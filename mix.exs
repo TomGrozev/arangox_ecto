@@ -1,0 +1,71 @@
+defmodule EctoArangodb.MixProject do
+  use Mix.Project
+
+  @version "0.1.0"
+
+  def project do
+    [
+      app: :ecto_arangodb,
+      version: @version,
+      elixir: "~> 1.10",
+      start_permanent: Mix.env() == :prod,
+      deps: deps(),
+      # Hex
+      description: "An ArangoDB adapter for Ecto supporting standard queries.",
+      package: package(),
+      # Docs
+      name: "Ecto ArangoDB Adapter",
+      docs: docs()
+    ]
+  end
+
+  # Run "mix help compile.app" to learn about applications.
+  def application do
+    [
+      extra_applications: [:logger],
+      mod: {Test.Application, []},
+      env: [
+        log_levels: [:info],
+        log_colours: %{info: :green, debug: :normal},
+        log_in_colour: System.get_env("MIX_ENV") == "dev"
+      ]
+    ]
+  end
+
+  # Run "mix help deps" to learn about dependencies.
+  defp deps do
+    [
+      ecto_dep(),
+      {:arangox, "~> 0.4.0"},
+      {:velocy, "~> 0.1"},
+      {:jason, "~> 1.2"}
+    ]
+  end
+
+  defp ecto_dep do
+    if path = System.get_env("ECTO_PATH") do
+      {:ecto, path: path}
+    else
+      {:ecto, "~> 3.4.4"}
+    end
+  end
+
+  defp package do
+    [
+      maintainers: ["Tom Grozev"],
+      licenses: ["Apache-2.0"],
+      links: %{"GitHub" => "https://github.com/TomGrozev/ecto_arangodb"},
+      files: ~w(.formatter.exs mix.exs README.md lib)
+    ]
+  end
+
+  defp docs do
+    [
+      main: "readme",
+      extras: ["README.md"],
+      source_ref: "v#{@version}",
+      canonical: "http://hexdocs.pm/ecto_arangodb",
+      source_url: "https://github.com/TomGrozev/ecto_arangodb"
+    ]
+  end
+end
