@@ -1,6 +1,6 @@
 defmodule EctoArangodbTest do
   use ExUnit.Case
-  doctest Ecto.Adapters.ArangoDB
+  doctest ArangoXEcto
 
   import Ecto.Query
 
@@ -13,6 +13,6 @@ defmodule EctoArangodbTest do
   end
 
   defp get_aql_query(query, operation \\ :all) do
-    apply(Ecto.Adapters.ArangoDB.Query, operation, [query])
+    apply(ArangoXEcto.Query, operation, [query])
   end
 end

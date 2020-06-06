@@ -1,5 +1,5 @@
 defmodule EctoArangodbTest.Test do
-  use Ecto.Adapters.ArangoDB.Schema
+  use ArangoXEcto.Schema
   import Ecto.Changeset
 
   schema "test" do

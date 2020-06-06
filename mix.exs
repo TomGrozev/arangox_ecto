@@ -1,11 +1,11 @@
-defmodule EctoArangodb.MixProject do
+defmodule ArangoXEcto.MixProject do
   use Mix.Project
 
   @version "0.1.0"
 
   def project do
     [
-      app: :ecto_arangodb,
+      app: :arangox_ecto,
       version: @version,
       elixir: "~> 1.10",
       start_permanent: Mix.env() == :prod,
@@ -54,7 +54,7 @@ defmodule EctoArangodb.MixProject do
     [
       maintainers: ["Tom Grozev"],
       licenses: ["Apache-2.0"],
-      links: %{"GitHub" => "https://github.com/TomGrozev/ecto_arangodb"},
+      links: %{"GitHub" => "https://github.com/TomGrozev/arangox_ecto"},
       files: ~w(.formatter.exs mix.exs README.md lib)
     ]
   end
@@ -64,8 +64,8 @@ defmodule EctoArangodb.MixProject do
       main: "readme",
       extras: ["README.md"],
       source_ref: "v#{@version}",
-      canonical: "http://hexdocs.pm/ecto_arangodb",
-      source_url: "https://github.com/TomGrozev/ecto_arangodb"
+      canonical: "http://hexdocs.pm/arangox_ecto",
+      source_url: "https://github.com/TomGrozev/arangox_ecto"
     ]
   end
 end
