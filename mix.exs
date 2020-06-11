@@ -1,7 +1,7 @@
 defmodule ArangoXEcto.MixProject do
   use Mix.Project
 
-  @version "0.1.0"
+  @version "0.4.0"
 
   def project do
     [
@@ -23,7 +23,7 @@ defmodule ArangoXEcto.MixProject do
   def application do
     [
       extra_applications: [:logger],
-      mod: {Test.Application, []},
+      mod: [],
       env: [
         log_levels: [:info],
         log_colours: %{info: :green, debug: :normal},

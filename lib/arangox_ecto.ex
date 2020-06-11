@@ -134,7 +134,8 @@ defmodule ArangoXEcto do
     log_message(:debug, "#{inspect(__MODULE__)}.prepare: #{cmd}", %{
       "#{inspect(__MODULE__)}.prepare-params" => %{auery: inspect(query, structs: false)}
     })
-    IO.inspect query
+
+    IO.inspect(query)
 
     aql_query = apply(ArangoXEcto.Query, cmd, [query])
     {:nocache, aql_query}
@@ -144,7 +145,13 @@ defmodule ArangoXEcto do
   Executes a previously prepared query.
   """
   @impl Ecto.Adapter.Queryable
-  def execute(%{pid: conn}, %{sources: {{collection, _, _}}, select: selecting}, {:nocache, query}, params, _options) do
+  def execute(
+        %{pid: conn},
+        %{sources: {{collection, _, _}}, select: selecting},
+        {:nocache, query},
+        params,
+        _options
+      ) do
     log_message(:debug, "#{inspect(__MODULE__)}.execute", %{
       "#{inspect(__MODULE__)}.execute-params" => %{query: inspect(query, structs: false)}
     })
@@ -195,17 +202,13 @@ defmodule ArangoXEcto do
     return_new = Enum.any?(returning, &(not (&1 in [:_id, :_key, :_rev])))
     options = if return_new, do: "?returnNew=true", else: ""
 
-    case Arangox.post(
-           conn,
-           "/_api/document/#{collection}" <> options,
-           doc
-         ) do
-      {:ok, _, %{body: body}} ->
-        single_doc_result(body, returning, return_new)
-
-      {:error, %{status: status}} ->
-        {:invalid, status}
-    end
+    Arangox.post(
+      conn,
+      "/_api/document/#{collection}" <> options,
+      doc
+    )
+    |> IO.inspect()
+    |> single_doc_result(returning, return_new)
   end
 
   @doc """
@@ -221,8 +224,8 @@ defmodule ArangoXEcto do
         returning,
         _options
       ) do
-#    IO.inspect(list)
-#    IO.inspect(returning)
+    #    IO.inspect(list)
+    #    IO.inspect(returning)
 
     docs = build_docs(list)
     return_new = not Enum.any?(returning, &(not (&1 in [:_id, :_key, :_rev])))
@@ -328,11 +331,12 @@ defmodule ArangoXEcto do
     end)
   end
 
-  defp single_doc_result({:ok, _, %{"new" => doc}}, returning, true) do
+  defp single_doc_result({:ok, _, %Arangox.Response{body: %{"new" => doc}}}, returning, true) do
     {:ok, Enum.map(returning, &{&1, Map.get(doc, Atom.to_string(&1))})}
   end
 
-  defp single_doc_result({:ok, _, doc}, returning, false) do
+  defp single_doc_result({:ok, _, %Arangox.Response{body: doc}}, returning, false) do
+    doc = patch_body_keys(doc)
     {:ok, Enum.map(returning, &{&1, Map.get(doc, Atom.to_string(&1))})}
   end
 
@@ -342,6 +346,19 @@ defmodule ArangoXEcto do
 
   defp single_doc_result({:error, %{error_num: error_num, message: msg}}, _, _) do
     raise "#{inspect(__MODULE__)} Error(#{error_num}): #{msg}"
+  end
+
+  defp replacement_key(key) do
+    replacements = %{"1" => "_key", "2" => "_rev", "3" => "_id"}
+
+    case Map.get(replacements, to_string(key)) do
+      nil -> key
+      k -> k
+    end
+  end
+
+  defp patch_body_keys(%{} = body) do
+    for {k, v} <- body, into: %{}, do: {replacement_key(k), v}
   end
 
   defp get_insert_fields(docs, returning, false), do: process_docs(docs, returning)
@@ -357,8 +374,8 @@ defmodule ArangoXEcto do
     {length(docs), docs}
   end
 
-#  defp validate_struct(module, %{} = params),
-#    do: module.changeset(struct(module.__struct__), params)
+  #  defp validate_struct(module, %{} = params),
+  #    do: module.changeset(struct(module.__struct__), params)
 
   defp load_date(d) do
     case Date.from_iso8601(d) do

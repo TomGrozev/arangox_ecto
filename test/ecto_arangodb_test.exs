@@ -8,7 +8,8 @@ defmodule EctoArangodbTest do
 
   describe "create query in AQL" do
     test "query selecting singular document" do
-      assert get_aql_query(from u in Test) =~ "FOR t0 IN `test` RETURN [ t0.`_key`, t0.`title`, t0.`inserted_at`, t0.`updated_at` ]"
+      assert get_aql_query(from(u in Test)) =~
+               "FOR t0 IN `test` RETURN [ t0.`_key`, t0.`title`, t0.`inserted_at`, t0.`updated_at` ]"
     end
   end
 
