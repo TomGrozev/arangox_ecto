@@ -27,18 +27,10 @@ defmodule ArangoXEcto.Migration do
 
   @spec index(String.t(), [String.t()], [index_option]) :: %Index{}
   def index(collection_name, fields, opts \\ []) do
-    index = %Index{
-      collection_name: collection_name,
-      fields: fields
-    }
+    keys = [collection_name: collection_name, fields: fields]
+    |> Keyword.merge(opts)
 
-    Enum.each(opts, fn {key, value} ->
-      if key in struct_keys(index) do
-        Map.put(index, key, index_opt_value(key, value))
-      end
-    end)
-
-    index
+    struct(Index, keys)
   end
 
   def create(%Collection{} = collection) do
@@ -53,7 +45,8 @@ defmodule ArangoXEcto.Migration do
   def create(%Index{collection_name: collection_name} = index) do
     {:ok, conn} = get_db_conn()
 
-    case Arangox.post(conn, "/_api/index?collection=" <> collection_name, Map.from_struct(index)) do
+    IO.inspect Map.from_struct(index)
+    case Arangox.post(conn, "/_api/index?collection=" <> get_collection_name(collection_name), Map.from_struct(index)) do
       {:ok, _, _} -> :ok
       {:error, %{status: status, message: message}} -> {:error, "#{status} - #{message}"}
     end
@@ -62,7 +55,7 @@ defmodule ArangoXEcto.Migration do
   def drop(%Collection{name: collection_name}) do
     {:ok, conn} = get_db_conn()
 
-    case Arangox.delete(conn, "/_api/collection/" <> collection_name) do
+    case Arangox.delete(conn, "/_api/collection/" <> get_collection_name(collection_name)) do
       {:ok, _, _} -> :ok
       {:error, %{status: status, message: message}} -> {:error, "#{status} - #{message}"}
     end
@@ -89,19 +82,6 @@ defmodule ArangoXEcto.Migration do
   defp collection_type(:document), do: 2
   defp collection_type(:edge), do: 3
 
-  @spec index_type(atom) :: String.t()
-  defp index_type(type) when is_atom(type) do
-    if type in struct_keys(%Index{}) do
-      Atom.to_string(type)
-    else
-      "hash"
-    end
-  end
-
-  defp index_type(type), do: "hash"
-
-  defp index_opt_value(:type, value), do: index_type(value)
-  defp index_opt_value(_, value), do: value
-
-  defp struct_keys(%{} = struct), do: Map.keys(struct) |> List.delete(:__struct__)
+  defp get_collection_name(name) when is_atom(name), do: Atom.to_string(name)
+  defp get_collection_name(name) when is_binary(name), do: name
 end
