@@ -45,7 +45,6 @@ defmodule ArangoXEcto.Migration do
   def create(%Index{collection_name: collection_name} = index) do
     {:ok, conn} = get_db_conn()
 
-    IO.inspect Map.from_struct(index)
     case Arangox.post(conn, "/_api/index?collection=" <> get_collection_name(collection_name), Map.from_struct(index)) do
       {:ok, _, _} -> :ok
       {:error, %{status: status, message: message}} -> {:error, "#{status} - #{message}"}
