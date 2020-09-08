@@ -20,7 +20,7 @@
       <excludeFolder url="file://$MODULE_DIR$/_build/test/lib/telemetry" />
       <excludeFolder url="file://$MODULE_DIR$/_build/test/lib/velocy" />
     </content>
-    <orderEntry type="jdk" jdkName="Elixir 1.10.3" jdkType="Elixir SDK" />
+    <orderEntry type="jdk" jdkName="Elixir 1.10.4" jdkType="Elixir SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
     <orderEntry type="library" name="arangox" level="project" />
     <orderEntry type="library" name="velocy" level="project" />

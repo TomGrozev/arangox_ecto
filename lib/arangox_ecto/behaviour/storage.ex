@@ -1,4 +1,8 @@
-defmodule ArangoXEcto.Storage do
+defmodule ArangoXEcto.Behaviour.Storage do
+  @moduledoc """
+  Handles Ecto adapter storage methods
+  """
+
   @behaviour Ecto.Adapter.Storage
 
   alias ArangoXEcto.Utils
@@ -6,7 +10,7 @@ defmodule ArangoXEcto.Storage do
   @doc """
   Creates the storage given by options.
   """
-  @impl Ecto.Adapter.Storage
+  @impl true
   def storage_up(options) do
     otp_app = Keyword.fetch!(options, :otp_app)
     database = Keyword.fetch!(options, :database)
@@ -22,7 +26,7 @@ defmodule ArangoXEcto.Storage do
   @doc """
   Returns the status of a storage given by options.
   """
-  @impl Ecto.Adapter.Storage
+  @impl true
   def storage_status(options) do
     otp_app = Keyword.fetch!(options, :otp_app)
     database = Keyword.fetch!(options, :database)
@@ -31,10 +35,9 @@ defmodule ArangoXEcto.Storage do
 
     case Arangox.get(conn, "/_api/database") do
       {:ok, _, %{body: %{"result" => result}}} when is_list(result) ->
-        if database in result do
-          :up
-        else
-          :down
+        cond do
+          database in result -> :ok
+          true -> :down
         end
 
       {:error, %{status: status}} ->
@@ -45,7 +48,7 @@ defmodule ArangoXEcto.Storage do
   @doc """
   Drops the storage given by options.
   """
-  @impl Ecto.Adapter.Storage
+  @impl true
   def storage_down(options) do
     otp_app = Keyword.fetch!(options, :otp_app)
     database = Keyword.fetch!(options, :database)

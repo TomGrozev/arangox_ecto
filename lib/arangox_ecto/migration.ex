@@ -8,10 +8,22 @@ defmodule ArangoXEcto.Migration do
 
   defmodule Collection do
     defstruct [:name, :type]
+
+    @type t :: %__MODULE__{}
   end
 
   defmodule Index do
-    defstruct [:collection_name, :fields, :sparse, :unique, :deduplication, :minLength, type: :hash]
+    defstruct [
+      :collection_name,
+      :fields,
+      :sparse,
+      :unique,
+      :deduplication,
+      :minLength,
+      type: :hash
+    ]
+
+    @type t :: %__MODULE__{}
   end
 
   defmacro __using__(_) do
@@ -21,14 +33,19 @@ defmodule ArangoXEcto.Migration do
     end
   end
 
+  @spec collection(String.t(), atom()) :: Collection.t()
   def collection(collection_name, type \\ :document) do
     %Collection{name: collection_name, type: collection_type(type)}
   end
 
-  @spec index(String.t(), [String.t()], [index_option]) :: %Index{}
+  @spec edge(String.t()) :: Collection.t()
+  def edge(edge_name), do: collection(edge_name, :edge)
+
+  @spec index(String.t(), [String.t()], [index_option]) :: Index.t()
   def index(collection_name, fields, opts \\ []) do
-    keys = [collection_name: collection_name, fields: fields]
-    |> Keyword.merge(opts)
+    keys =
+      [collection_name: collection_name, fields: fields]
+      |> Keyword.merge(opts)
 
     struct(Index, keys)
   end
@@ -45,7 +62,11 @@ defmodule ArangoXEcto.Migration do
   def create(%Index{collection_name: collection_name} = index) do
     {:ok, conn} = get_db_conn()
 
-    case Arangox.post(conn, "/_api/index?collection=" <> get_collection_name(collection_name), Map.from_struct(index)) do
+    case Arangox.post(
+           conn,
+           "/_api/index?collection=" <> get_collection_name(collection_name),
+           Map.from_struct(index)
+         ) do
       {:ok, _, _} -> :ok
       {:error, %{status: status, message: message}} -> {:error, "#{status} - #{message}"}
     end
