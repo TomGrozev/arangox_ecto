@@ -25,12 +25,6 @@ defmodule ArangoXEcto.Query do
     offset_and_limit = offset_and_limit(query, sources)
     select = select(query, sources)
 
-    IO.inspect(where)
-
-    if is_preload?(query.select) do
-      all_preload(query, sources)
-    end
-
     IO.iodata_to_binary([from, join, where, order_by, offset_and_limit, select])
   end
 
@@ -68,43 +62,9 @@ defmodule ArangoXEcto.Query do
     IO.iodata_to_binary([from, join, where, order_by, offset_and_limit, update, return])
   end
 
-  def all_preload(query, {{_, _, child_schema}} = sources) do
-    foreign_key = with %Query.SelectExpr{expr: {:{}, [], [field, {:&, [], [0]}]}, fields: _} <- query.select,
-         {{:., _, [{:&, [], [0]}, foreign_key]}, _, _} <- field,
-          do: foreign_key
-
-    # field: {{:., [type: :binary_id], [{:&, [], [0]}, :wrote_post_rel]}, [], []}
-
-    rel =
-      Enum.map(child_schema.__schema__(:associations), &(child_schema.__schema__(:association, &1)))
-      |> Enum.filter(fn
-        %Ecto.Association.BelongsTo{owner_key: ^foreign_key} -> true
-        _ -> false
-      end)
-      |> List.first()
-
-    IO.inspect(rel)
-
-    from =
-      with %Ecto.Association.BelongsTo{related: parent_schema} <- rel,
-           from_source <- parent_schema.__schema__(:source),
-           do: "#{from_source}/#{foreign_key}"
-
-    to =
-      with %Ecto.Association.BelongsTo{field: to_key} <- rel,
-           to_source <- child_schema.__schema__(:source),
-           do: "#{to_source}/#{to_key}"
-
-    IO.inspect(from)
-    IO.inspect(to)
-  end
-
   #
   # Helpers
   #
-
-  defp is_preload?(%Query.SelectExpr{expr: {:{}, [], [_, {:&, [], [0]}]}, fields: [_ | _]}), do: true
-  defp is_preload?(_any), do: false
 
   defp create_names(%{sources: sources}) do
     create_names(sources, 0, tuple_size(sources)) |> List.to_tuple()

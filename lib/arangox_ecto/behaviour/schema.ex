@@ -58,7 +58,6 @@ defmodule ArangoXEcto.Behaviour.Schema do
       doc
     )
     |> single_doc_result(returning, return_new)
-    |> create_relationships(conn, schema, fields)
   end
 
   @doc """
