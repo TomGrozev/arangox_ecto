@@ -92,7 +92,7 @@ defmodule ArangoXEctoTest do
 
     edge = ArangoXEcto.create_edge(Repo, user1, user2)
 
-    assert Kernel.match?(%ArangoXEcto.Schema.Edge{_from: ^from, _to: ^to}, edge)
+    assert Kernel.match?(%ArangoXEcto.Edge{_from: ^from, _to: ^to}, edge)
   end
 
   test "create edge with no fields and a custom name" do
@@ -104,7 +104,7 @@ defmodule ArangoXEctoTest do
 
     edge = ArangoXEcto.create_edge(Repo, user1, user2, collection_name: "friends")
 
-    assert Kernel.match?(%ArangoXEcto.Schema.Edge{_from: ^from, _to: ^to}, edge)
+    assert Kernel.match?(%ArangoXEcto.Edge{_from: ^from, _to: ^to}, edge)
   end
 
   test "create edge with fields and a custom module" do

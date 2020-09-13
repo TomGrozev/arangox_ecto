@@ -17,7 +17,7 @@ defmodule ArangoXEctoTest.Integration.Post do
 end
 
 defmodule ArangoXEctoTest.Integration.UserPosts do
-  use ArangoXEcto.Schema.Edge
+  use ArangoXEcto.Edge
   import Ecto.Changeset
 
   schema "user_posts" do

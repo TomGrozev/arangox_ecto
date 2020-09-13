@@ -1,4 +1,4 @@
-defmodule ArangoXEcto.Schema.Attributes.Fields do
+defmodule ArangoXEcto.Schema.Fields do
   @moduledoc """
   Defines required fields for schemas
   """

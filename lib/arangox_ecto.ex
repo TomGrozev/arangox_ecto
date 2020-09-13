@@ -2,7 +2,7 @@ defmodule ArangoXEcto do
   @moduledoc """
   Methods for interacting with ArangoDB
   """
-  alias ArangoXEcto.Schema.Edge
+  alias ArangoXEcto.Edge
 
   @type query :: binary()
   @type vars :: keyword() | map()

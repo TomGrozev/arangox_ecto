@@ -1,4 +1,4 @@
-defmodule ArangoXEcto.Schema.Edge do
+defmodule ArangoXEcto.Edge do
   @moduledoc """
   Edge schema required fields definition
   """
@@ -6,9 +6,9 @@ defmodule ArangoXEcto.Schema.Edge do
 
   import Ecto.Changeset
 
-  require ArangoXEcto.Schema.Attributes.Fields
+  require ArangoXEcto.Schema.Fields
 
-  alias ArangoXEcto.Schema.Attributes.Fields
+  alias ArangoXEcto.Schema.Fields
 
   @callback changeset(Ecto.Schema.t() | Changeset.t(), map()) :: Changeset.t()
 
