@@ -99,34 +99,34 @@ defmodule ArangoXEcto.Adapter do
   def dumpers({:in, sub}, {:in, sub}), do: [{:array, sub}]
 
   def dumpers(:date, type) when type in [:date, Date],
-      do: [fn %Date{} = d -> {:ok, Date.to_iso8601(d)} end]
+    do: [fn %Date{} = d -> {:ok, Date.to_iso8601(d)} end]
 
   def dumpers(:time, type) when type in [:time, Time],
-      do: [fn %Time{} = t -> {:ok, Time.to_iso8601(t)} end]
+    do: [fn %Time{} = t -> {:ok, Time.to_iso8601(t)} end]
 
   def dumpers(:utc_datetime, type) when type in [:utc_datetime, DateTime],
-      do: [fn %DateTime{} = dt -> {:ok, DateTime.to_iso8601(dt)} end]
+    do: [fn %DateTime{} = dt -> {:ok, DateTime.to_iso8601(dt)} end]
 
   def dumpers(:naive_datetime, type) when type in [:naive_datetime, NaiveDateTime],
-      do: [fn %NaiveDateTime{} = dt -> {:ok, NaiveDateTime.to_iso8601(dt)} end]
+    do: [fn %NaiveDateTime{} = dt -> {:ok, NaiveDateTime.to_iso8601(dt)} end]
 
   def dumpers(_primitive, type), do: [type]
 
   @behaviour Ecto.Adapter.Queryable
   defdelegate stream(adapter_meta, query_meta, query_cache, params, options),
-              to: ArangoXEcto.Behaviour.Queryable
+    to: ArangoXEcto.Behaviour.Queryable
 
   defdelegate prepare(atom, query), to: ArangoXEcto.Behaviour.Queryable
 
   defdelegate execute(adapter_meta, query_meta, query_cache, params, options),
-              to: ArangoXEcto.Behaviour.Queryable
+    to: ArangoXEcto.Behaviour.Queryable
 
   @behaviour Ecto.Adapter.Schema
   defdelegate delete(adapter_meta, schema_meta, filters, options),
-              to: ArangoXEcto.Behaviour.Schema
+    to: ArangoXEcto.Behaviour.Schema
 
   defdelegate insert(adapter_meta, schema_meta, fields, on_conflict, returning, options),
-              to: ArangoXEcto.Behaviour.Schema
+    to: ArangoXEcto.Behaviour.Schema
 
   defdelegate insert_all(
                 adapter_meta,
@@ -140,7 +140,7 @@ defmodule ArangoXEcto.Adapter do
               to: ArangoXEcto.Behaviour.Schema
 
   defdelegate update(adapter_meta, schema_meta, fields, filters, returning, options),
-              to: ArangoXEcto.Behaviour.Schema
+    to: ArangoXEcto.Behaviour.Schema
 
   #  defp validate_struct(module, %{} = params),
   #    do: module.changeset(struct(module.__struct__), params)

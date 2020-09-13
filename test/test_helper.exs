@@ -12,7 +12,7 @@ Application.put_env(:arangox_ecto, Repo,
 
 Code.require_file("./support/schemas.exs", __DIR__)
 
-{:ok, _} = ArangoXEcto.ensure_all_started(Ecto.Integration.TestRepo, :temporary)
+{:ok, _} = ArangoXEcto.Adapter.ensure_all_started(Ecto.Integration.TestRepo, :temporary)
 
 {:ok, _pid} = Repo.start_link()
 

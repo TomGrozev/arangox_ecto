@@ -7,8 +7,6 @@ defmodule ArangoXEcto.Behaviour.Schema do
 
   require Logger
 
-  import ArangoXEcto.Graph.Relationship
-
   @doc """
   Called to autogenerate a value for id/embed_id/binary_id.
 

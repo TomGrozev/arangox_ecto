@@ -80,7 +80,6 @@ defmodule ArangoXEcto.Behaviour.Queryable do
         options
       )
       |> IO.inspect()
-      # TODO: Filter for relationships and query the edges
 
     case res do
       {:ok, result} -> {length(result), result}
