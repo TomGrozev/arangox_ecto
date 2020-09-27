@@ -1,6 +1,27 @@
 defmodule ArangoXEcto.Edge do
   @moduledoc """
-  Edge schema required fields definition
+  Base Edge Schema.
+
+  This module should be used such as `use ArangoXEcto.Edge` to create a custom edge schema.
+
+  ## Example
+
+      defmodule ArangoXEctoTest.Integration.UserPosts do
+        use ArangoXEcto.Edge
+        import Ecto.Changeset
+
+        schema "user_posts" do
+          edge_fields()
+
+          field(:type, :string)
+        end
+
+        def changeset(edge, attrs) do
+          edges_changeset(edge, attrs)
+          |> cast(attrs, [:type])
+          |> validate_required([:type])
+        end
+      end
   """
   use ArangoXEcto.Schema
 
@@ -9,6 +30,8 @@ defmodule ArangoXEcto.Edge do
   require ArangoXEcto.Schema.Fields
 
   alias ArangoXEcto.Schema.Fields
+
+  @type t :: %__MODULE__{}
 
   @callback changeset(Ecto.Schema.t() | Changeset.t(), map()) :: Changeset.t()
 
@@ -28,6 +51,17 @@ defmodule ArangoXEcto.Edge do
     end
   end
 
+  @doc """
+  Macro to define the required edge fields i.e. `_from` and `_to`.
+
+  This is required when using a custom edge schema and can be used as below.
+
+      schema "user_posts" do
+        edge_fields()
+
+        field(:type, :string)
+      end
+  """
   defmacro edge_fields do
     quote do
       require unquote(Fields)
@@ -36,13 +70,26 @@ defmodule ArangoXEcto.Edge do
     end
   end
 
-  @after_compile
   schema "" do
     Fields.define_fields(:edge)
   end
 
   @doc """
-  Validates the required fields for an edge
+  Default changeset for an edge.
+
+  Casts and requires the `_from` and `_to` fields. This will also verify the format of both fields to match that of
+  an Arango id.
+
+  Any custom changeset should first use this changeset. For example to add a required `type` field, you could do the
+  following:
+
+      def changeset(edge, attrs) do
+        edges_changeset(edge, attrs)
+        |> cast(attrs, [:type])
+        |> validate_required([:type])
+      end
+
+  Direct use of the `edges_changeset/2` function is discouraged unless per the use case mentioned above.
   """
   def edges_changeset(edge, attrs) do
     edge

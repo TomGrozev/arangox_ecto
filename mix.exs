@@ -11,10 +11,10 @@ defmodule ArangoXEcto.MixProject do
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       # Hex
-      description: "An ArangoDB adapter for Ecto supporting standard queries.",
+      description: "An ArangoDB adapter for Ecto supporting standard queries and graph queries.",
       package: package(),
       # Docs
-      name: "Ecto ArangoDB Adapter",
+      name: "ArangoX Ecto",
       docs: docs()
     ]
   end
@@ -38,7 +38,8 @@ defmodule ArangoXEcto.MixProject do
       ecto_dep(),
       {:arangox, "~> 0.4.0"},
       {:velocy, "~> 0.1"},
-      {:jason, "~> 1.2"}
+      {:jason, "~> 1.2"},
+      {:ex_doc, "~> 0.22.5", only: :dev, runtime: false}
     ]
   end
 

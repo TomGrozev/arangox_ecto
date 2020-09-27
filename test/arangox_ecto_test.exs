@@ -2,7 +2,7 @@ defmodule ArangoXEctoTest do
   use ExUnit.Case
   @moduletag :supported
 
-  doctest ArangoXEcto
+  #  doctest ArangoXEcto
 
   alias ArangoXEctoTest.Integration.{User, Post, UserPosts}
   alias ArangoXEctoTest.Repo
@@ -48,6 +48,29 @@ defmodule ArangoXEctoTest do
     end
 
     context
+  end
+
+  test "invalid AQL query" do
+    assert_raise Arangox.Error, ~r/\[400\] \[1501\] AQL: syntax error/i, fn ->
+      ArangoXEcto.aql_query(
+        Repo,
+        """
+        FOsdfsdfgdfs abc
+        """
+      )
+    end
+  end
+
+  test "non existent collection AQL query" do
+    assert_raise Arangox.Error, ~r/\[404\] \[1203\] AQL: collection or view not found/, fn ->
+      ArangoXEcto.aql_query(
+        Repo,
+        """
+        FOR var in non_existent
+        RETURN var
+        """
+      )
+    end
   end
 
   test "filter AQL query" do
@@ -118,7 +141,6 @@ defmodule ArangoXEctoTest do
 
     assert Kernel.match?(%UserPosts{_from: ^from, _to: ^to, type: "wrote"}, edge)
   end
-
 
   defp id_from_user(%{id: id}), do: "users/" <> id
 end

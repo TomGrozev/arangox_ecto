@@ -8,7 +8,6 @@ defmodule ArangoXEcto.Schema do
   defmacro __using__(_) do
     quote do
       use Ecto.Schema
-      @behaviour unquote(__MODULE__)
       import unquote(__MODULE__)
 
       @primary_key {:id, :binary_id, autogenerate: true, source: :_key}
