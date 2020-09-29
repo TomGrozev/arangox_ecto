@@ -44,5 +44,9 @@
     <orderEntry type="library" name="benchee" level="project" />
     <orderEntry type="library" name="nimble_parsec" level="project" />
     <orderEntry type="library" name="stream_data" level="project" />
+    <orderEntry type="library" name="ecto" level="project" />
+    <orderEntry type="library" name="telemetry" level="project" />
+    <orderEntry type="library" name="decimal" level="project" />
+    <orderEntry type="library" name="inflex" level="project" />
   </component>
 </module>

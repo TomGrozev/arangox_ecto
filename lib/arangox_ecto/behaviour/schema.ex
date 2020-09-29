@@ -23,9 +23,9 @@ defmodule ArangoXEcto.Behaviour.Schema do
   @impl true
   def insert(
         %{pid: conn},
-        %{source: collection, schema: schema} = a,
+        %{source: collection, schema: schema},
         fields,
-        on_conflict,
+        _on_conflict,
         returning,
         options
       ) do

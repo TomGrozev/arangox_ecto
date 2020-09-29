@@ -6,6 +6,9 @@ defmodule ArangoXEcto do
   but it was found to be too much of a 'hacky' solution. Using separate functions that still utilise Ecto document
   queries was found to be the optimal solution.
   """
+
+  import Ecto.Query, only: [from: 2]
+
   alias ArangoXEcto.Edge
 
   @type query :: binary()
@@ -120,7 +123,7 @@ defmodule ArangoXEcto do
       %ArangoXEcto.Edge{_from: "users/12345", _to: "users/54321"}
 
   """
-  @spec create_edge(Ecto.Repo.t(), mod(), mod(), keyword()) :: map()
+  @spec create_edge(Ecto.Repo.t(), mod(), mod(), keyword()) :: {:ok, Ecto.Schema.t()} | {:error, Ecto.Changeset.t()}
   def create_edge(repo, from, to, opts \\ [])
 
   def create_edge(repo, from, to, [edge: edge_module, fields: _fields] = opts) do
@@ -128,9 +131,6 @@ defmodule ArangoXEcto do
     to_id = struct_id(to)
 
     edge_module
-    |> validate_ecto_schema()
-    |> validate_edge_module()
-    |> edge_module()
     |> do_create_edge(repo, from_id, to_id, opts)
   end
 
@@ -146,7 +146,7 @@ defmodule ArangoXEcto do
   @doc """
   Same as create_edge/4 but specific for custom edge and fields.
   """
-  @spec create_edge(Ecto.Repo.t(), mod(), mod(), mod(), map(), keyword()) :: map()
+  @spec create_edge(Ecto.Repo.t(), mod(), mod(), mod(), map(), keyword()) :: {:ok, Ecto.Schema.t()} | {:error, Ecto.Changeset.t()}
   def create_edge(repo, from, to, edge, %{} = fields, opts \\ []) do
     opts =
       opts
@@ -156,17 +156,75 @@ defmodule ArangoXEcto do
   end
 
   @doc """
-  Deletes an edge that matches the query
+  Deletes all edges matching matching the query
 
-  If field conditions are set then those conditions must be true to delete.
+  If the `:conditions` option is set then those conditions must be true to delete.
+
+  ## Options
+
+  Accepts the following options:
+
+  - `:edge` - A specific edge module to use for the edge. This is required for any additional fields on the edge. Overrides `collection_name`.
+  - `:fields` - The values of the fields to set on the edge. Requires `edge` to be set otherwise it is ignored.
+  - `:collection_name` - The name of the collection to use.
+  - `:conditions` - A keyword list of conditions to filter for edge deletion
+
+  ## Parameters
+
+  - `repo` - The Ecto repo module to use for queries
+  - `from` - The Ecto Schema struct to use for the from vertex
+  - `to` - The Ecto Schema struct to use for the to vertex
+  - `opts` - Options to use
+
+  ## Examples
+
+      iex> ArangoXEcto.create_edge(Repo, user1, user2)
+      %ArangoXEcto.Edge{_from: "users/12345", _to: "users/54321"}
+
+  Create an edge with a specific edge collection name
+
+      iex> ArangoXEcto.create_edge(Repo, user1, user2, collection_name: "friends")
+      %ArangoXEcto.Edge{_from: "users/12345", _to: "users/54321"}
+
+  Create a edge schema and use it to create an edge relation
+
+      defmodule UserPosts do
+        use ArangoXEcto.Edge
+        import Ecto.Changeset
+
+        schema "user_posts" do
+          edge_fields()
+
+          field(:type, :string)
+        end
+
+        def changeset(edge, attrs) do
+          edges_changeset(edge, attrs)
+          |> cast(attrs, [:type])
+          |> validate_required([:type])
+        end
+      end
+
+      iex> ArangoXEcto.create_edge(Repo, user1, user2, edge: UserPosts, fields: %{type: "wrote"})
+      %ArangoXEcto.Edge{_from: "users/12345", _to: "users/54321"}
   """
-  @spec delete_edge(Ecto.Repo.t(), mod(), mod(), keyword()) :: map()
-  def delete_edge(repo, from, to, opts) do
+  @spec delete_all_edges(Ecto.Repo.t(), mod(), mod(), keyword()) :: {:ok, Ecto.Schema.t()} | {:error, Ecto.Changeset.t()}
+  def delete_all_edges(repo, from, to, opts \\ [])
+
+  def delete_all_edges(repo, from, to, [edge: edge_module] = opts) do
+    from_id = struct_id(from)
+    to_id = struct_id(to)
+
+    edge_module
+    |> do_delete_all_edges(repo, from_id, to_id, opts)
+  end
+
+  def delete_all_edges(repo, from, to, opts) do
     from_id = struct_id(from)
     to_id = struct_id(to)
 
     edge_module(opts, from, to)
-    |> do_delete_edge(repo, from_id, to_id, opts)
+    |> do_delete_all_edges(repo, from_id, to_id, opts)
   end
 
   @doc """
@@ -174,6 +232,14 @@ defmodule ArangoXEcto do
   """
   @spec get_id_from_struct(mod()) :: binary()
   def get_id_from_struct(struct), do: struct_id(struct)
+
+  @doc """
+  Gets an ID from a module and a key
+  """
+  @spec get_id_from_module(Ecto.Schema.t(), binary()) :: binary()
+  def get_id_from_module(module, key) do
+    module.__schema__(:source) <> "/" <> key
+  end
 
   @doc """
   Converts raw output of a query into a struct
@@ -190,6 +256,14 @@ defmodule ArangoXEcto do
     struct(module, args)
   end
 
+  @doc """
+  Returns the Edge Module name as an atom.
+  """
+  @spec edge_module(keyword(), mod(), mod()) :: atom()
+  def edge_module([collection_name: name], _, _), do: create_edge_module(name)
+
+  def edge_module(_, mod1, mod2), do: create_edge_module(gen_edge_collection_name(mod1, mod2))
+
   ###############
   ##  Helpers  ##
   ###############
@@ -202,17 +276,35 @@ defmodule ArangoXEcto do
 
   defp do_create_edge(module, repo, id1, id2, opts) do
     module
+    |> validate_ecto_schema()
+    |> validate_edge_module()
     |> maybe_create_edges_collection(repo)
     |> ensure_collections_exists(repo, id1, id2)
     |> edge_changeset(id1, id2, opts)
     |> repo.insert!()
   end
 
-  defp do_delete_edge(module, repo, id1, id2, opts) do
+  defp do_delete_all_edges(module, repo, from_id, to_id, opts) do
     module
-    |> collection_name_from_struct()
-    |> collection_exists!(repo)
+    |> validate_ecto_schema()
+    |> validate_edge_module()
+    |> source_name()
+    |> collection_exists!(repo, 3)
 
+    module
+    |> find_edge_by_nodes(repo, from_id, to_id, opts)
+    |> Enum.each(&repo.delete/1)
+  end
+
+  defp find_edge_by_nodes(module, repo, from_id, to_id, opts) do
+    conditions =
+      Keyword.get(opts, :conditions, [])
+      |> Keyword.merge([_from: from_id, _to: to_id])
+
+    query = from module,
+            where: ^conditions
+
+    repo.all(query)
   end
 
   defp ensure_collections_exists(module, repo, id1, id2) do
@@ -225,8 +317,8 @@ defmodule ArangoXEcto do
     module
   end
 
-  defp collection_exists!(collection_name, repo) do
-    case collection_exists?(repo, collection_name) do
+  defp collection_exists!(collection_name, repo, type \\ 2) do
+    case collection_exists?(repo, collection_name, type) do
       true ->
         true
 
@@ -237,15 +329,24 @@ defmodule ArangoXEcto do
 
   defp collection_from_id(id), do: source_name(id)
 
-  defp edge_module(module), do: struct(module)
+  defp create_edge_module(collection_name) do
+    # TODO: Make prefix modules part of project instead of this
+    module_name = Module.concat(ArangoXEcto.Edge, Macro.camelize(collection_name))
 
-  defp edge_module([collection_name: name], _, _), do: create_edge_struct(name)
+    unless function_exported?(module_name, :__info__, 1) do
+      contents =
+        quote do
+          use ArangoXEcto.Edge
 
-  defp edge_module(_, mod1, mod2), do: create_edge_struct(gen_edge_collection_name(mod1, mod2))
+          schema unquote(collection_name) do
+            edge_fields()
+          end
+        end
 
-  defp create_edge_struct(name) do
-    %Edge{}
-    |> Ecto.put_meta(source: name)
+      {:module, _, _, _} = Module.create(module_name, contents, Macro.Env.location(__ENV__))
+    end
+
+    module_name
   end
 
   defp gen_edge_collection_name(mod1, mod2) do
@@ -256,14 +357,19 @@ defmodule ArangoXEcto do
     "#{name1}_#{name2}"
   end
 
-  defp source_name(%schema{}) do
-    schema.__schema__(:source)
+  defp source_name(%{} = struct) do
+    Map.get(struct.__meta__, :source)
   end
 
   defp source_name(id) when is_binary(id) do
     String.split(id, "/", trim: true)
     |> List.first()
   end
+
+  defp source_name(module) do
+    module.__schema__(:source)
+  end
+
 
   defp struct_id(%{id: id} = struct) do
     source = source_name(struct)
@@ -296,10 +402,11 @@ defmodule ArangoXEcto do
     end
   end
 
-  defp edge_changeset(%module{} = struct, id1, id2, opts) do
+  defp edge_changeset(module, id1, id2, opts) do
     attrs =
       Keyword.get(opts, :fields, %{})
       |> Map.merge(%{_from: id1, _to: id2})
+    struct = struct(module)
 
     try do
       Kernel.apply(module, :changeset, [struct, attrs])
@@ -309,12 +416,8 @@ defmodule ArangoXEcto do
     end
   end
 
-  defp collection_name_from_struct(struct) do
-    Map.get(struct.__meta__, :source)
-  end
-
   defp maybe_create_edges_collection(struct, repo) do
-    collection_name = collection_name_from_struct(struct)
+    collection_name = source_name(struct)
 
     collection_exists?(repo, collection_name, 3)
     |> case do
