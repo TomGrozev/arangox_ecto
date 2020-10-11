@@ -9,9 +9,7 @@ defmodule ArangoXEctoTest do
 
   @test_collections [:users]
 
-  @doc """
-  Deletes existing collections and creates testing collections
-  """
+  # Deletes existing collections and creates testing collections
   setup_all do
     %{pid: conn} = Ecto.Adapter.lookup_meta(Repo)
 
@@ -39,9 +37,7 @@ defmodule ArangoXEctoTest do
     [conn: conn]
   end
 
-  @doc """
-  Empties each collection before every test
-  """
+  # Empties each collection before every test
   setup %{conn: conn} = context do
     for collection <- @test_collections do
       Arangox.put(conn, "/_api/collection/#{collection}/truncate")
@@ -77,19 +73,21 @@ defmodule ArangoXEctoTest do
     test "filter AQL query" do
       fname = "John"
       lname = "Smith"
-      user = %User{first_name: fname, last_name: lname} |> Repo.insert!()
+      %User{first_name: fname, last_name: lname} |> Repo.insert!()
+
       collection_name = User.__schema__(:source)
 
       result =
         ArangoXEcto.aql_query(
           Repo,
           """
-          FOR var in users
+          FOR var in @@collection_name
           FILTER var.first_name == @fname AND var.last_name == @lname
           RETURN var
           """,
+          [{:"@collection_name", collection_name},
           fname: fname,
-          lname: lname
+          lname: lname]
         )
 
       assert Kernel.match?(
