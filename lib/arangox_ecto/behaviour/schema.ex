@@ -29,12 +29,6 @@ defmodule ArangoXEcto.Behaviour.Schema do
         returning,
         options
       ) do
-    #    IO.inspect(a)
-    #    IO.inspect(fields)
-    #    IO.inspect(on_conflict)
-    #    IO.inspect(returning)
-    #    IO.inspect(options)
-
     return_new = should_return_new?(returning, options)
     options = if return_new, do: "?returnNew=true", else: ""
 
@@ -49,6 +43,8 @@ defmodule ArangoXEcto.Behaviour.Schema do
     Logger.debug("#{inspect(__MODULE__)}.insert", %{
       "#{inspect(__MODULE__)}.insert-params" => %{document: inspect(doc)}
     })
+
+    maybe_create_collection(collection, conn)
 
     Arangox.post(
       conn,
@@ -75,6 +71,12 @@ defmodule ArangoXEcto.Behaviour.Schema do
     return_new = should_return_new?(returning, options)
     options = if return_new, do: "?returnNew=true", else: ""
 
+    Logger.debug("#{inspect(__MODULE__)}.insert_all", %{
+      "#{inspect(__MODULE__)}.insert_all-params" => %{documents: inspect(docs)}
+    })
+
+    maybe_create_collection(collection, conn)
+
     case Arangox.post(
            conn,
            "/_api/document/#{collection}" <> options,
@@ -93,6 +95,10 @@ defmodule ArangoXEcto.Behaviour.Schema do
   """
   @impl true
   def delete(%{pid: conn}, %{source: collection}, [{:_key, key}], _options) do
+    Logger.debug("#{inspect(__MODULE__)}.delete", %{
+      "#{inspect(__MODULE__)}.delete-params" => %{collection: collection, key: key}
+    })
+
     case Arangox.delete(conn, "/_api/document/#{collection}/#{key}") do
       {:ok, _, _} -> {:ok, []}
       {:error, %{status: status}} -> {:error, status}
@@ -110,10 +116,15 @@ defmodule ArangoXEcto.Behaviour.Schema do
   @impl true
   def update(%{pid: conn}, %{source: collection}, fields, [{:_key, key}], returning, options) do
     document = Enum.into(fields, %{})
-    IO.inspect(options)
 
     return_new = should_return_new?(returning, options)
     options = if return_new, do: "?returnNew=true", else: ""
+
+    Logger.debug("#{inspect(__MODULE__)}.update", %{
+      "#{inspect(__MODULE__)}.update-params" => %{document: inspect(document)}
+    })
+
+    maybe_create_collection(collection, conn)
 
     Arangox.patch(
       conn,
@@ -128,6 +139,9 @@ defmodule ArangoXEcto.Behaviour.Schema do
     raise "Updating with filters other than _key is not supported yet"
   end
 
+  @doc """
+  Gets the foreign keys from a schema
+  """
   @spec get_foreign_keys(nil | module()) :: [atom()]
   def get_foreign_keys(nil), do: []
 
@@ -162,6 +176,27 @@ defmodule ArangoXEcto.Behaviour.Schema do
 
   defp single_doc_result({:error, %{error_num: error_num, message: msg}}, _, _) do
     raise "#{inspect(__MODULE__)} Error(#{error_num}): #{msg}"
+  end
+
+  defp maybe_create_collection(collection_name, conn) do
+    if not collection_exists?(conn, collection_name) do
+      create_collection(conn, collection_name)
+    end
+  end
+
+  defp collection_exists?(conn, collection_name) when is_binary(collection_name) do
+    Arangox.get(conn, "/_api/collection/#{collection_name}")
+    |> case do
+         {:ok, _request, %Arangox.Response{body: %{"isSystem" => false}}} ->
+           true
+
+         _any ->
+           false
+       end
+  end
+
+  defp create_collection(conn, collection_name) do
+    Arangox.post!(conn, "/_api/collection", %{name: collection_name, type: 2})
   end
 
   defp build_docs(fields) when is_list(fields) do

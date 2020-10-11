@@ -5,6 +5,8 @@ defmodule ArangoXEcto.Behaviour.Queryable do
 
   require Logger
 
+  @behaviour Ecto.Adapter.Queryable
+
   @doc """
   Streams a previously prepared query.
   """

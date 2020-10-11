@@ -6,7 +6,6 @@ defmodule ArangoXEcto.Adapter do
   @otp_app :arangox_ecto
 
   @behaviour Ecto.Adapter
-  @behaviour Ecto.Adapter.Queryable
 
   @impl Ecto.Adapter
   defmacro __before_compile__(_env) do

@@ -431,7 +431,7 @@ defmodule ArangoXEcto do
     end
   end
 
-  defp collection_exists?(repo, collection_name, type \\ 2) when is_binary(collection_name) do
+  defp collection_exists?(repo, collection_name, type) when is_binary(collection_name) do
     conn = gen_conn_from_repo(repo)
 
     Arangox.get(conn, "/_api/collection/#{collection_name}")
