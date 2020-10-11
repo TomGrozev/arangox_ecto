@@ -11,10 +11,10 @@
   <a href="https://github.com/TomGrozev/arangox_ecto">
     <img src="images/logo.png" alt="Logo" width="80" height="80">
   </a>
-
+  
   <h3 align="center">ArangoX Ecto</h3>
-
-  <p align="center">
+  
+  <span align="center">
     An adapter for ArangoDB and Ecto that support full graph functionality.
     <br />
     <a href="https://hexdocs.pm/arangox_ecto"><strong>Explore the docs »</strong></a>
@@ -25,7 +25,7 @@
     <a href="https://github.com/TomGrozev/arangox_ecto/issues">Report Bug</a>
     ·
     <a href="https://github.com/TomGrozev/arangox_ecto/issues">Request Feature</a>
-  </p>
+  </span>
 </p>
 
 

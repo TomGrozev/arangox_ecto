@@ -1,4 +1,12 @@
 defmodule ArangoXEcto.Utils do
+  @moduledoc """
+  Helper methods
+  """
+
+  @doc """
+  Get system database connection
+  """
+  @spec get_system_db(keyword()) :: pid()
   def get_system_db(config) do
     options =
       config

@@ -16,6 +16,15 @@ defmodule ArangoXEctoTest.Integration.Post do
   end
 end
 
+defmodule ArangoXEctoTest.Integration.Deep.Magic do
+  use ArangoXEcto.Schema
+
+  schema "magics" do
+    field(:something, :string)
+    field(:idk, :string)
+  end
+end
+
 defmodule ArangoXEctoTest.Integration.UserPosts do
   use ArangoXEcto.Edge
   import Ecto.Changeset

@@ -1,7 +1,11 @@
 defmodule ArangoXEcto.Behaviour.Schema do
   @moduledoc """
   Handles Ecto adapter schema methods
+
+  This implements methods for `Ecto.Adapter.Schema`. These functions should not be accessed directly
+  and should only be used by Ecto. Direct interaction functions are in the `ArangoXEcto` module.
   """
+  @moduledoc false
 
   @behaviour Ecto.Adapter.Schema
 
@@ -187,12 +191,12 @@ defmodule ArangoXEcto.Behaviour.Schema do
   defp collection_exists?(conn, collection_name) when is_binary(collection_name) do
     Arangox.get(conn, "/_api/collection/#{collection_name}")
     |> case do
-         {:ok, _request, %Arangox.Response{body: %{"isSystem" => false}}} ->
-           true
+      {:ok, _request, %Arangox.Response{body: %{"isSystem" => false}}} ->
+        true
 
-         _any ->
-           false
-       end
+      _any ->
+        false
+    end
   end
 
   defp create_collection(conn, collection_name) do

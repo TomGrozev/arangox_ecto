@@ -1,7 +1,11 @@
 defmodule ArangoXEcto.Behaviour.Queryable do
   @moduledoc """
   Handles Ecto adapter queryable methods
+
+  This implements methods for `Ecto.Adapter.Queryable`. These functions should not be accessed directly
+  and should only be used by Ecto. Direct interaction functions are in the `ArangoXEcto` module.
   """
+  @moduledoc false
 
   require Logger
 

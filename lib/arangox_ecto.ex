@@ -123,7 +123,8 @@ defmodule ArangoXEcto do
       %ArangoXEcto.Edge{_from: "users/12345", _to: "users/54321"}
 
   """
-  @spec create_edge(Ecto.Repo.t(), mod(), mod(), keyword()) :: {:ok, Ecto.Schema.t()} | {:error, Ecto.Changeset.t()}
+  @spec create_edge(Ecto.Repo.t(), mod(), mod(), keyword()) ::
+          {:ok, Ecto.Schema.t()} | {:error, Ecto.Changeset.t()}
   def create_edge(repo, from, to, opts \\ [])
 
   def create_edge(repo, from, to, [edge: edge_module, fields: _fields] = opts) do
@@ -138,7 +139,7 @@ defmodule ArangoXEcto do
     from_id = struct_id(from)
     to_id = struct_id(to)
 
-    edge_module(opts, from, to)
+    edge_module(from, to, opts)
     |> do_create_edge(repo, from_id, to_id, opts)
   end
 
@@ -146,7 +147,8 @@ defmodule ArangoXEcto do
   @doc """
   Same as create_edge/4 but specific for custom edge and fields.
   """
-  @spec create_edge(Ecto.Repo.t(), mod(), mod(), mod(), map(), keyword()) :: {:ok, Ecto.Schema.t()} | {:error, Ecto.Changeset.t()}
+  @spec create_edge(Ecto.Repo.t(), mod(), mod(), mod(), map(), keyword()) ::
+          {:ok, Ecto.Schema.t()} | {:error, Ecto.Changeset.t()}
   def create_edge(repo, from, to, edge, %{} = fields, opts \\ []) do
     opts =
       opts
@@ -208,7 +210,8 @@ defmodule ArangoXEcto do
       iex> ArangoXEcto.create_edge(Repo, user1, user2, edge: UserPosts, fields: %{type: "wrote"})
       %ArangoXEcto.Edge{_from: "users/12345", _to: "users/54321"}
   """
-  @spec delete_all_edges(Ecto.Repo.t(), mod(), mod(), keyword()) :: {:ok, Ecto.Schema.t()} | {:error, Ecto.Changeset.t()}
+  @spec delete_all_edges(Ecto.Repo.t(), mod(), mod(), keyword()) ::
+          {:ok, Ecto.Schema.t()} | {:error, Ecto.Changeset.t()}
   def delete_all_edges(repo, from, to, opts \\ [])
 
   def delete_all_edges(repo, from, to, [edge: edge_module] = opts) do
@@ -223,18 +226,42 @@ defmodule ArangoXEcto do
     from_id = struct_id(from)
     to_id = struct_id(to)
 
-    edge_module(opts, from, to)
+    edge_module(from, to, opts)
     |> do_delete_all_edges(repo, from_id, to_id, opts)
   end
 
   @doc """
   Gets an ID from a schema struct
+
+  ## Parameters
+
+  - `struct` - The Ecto struct
+
+  ## Example
+
+  If the User schema's collection name is `users` the following would be:
+
+      iex> user = %User{id: "123456"}
+      %User{id: "123456"}
+
+      iex> ArangoXEcto.get_id_from_struct(user)
+      "users/123456"
   """
   @spec get_id_from_struct(mod()) :: binary()
   def get_id_from_struct(struct), do: struct_id(struct)
 
   @doc """
   Gets an ID from a module and a key
+
+  ## Parameters
+
+  - `module` - Module to get the collection name from
+  - `key` - The `_key` to use in the id
+
+  ## Example
+
+      iex> ArangoXEcto.get_id_from_module(User, "123456")
+      "users/123456"
   """
   @spec get_id_from_module(Ecto.Schema.t(), binary()) :: binary()
   def get_id_from_module(module, key) do
@@ -243,26 +270,97 @@ defmodule ArangoXEcto do
 
   @doc """
   Converts raw output of a query into a struct
+
+  Transforms string map arguments into atom key map, adds id key and drops `_id`, `_key` and `_rev` keys.
+  Then it creates a struct from filtered arguments using module.
+
+  If a list of maps are passed then the maps are enumerated over.
+
+  ## Parameters
+
+  - `maps` - List of maps or singular map to convert to a struct
+  - `module` - Module to use for the struct
+
+  ## Example
+
+      iex> {:ok, users} = ArangoXEcto.aql_query(
+            Repo,
+            "FOR user IN users RETURN user"
+          )
+      {:ok,
+      [
+        %{
+          "_id" => "users/12345",
+          "_key" => "12345",
+          "_rev" => "_bHZ8PAK---",
+          "first_name" => "John",
+          "last_name" => "Smith"
+        }
+      ]}
+
+      iex> ArangoXEcto.raw_to_struct(users, User)
+      [
+        %User{
+          id: "12345",
+          first_name: "John",
+          last_name: "Smith"
+        }
+      ]
   """
   @spec raw_to_struct(map() | [map()], Ecto.Schema.t()) :: struct()
-  def raw_to_struct(maps, module) when is_list(maps) do
-    Enum.map(maps, & raw_to_struct(&1, module))
+  def raw_to_struct(map, module) when is_list(map) do
+    Enum.map(map, &raw_to_struct(&1, module))
   end
 
   def raw_to_struct(map, module) when is_map(map) do
-    args = patch_map(map)
-    |> filter_keys_for_struct()
+    args =
+      patch_map(map)
+      |> filter_keys_for_struct()
 
     struct(module, args)
   end
 
   @doc """
-  Returns the Edge Module name as an atom.
-  """
-  @spec edge_module(keyword(), mod(), mod()) :: atom()
-  def edge_module([collection_name: name], _, _), do: create_edge_module(name)
+  Generates a edge schema dynamically
 
-  def edge_module(_, mod1, mod2), do: create_edge_module(gen_edge_collection_name(mod1, mod2))
+  If no collection name is passed in the options, then one is generated using the passed modules.
+
+  This will create the Ecto Module in the environment dynamically. It will create it under the closest
+  common parent module of the passed modules.
+
+  Returns the Edge Module name as an atom.
+
+  ## Parameters
+
+  - `from_module` - Ecto Schema Module for the from part of the edge
+  - `to_module` - Ecto Schema Module for the to part of the edge
+  - `opts` - Options passed for module generation
+
+  ## Options
+
+  - `:collection_name` - The name of collection to use instead of generating it
+
+  ## Examples
+
+      iex> ArangoXEcto.edge_module(MyProject.User, MyProject.Company, [collection_name: "works_for"])
+      MyProject.WorksFor
+
+      iex> ArangoXEcto.edge_module(MyProject.User, MyProject.Company)
+      MyProject.UsersCompanies
+  """
+  @spec edge_module(mod(), mod(), keyword()) :: atom()
+  def edge_module(from_module, to_module, opts \\ [])
+
+  def edge_module(%from_module{}, %to_module{}, opts),
+    do: edge_module(from_module, to_module, opts)
+
+  def edge_module(from_module, to_module, collection_name: name),
+    do: create_edge_module(name, from_module, to_module)
+
+  def edge_module(from_module, to_module, _) do
+    gen_edge_collection_name(from_module, to_module)
+    |> create_edge_module(from_module, to_module)
+  end
 
   ###############
   ##  Helpers  ##
@@ -299,10 +397,12 @@ defmodule ArangoXEcto do
   defp find_edge_by_nodes(module, repo, from_id, to_id, opts) do
     conditions =
       Keyword.get(opts, :conditions, [])
-      |> Keyword.merge([_from: from_id, _to: to_id])
+      |> Keyword.merge(_from: from_id, _to: to_id)
 
-    query = from module,
-            where: ^conditions
+    query =
+      from(module,
+        where: ^conditions
+      )
 
     repo.all(query)
   end
@@ -329,9 +429,9 @@ defmodule ArangoXEcto do
 
   defp collection_from_id(id), do: source_name(id)
 
-  defp create_edge_module(collection_name) do
-    # TODO: Make prefix modules part of project instead of this
-    module_name = Module.concat(ArangoXEcto.Edge, Macro.camelize(collection_name))
+  defp create_edge_module(collection_name, from_module, to_module) do
+    project_prefix = Module.concat(common_parent_module(from_module, to_module), "Edges")
+    module_name = Module.concat(project_prefix, Macro.camelize(collection_name))
 
     unless function_exported?(module_name, :__info__, 1) do
       contents =
@@ -348,6 +448,26 @@ defmodule ArangoXEcto do
 
     module_name
   end
+
+  defp common_parent_module(module1, module2) do
+    parent1 = parent_module_list(module1)
+    parent2 = parent_module_list(module2)
+
+    common_ordered_list(parent1, parent2)
+    |> Module.concat()
+  end
+
+  defp parent_module_list(module) do
+    Module.split(module)
+    |> Enum.drop(-1)
+  end
+
+  defp common_ordered_list(list1, list2, acc \\ [])
+
+  defp common_ordered_list([h1 | t1], [h2 | t2], acc) when h1 == h2,
+    do: common_ordered_list(t1, t2, [h1 | acc])
+
+  defp common_ordered_list(_, _, acc), do: Enum.reverse(acc)
 
   defp gen_edge_collection_name(mod1, mod2) do
     name1 = source_name(mod1)
@@ -369,7 +489,6 @@ defmodule ArangoXEcto do
   defp source_name(module) do
     module.__schema__(:source)
   end
-
 
   defp struct_id(%{id: id} = struct) do
     source = source_name(struct)
@@ -406,6 +525,7 @@ defmodule ArangoXEcto do
     attrs =
       Keyword.get(opts, :fields, %{})
       |> Map.merge(%{_from: id1, _to: id2})
+
     struct = struct(module)
 
     try do
@@ -457,10 +577,7 @@ defmodule ArangoXEcto do
   defp filter_keys_for_struct(map) do
     key = Map.get(map, :_key)
 
-    with map = Map.put(map, :id, key),
-         {_, map} = Map.pop(map, :_id),
-         {_, map} = Map.pop(map, :_rev),
-         {_, map} = Map.pop(map, :_key),
-         do: map
+    Map.put(map, :id, key)
+    |> Map.drop([:_id, :_rev, :_key])
   end
 end

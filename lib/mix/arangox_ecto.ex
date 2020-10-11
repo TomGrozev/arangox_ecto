@@ -4,6 +4,7 @@ defmodule Mix.ArangoXEcto do
 
   Based off of https://github.com/SquashConsulting/ecto_aql.
   """
+  @moduledoc false
 
   def path_to_priv_repo(repo) do
     app = Keyword.fetch!(repo.config(), :otp_app)

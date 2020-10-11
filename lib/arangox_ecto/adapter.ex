@@ -1,6 +1,9 @@
 defmodule ArangoXEcto.Adapter do
   @moduledoc """
   Ecto adapter for ArangoDB using ArangoX
+
+  This implements methods for `Ecto.Adapter`. These functions should not be accessed directly
+  and should only be used by Ecto. Direct interaction functions are in the `ArangoXEcto` module.
   """
 
   @otp_app :arangox_ecto
