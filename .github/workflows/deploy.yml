@@ -25,6 +25,6 @@ jobs:
         - run: mix test
           env:
             DB_ENDPOINT: 'http://localhost:8529'
-        - run: mix hex.publish
+        - run: mix hex.publish --yes
           env:
             HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
