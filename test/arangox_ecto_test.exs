@@ -85,9 +85,7 @@ defmodule ArangoXEctoTest do
           FILTER var.first_name == @fname AND var.last_name == @lname
           RETURN var
           """,
-          [{:"@collection_name", collection_name},
-          fname: fname,
-          lname: lname]
+          [{:"@collection_name", collection_name}, fname: fname, lname: lname]
         )
 
       assert Kernel.match?(

@@ -7,7 +7,7 @@ alias ArangoXEctoTest.Repo
 Application.put_env(:arangox_ecto, Repo,
   adapter: ArangoXEcto,
   database: "arangox_ecto_test",
-  endpoints: "http://192.168.1.138:8529"
+  endpoints: System.get_env("DB_ENDPOINT", "http://192.168.1.138:8529")
 )
 
 Code.require_file("./support/schemas.exs", __DIR__)
