@@ -4,11 +4,9 @@ ExUnit.start()
 
 alias ArangoXEctoTest.Repo
 
-test_db = "arangox_ecto_test"
-
 Application.put_env(:arangox_ecto, Repo,
   adapter: ArangoXEcto,
-  database: test_db,
+  database: "arangox_ecto_test",
   endpoints: System.get_env("DB_ENDPOINT", "http://192.168.1.138:8529")
 )
 
