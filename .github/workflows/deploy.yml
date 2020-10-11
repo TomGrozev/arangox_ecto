@@ -17,9 +17,8 @@ jobs:
         - run: mix format
         - run: mix clean
         - run: mix compile --warnings-as-errors
-        - run: mix credo --strict
+        - run: mix credo --strict --ignore design
         - run: mix doctor --summary
-        - run: mix dialyzer
         - run: mix test
         - run: mix hex.publish
           env:
