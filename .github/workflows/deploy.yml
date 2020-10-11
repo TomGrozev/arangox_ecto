@@ -12,7 +12,6 @@ jobs:
         - uses: xinova/arangodb-action@v1
           with:
             arangodb version: 'latest'
-          run: arangosh
         - uses: actions/setup-elixir@v1
           with:
             otp-version: '23'
