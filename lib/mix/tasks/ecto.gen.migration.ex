@@ -10,21 +10,30 @@ defmodule Mix.Tasks.Ecto.Gen.Migration do
 
   @moduledoc """
   Generates a migration.
-  The repository must be set under `:ecto_repos` in the
-  current app configuration or given via the `-r` option.
+
+  The repository must be set under `:ecto_repos` in the current app
+  configuration or given via the `-r` option.
+
   ## Examples
+
       mix ecto.gen.migration create_users
       mix ecto.gen.migration create_users -r Custom.Repo
-  The generated migration filename will be prefixed with the current
-  timestamp in UTC which is used for versioning and ordering.
+
+  The generated migration filename will be prefixed with the current timestamp
+  in UTC which is used for versioning and ordering.
+
   By default, the migration will be generated to the
-  "priv/YOUR_REPO/migrations" directory of the current application
-  but it can be configured to be any subdirectory of `priv` by
-  specifying the `:priv` key under the repository configuration.
-  This generator will automatically open the generated file if
-  you have `ECTO_EDITOR` set in your environment variable.
+  `priv/YOUR_REPO/migrations` directory of the current application but it can
+  be configured to be any subdirectory of `priv` by specifying the `:priv` key
+  under the repository configuration.
+
+  This generator will automatically open the generated file if you have
+  `ECTO_EDITOR` set in your environment variable.
+
   ## Command line options
+
     * `-r`, `--repo` - the repo to generate migration for
+
   """
 
   @aliases [
@@ -68,7 +77,7 @@ defmodule Mix.Tasks.Ecto.Gen.Migration do
 
         {_, _} ->
           Mix.raise(
-            "expected ecto.gen.migration to recieve the migration file name, " <>
+            "expected ecto.gen.migration to receive the migration file name, " <>
               "got: #{inspect(Enum.join(args, " "))}"
           )
       end
