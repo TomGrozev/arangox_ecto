@@ -31,8 +31,6 @@ defmodule ArangoXEcto.Behaviour.Queryable do
       }
     })
 
-    IO.inspect(query)
-
     aql_query = apply(ArangoXEcto.Query, cmd, [query])
     {:nocache, aql_query}
   end
@@ -85,7 +83,6 @@ defmodule ArangoXEcto.Behaviour.Queryable do
         end,
         options
       )
-      |> IO.inspect()
 
     case res do
       {:ok, result} -> {length(result), result}

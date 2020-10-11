@@ -4,7 +4,7 @@ defmodule ArangoXEctoTest do
 
   #  doctest ArangoXEcto
 
-  alias ArangoXEctoTest.Integration.{User, Post, UserPosts}
+  alias ArangoXEctoTest.Integration.{Post, User, UserPosts}
   alias ArangoXEctoTest.Repo
 
   @test_collections [:users]

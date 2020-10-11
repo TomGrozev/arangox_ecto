@@ -1,34 +1,4 @@
-[![Contributors][contributors-shield]][contributors-url]
-[![Forks][forks-shield]][forks-url]
-[![Stargazers][stars-shield]][stars-url]
-[![Issues][issues-shield]][issues-url]
-[![MIT License][license-shield]][license-url]
-
-
-
-<br />
-<p align="center">
-  <a href="https://github.com/TomGrozev/arangox_ecto">
-    <img src="images/logo.png" alt="Logo" width="80" height="80">
-  </a>
-  
-  <h3 align="center">ArangoX Ecto</h3>
-  
-  <span align="center">
-    An adapter for ArangoDB and Ecto that support full graph functionality.
-    <br />
-    <a href="https://hexdocs.pm/arangox_ecto"><strong>Explore the docs »</strong></a>
-    <br />
-    <br />
-    <a href="https://github.com/TomGrozev/arangox_ecto">View Demo</a>
-    ·
-    <a href="https://github.com/TomGrozev/arangox_ecto/issues">Report Bug</a>
-    ·
-    <a href="https://github.com/TomGrozev/arangox_ecto/issues">Request Feature</a>
-  </span>
-</p>
-
-
+# ArangoXEcto
 
 <!-- TABLE OF CONTENTS -->
 ## Table of Contents
@@ -74,7 +44,7 @@ To get the adapter integrated with your project, follow these simple steps.
 Add the following line to your mix dependencies.
 
 ```elixir
-{:arangox_ecto, "~> 0.6"}
+{:arangox_ecto, git: "https://github.com/TomGrozev/arangox_ecto", tag: "0.6.1"}
 ```
 
 ## Usage

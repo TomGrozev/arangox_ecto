@@ -1,4 +1,8 @@
 defmodule Mix.Tasks.Ecto.Migrate do
+  @moduledoc """
+  Runs Migration/Rollback functions from migration modules
+  """
+
   use Mix.Task
 
   import Mix.ArangoXEcto

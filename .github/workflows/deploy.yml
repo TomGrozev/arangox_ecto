@@ -1,0 +1,26 @@
+name: Deploy
+
+on: push
+
+jobs:
+    lint-code:
+      name: Lint code
+      runs-on: ubuntu-latest
+
+      steps:
+        - uses: actions/checkout@v2
+        - uses: actions/setup-elixir@v1
+          with:
+            otp-version: '23'
+            elixir-version: '1.10.4'
+        - run: mix deps.get
+        - run: mix format
+        - run: mix clean
+        - run: mix compile --warnings-as-errors
+        - run: mix credo --strict
+        - run: mix doctor --summary
+        - run: mix dialyzer
+        - run: mix test
+        - run: mix hex.publish
+          env:
+            HEX_API_KEY: ${{ secrets.HEX_API_KEY }}

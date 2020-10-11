@@ -39,9 +39,10 @@ defmodule ArangoXEcto.Behaviour.Storage do
 
     case Arangox.get(conn, "/_api/database") do
       {:ok, _, %{body: %{"result" => result}}} when is_list(result) ->
-        cond do
-          database in result -> :ok
-          true -> :down
+        if database in result do
+          :ok
+        else
+          :down
         end
 
       {:error, %{status: status}} ->

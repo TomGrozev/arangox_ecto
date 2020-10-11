@@ -162,6 +162,8 @@ defmodule ArangoXEcto do
 
   If the `:conditions` option is set then those conditions must be true to delete.
 
+  To just delete one edge do so like any other Ecto Schema struct, i.e. using `Ecto.Repo` methods.
+
   ## Options
 
   Accepts the following options:
@@ -326,7 +328,10 @@ defmodule ArangoXEcto do
   If no collection name is passed in the options, then one is generated using the passed modules.
 
   This will create the Ecto Module in the environment dynamically. It will create it under the closest
-  common parent module of the passed modules.
+  common parent module of the passed modules plus the `Edges` alias. For example, if the modules were
+  `MyApp.Apple.User` and `MyApp.Apple.Banana.Post` then the edge would be created at `MyApp.Apple.Edges.UsersPosts`.
+  This assumes that the edge collection name was generated and not passed in, if it was `UsersPosts` would be
+  replaced with the camelcase of that collection name.
 
   Returns the Edge Module name as an atom.
 

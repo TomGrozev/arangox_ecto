@@ -128,7 +128,5 @@ defmodule ArangoXEcto.Edge do
 
   defp validate_id(changeset, fields) when is_list(fields) do
     Enum.reduce(fields, changeset, &validate_format(&2, &1, ~r/[a-zA-Z0-9]+\/[a-zA-Z0-9]+/))
-
-    changeset
   end
 end

@@ -1,7 +1,7 @@
 defmodule ArangoXEcto.MixProject do
   use Mix.Project
 
-  @version "0.6.0"
+  @version "0.6.1"
 
   def project do
     [
@@ -39,7 +39,11 @@ defmodule ArangoXEcto.MixProject do
       {:arangox, "~> 0.4.0"},
       {:velocy, "~> 0.1"},
       {:jason, "~> 1.2"},
-      {:ex_doc, "~> 0.22.5", only: :dev, runtime: false}
+      {:ex_doc, "~> 0.22.5", only: :dev, runtime: false},
+      {:credo, "~> 1.5.0-rc.2", only: [:dev, :test], runtime: false},
+      {:doctor, "~> 0.15.0", only: [:dev, :test], runtime: false},
+      {:dialyxir, "~> 1.0", only: [:dev], runtime: false},
+      {:git_hooks, "~> 0.5.0", only: [:test, :dev], runtime: false}
     ]
   end
 
@@ -62,10 +66,11 @@ defmodule ArangoXEcto.MixProject do
 
   defp docs do
     [
-      main: "readme",
-      extras: ["README.md"],
+      main: "docs",
+      logo: "images/logo.png",
+      extras: ["DOCS.md"],
       source_ref: "v#{@version}",
-      canonical: "http://hexdocs.pm/arangox_ecto",
+      canonical: "http://hex.pm/arangox_ecto",
       source_url: "https://github.com/TomGrozev/arangox_ecto"
     ]
   end

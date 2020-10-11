@@ -61,9 +61,9 @@ defmodule ArangoXEcto.Adapter do
       }
     })
 
-    with {:ok, _} = Application.ensure_all_started(@otp_app) do
-      {:ok, [config]}
-    end
+    {:ok, _} = Application.ensure_all_started(@otp_app)
+
+    {:ok, [config]}
   end
 
   @behaviour Ecto.Adapter.Storage

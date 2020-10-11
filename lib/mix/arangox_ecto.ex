@@ -6,16 +6,19 @@ defmodule Mix.ArangoXEcto do
   """
   @moduledoc false
 
+  @doc false
   def path_to_priv_repo(repo) do
     app = Keyword.fetch!(repo.config(), :otp_app)
     Path.join(Mix.Project.deps_paths()[app] || File.cwd!(), "priv/repo")
   end
 
+  @doc false
   def timestamp do
     {{y, m, d}, {hh, mm, ss}} = :calendar.universal_time()
     "#{y}#{pad(m)}#{pad(d)}#{pad(hh)}#{pad(mm)}#{pad(ss)}"
   end
 
+  @doc false
   def create_migrations do
     {:ok, conn} = system_db()
 
@@ -29,6 +32,7 @@ defmodule Mix.ArangoXEcto do
     end
   end
 
+  @doc false
   def create_master_document do
     {:ok, conn} = system_db()
 
@@ -36,6 +40,7 @@ defmodule Mix.ArangoXEcto do
       Arangox.post(conn, "/_api/document/_migrations", %{_key: "MASTER", migrations: []})
   end
 
+  @doc false
   def migrated_versions do
     {:ok, conn} = system_db()
 
@@ -47,6 +52,7 @@ defmodule Mix.ArangoXEcto do
     versions
   end
 
+  @doc false
   def update_versions(version) when is_binary(version),
     do: update_versions(String.to_integer(version))
 
@@ -61,6 +67,7 @@ defmodule Mix.ArangoXEcto do
     new_versions
   end
 
+  @doc false
   def remove_version(version) when is_binary(version),
     do: remove_version(String.to_integer(version))
 
@@ -77,6 +84,15 @@ defmodule Mix.ArangoXEcto do
     new_versions
   end
 
+  @doc false
+  def get_default_repo! do
+    case Mix.Ecto.parse_repo([])
+         |> List.first() do
+      nil -> Mix.raise("No Default Repo Found")
+      repo -> repo
+    end
+  end
+
   defp query(conn, query_str) do
     Arangox.transaction(conn, fn cursor ->
       cursor
@@ -86,14 +102,6 @@ defmodule Mix.ArangoXEcto do
       end)
       |> List.flatten()
     end)
-  end
-
-  def get_default_repo! do
-    case Mix.Ecto.parse_repo([])
-         |> List.first() do
-      nil -> Mix.raise("No Default Repo Found")
-      repo -> repo
-    end
   end
 
   defp config(opts) do

@@ -10,7 +10,7 @@ defmodule ArangoXEcto.Query do
   """
 
   alias Ecto.Query
-  alias Ecto.Query.{JoinExpr, BooleanExpr, QueryExpr}
+  alias Ecto.Query.{BooleanExpr, JoinExpr, QueryExpr}
 
   @doc """
   Creates an AQL query to fetch all entries from the data store matching the given query.

@@ -235,7 +235,6 @@ defmodule ArangoXEcto.Behaviour.Schema do
   defp process_docs(docs, []), do: {length(docs), nil}
 
   defp process_docs(docs, _returning) do
-    # TODO: Possibly broken
     {length(docs), docs}
   end
 end

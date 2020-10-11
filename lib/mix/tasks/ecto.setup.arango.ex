@@ -1,4 +1,8 @@
 defmodule Mix.Tasks.Ecto.Setup.Arango do
+  @moduledoc """
+  Sets up all necessary collection in _systems db for migrations and creates database
+  """
+
   use Mix.Task
   import Mix.ArangoXEcto
 
