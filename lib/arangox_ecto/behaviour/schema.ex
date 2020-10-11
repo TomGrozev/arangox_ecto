@@ -1,10 +1,4 @@
 defmodule ArangoXEcto.Behaviour.Schema do
-  @moduledoc """
-  Handles Ecto adapter schema methods
-
-  This implements methods for `Ecto.Adapter.Schema`. These functions should not be accessed directly
-  and should only be used by Ecto. Direct interaction functions are in the `ArangoXEcto` module.
-  """
   @moduledoc false
 
   @behaviour Ecto.Adapter.Schema

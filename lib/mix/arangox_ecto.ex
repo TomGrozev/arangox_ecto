@@ -1,9 +1,5 @@
 defmodule Mix.ArangoXEcto do
-  @moduledoc """
-  Helpers for mix tasks
-
-  Based off of https://github.com/SquashConsulting/ecto_aql.
-  """
+  # Based off of https://github.com/SquashConsulting/ecto_aql.
   @moduledoc false
 
   @doc false

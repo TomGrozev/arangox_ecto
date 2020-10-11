@@ -1,9 +1,4 @@
 defmodule ArangoXEcto.Schema.Fields do
-  @moduledoc """
-  Defines required fields for schemas
-
-  This is a helper module and methods should not be accessed directly.
-  """
   @moduledoc false
 
   @doc """

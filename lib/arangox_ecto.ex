@@ -212,8 +212,7 @@ defmodule ArangoXEcto do
       iex> ArangoXEcto.create_edge(Repo, user1, user2, edge: UserPosts, fields: %{type: "wrote"})
       %ArangoXEcto.Edge{_from: "users/12345", _to: "users/54321"}
   """
-  @spec delete_all_edges(Ecto.Repo.t(), mod(), mod(), keyword()) ::
-          {:ok, Ecto.Schema.t()} | {:error, Ecto.Changeset.t()}
+  @spec delete_all_edges(Ecto.Repo.t(), mod(), mod(), keyword()) :: :ok
   def delete_all_edges(repo, from, to, opts \\ [])
 
   def delete_all_edges(repo, from, to, [edge: edge_module] = opts) do
