@@ -4,15 +4,23 @@ ExUnit.start()
 
 alias ArangoXEctoTest.Repo
 
+test_db = "arangox_ecto_test"
+
 Application.put_env(:arangox_ecto, Repo,
   adapter: ArangoXEcto,
-  database: "arangox_ecto_test",
+  database: test_db,
   endpoints: System.get_env("DB_ENDPOINT", "http://192.168.1.138:8529")
 )
 
 Code.require_file("./support/schemas.exs", __DIR__)
 
-{:ok, _} = ArangoXEcto.Adapter.ensure_all_started(Ecto.Integration.TestRepo, :temporary)
+{:ok, _} = ArangoXEcto.Adapter.ensure_all_started(Repo, :temporary)
+
+case Repo.__adapter__().storage_up(Repo.config()) do
+  :ok -> :ok
+  {:error, :already_up} -> :ok
+  {:error, term} -> raise inspect(term)
+end
 
 {:ok, _pid} = Repo.start_link()
 
