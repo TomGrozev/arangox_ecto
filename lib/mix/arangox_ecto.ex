@@ -82,8 +82,9 @@ defmodule Mix.ArangoXEcto do
 
   @doc false
   def get_default_repo! do
-    case Mix.Ecto.parse_repo([])
-         |> List.first() do
+    Mix.Ecto.parse_repo([])
+    |> List.first()
+    |> case do
       nil -> Mix.raise("No Default Repo Found")
       repo -> repo
     end
@@ -101,7 +102,9 @@ defmodule Mix.ArangoXEcto do
   end
 
   defp config(opts) do
-    case Keyword.fetch(get_default_repo!().config(), :endpoints) do
+    get_default_repo!().config()
+    |> Keyword.fetch(:endpoints)
+    |> case do
       {:ok, endpoints} -> [endpoints: endpoints] |> Keyword.merge(opts)
       :error -> [endpoints: "http://localhost:8529"] |> Keyword.merge(opts)
     end

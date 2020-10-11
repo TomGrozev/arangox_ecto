@@ -54,7 +54,7 @@ defmodule ArangoXEcto.Adapter do
   """
   @impl Ecto.Adapter
   def ensure_all_started(config, type) do
-    Logger.debug("#{inspect(__MODULE__)}.ensute_all_started", %{
+    Logger.debug("#{inspect(__MODULE__)}.ensure_all_started", %{
       "#{inspect(__MODULE__)}.ensure_all_started-params" => %{
         type: type,
         config: config

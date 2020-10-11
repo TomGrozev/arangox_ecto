@@ -17,7 +17,8 @@ defmodule ArangoXEcto.Behaviour.Storage do
 
     case Arangox.post(conn, "/_api/database", %{name: database}) do
       {:ok, _, _} -> :ok
-      {:error, %{status: status}} -> {:error, status}
+      {:error, %{error_num: 1207}} -> {:error, :already_up}
+      {:error, reason} -> {:error, reason}
     end
   end
 
@@ -56,7 +57,7 @@ defmodule ArangoXEcto.Behaviour.Storage do
 
     case Arangox.delete(conn, "/_api/database/#{database}") do
       {:ok, _, _} -> :ok
-      {:error, %{status: status}} -> {:error, status}
+      {:error, reason} -> {:error, reason}
     end
   end
 end
