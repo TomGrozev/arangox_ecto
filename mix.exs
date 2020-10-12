@@ -11,7 +11,7 @@ defmodule ArangoXEcto.MixProject do
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       # Hex
-      description: "An ArangoDB adapter for Ecto supporting standard queries and graph queries.",
+      description: "An ArangoDB adapter for Ecto supporting Ecto queries and graph queries.",
       package: package(),
       # Docs
       name: "ArangoX Ecto",
