@@ -44,7 +44,7 @@ To get the adapter integrated with your project, follow these simple steps.
 Add the following line to your mix dependencies.
 
 ```elixir
-{:arangox_ecto, git: "https://github.com/TomGrozev/arangox_ecto", tag: "0.6.1"}
+{:arangox_ecto, "~> 0.6"}
 ```
 
 ## Usage
