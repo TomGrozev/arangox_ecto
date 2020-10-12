@@ -1,14 +1,14 @@
 name: Deploy
 
 on:
-  push:
-    tags:
-      - 'v*'
+  pull_request:
+    types: [closed]
     branches:
       - master
 
 jobs:
     deploy:
+      if: github.event.pull_request.merged == 'true'
       name: Deploy to Hex and create release
       runs-on: ubuntu-latest
 
