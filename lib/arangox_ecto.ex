@@ -395,12 +395,13 @@ defmodule ArangoXEcto do
       iex> ArangoXEcto.collection_exists?(Repo, "_system_test")
       false
   """
-  @spec collection_exists?(Ecto.Repo.t(), binary() | atom(), atom() | integer()) :: boolean()
-  def collection_exists?(repo, collection_name, type \\ :document)
+  @spec collection_exists?(Ecto.Repo.t() | pid(), binary() | atom(), atom() | integer()) ::
+          boolean()
+  def collection_exists?(repo_or_conn, collection_name, type \\ :document)
       when is_binary(collection_name) or is_atom(collection_name) do
     int_type = collection_type_to_integer(type)
 
-    conn = gen_conn_from_repo(repo)
+    conn = gen_conn_from_repo(repo_or_conn)
 
     Arangox.get(conn, "/_api/collection/#{collection_name}")
     |> case do
@@ -412,14 +413,63 @@ defmodule ArangoXEcto do
     end
   end
 
+  @doc """
+  Returns if a Schema is an edge or not
+
+  Checks for the presence of the `__edge__/0` function on the module.
+  """
+  @spec is_edge?(atom()) :: boolean()
+  def is_edge?(module), do: function_exported?(module, :__edge__, 0)
+
+  @doc """
+  Returns if a Schema is a document schema or not
+
+  Checks for the presence of the `__schema__/1` function on the module and not an edge.
+  """
+  @spec is_document?(atom()) :: boolean()
+  def is_document?(module),
+    do: function_exported?(module, :__schema__, 1) and not is_edge?(module)
+
+  @doc """
+  Returns the type of a module
+
+  This is just a shortcut to using `is_edge/1` and `is_document/1`. If it is neither an error is raised.
+
+  ## Examples
+
+  A real edge schema
+
+      iex> ArangoXEcto.schema_type!(MyApp.RealEdge)
+      :edge
+
+  Some module that is not an Ecto schema
+
+      iex> ArangoXEcto.schema_type!(MyApp.RandomModule)
+      ** (ArgumentError) Not an Ecto Schema
+  """
+  @spec schema_type!(atom()) :: :document | :edge
+  def schema_type!(module) do
+    cond do
+      is_edge?(module) -> :edge
+      is_document?(module) -> :document
+      true -> raise ArgumentError, "Not an Ecto Schema"
+    end
+  end
+
   ###############
   ##  Helpers  ##
   ###############
 
-  defp gen_conn_from_repo(repo) do
-    %{pid: conn} = Ecto.Adapter.lookup_meta(repo)
+  defp gen_conn_from_repo(repo_or_conn) do
+    case repo_or_conn do
+      pid when is_pid(pid) ->
+        pid
 
-    conn
+      repo ->
+        %{pid: conn} = Ecto.Adapter.lookup_meta(repo)
+
+        conn
+    end
   end
 
   defp do_create_edge(module, repo, id1, id2, opts) do

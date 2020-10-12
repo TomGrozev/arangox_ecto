@@ -35,7 +35,7 @@ defmodule ArangoXEcto.Behaviour.Queryable do
   @impl true
   def execute(
         %{pid: conn},
-        %{sources: {{collection, _, _}}, select: selecting},
+        %{sources: {{collection, source_module, _}}, select: selecting},
         {:nocache, query},
         params,
         _options
@@ -46,41 +46,47 @@ defmodule ArangoXEcto.Behaviour.Queryable do
       }
     })
 
-    options =
-      if selecting == nil,
-        do: [],
-        else: [
-          write: collection
-        ]
+    collection_type = ArangoXEcto.schema_type!(source_module)
 
-    zipped_args =
-      Stream.zip(
-        Stream.iterate(1, &(&1 + 1))
-        |> Stream.map(&Integer.to_string(&1)),
-        params
-      )
-      |> Enum.into(%{})
+    if ArangoXEcto.collection_exists?(conn, collection, collection_type) do
+      options =
+        if selecting == nil,
+          do: [],
+          else: [
+            write: collection
+          ]
 
-    res =
-      Arangox.transaction(
-        conn,
-        fn cursor ->
-          stream = Arangox.cursor(cursor, query, zipped_args)
+      zipped_args =
+        Stream.zip(
+          Stream.iterate(1, &(&1 + 1))
+          |> Stream.map(&Integer.to_string(&1)),
+          params
+        )
+        |> Enum.into(%{})
 
-          Enum.reduce(
-            stream,
-            [],
-            fn resp, acc ->
-              acc ++ resp.body["result"]
-            end
-          )
-        end,
-        options
-      )
+      res =
+        Arangox.transaction(
+          conn,
+          fn cursor ->
+            stream = Arangox.cursor(cursor, query, zipped_args)
 
-    case res do
-      {:ok, result} -> {length(result), result}
-      {:error, _reason} -> {0, nil}
+            Enum.reduce(
+              stream,
+              [],
+              fn resp, acc ->
+                acc ++ resp.body["result"]
+              end
+            )
+          end,
+          options
+        )
+
+      case res do
+        {:ok, result} -> {length(result), result}
+        {:error, _reason} -> {0, nil}
+      end
+    else
+      {0, []}
     end
   end
 end
