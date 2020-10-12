@@ -164,6 +164,13 @@ defmodule ArangoXEcto do
 
   To just delete one edge do so like any other Ecto Schema struct, i.e. using `Ecto.Repo` methods.
 
+  ## Parameters
+
+  - `repo` - The Ecto repo module to use for queries
+  - `from` - The Ecto Schema struct to use for the from vertex
+  - `to` - The Ecto Schema struct to use for the to vertex
+  - `opts` - Options to use
+
   ## Options
 
   Accepts the following options:
@@ -172,13 +179,6 @@ defmodule ArangoXEcto do
   - `:fields` - The values of the fields to set on the edge. Requires `edge` to be set otherwise it is ignored.
   - `:collection_name` - The name of the collection to use.
   - `:conditions` - A keyword list of conditions to filter for edge deletion
-
-  ## Parameters
-
-  - `repo` - The Ecto repo module to use for queries
-  - `from` - The Ecto Schema struct to use for the from vertex
-  - `to` - The Ecto Schema struct to use for the to vertex
-  - `opts` - Options to use
 
   ## Examples
 
@@ -364,6 +364,52 @@ defmodule ArangoXEcto do
   def edge_module(from_module, to_module, _) do
     gen_edge_collection_name(from_module, to_module)
     |> create_edge_module(from_module, to_module)
+  end
+
+  @doc """
+  Checks if a collection exists
+
+  This will return true if the collection exists in the database, matches the specified type and is not a system
+  database, otherwise it will be false.
+
+  ## Parameters
+
+  - `repo` - The Ecto repo module to use for the query
+  - `collection_name` - Name of the collection to check
+  - `type` - The type of collection to check against, defaults to a regular document
+
+  ## Examples
+
+  Checking a document collection exists
+
+      iex> ArangoXEcto.collection_exists?(Repo, :users)
+      true
+
+  Checking an edge collection exists
+
+      iex> ArangoXEcto.collection_exists?(Repo, "my_edge", :edge)
+      true
+
+  Checking a system document collection exists does not work
+
+      iex> ArangoXEcto.collection_exists?(Repo, "_system_test")
+      false
+  """
+  @spec collection_exists?(Ecto.Repo.t(), binary() | atom(), atom() | integer()) :: boolean()
+  def collection_exists?(repo, collection_name, type \\ :document)
+      when is_binary(collection_name) or is_atom(collection_name) do
+    int_type = collection_type_to_integer(type)
+
+    conn = gen_conn_from_repo(repo)
+
+    Arangox.get(conn, "/_api/collection/#{collection_name}")
+    |> case do
+      {:ok, _request, %Arangox.Response{body: %{"type" => ^int_type, "isSystem" => false}}} ->
+        true
+
+      _any ->
+        false
+    end
   end
 
   ###############
@@ -555,19 +601,6 @@ defmodule ArangoXEcto do
     end
   end
 
-  defp collection_exists?(repo, collection_name, type) when is_binary(collection_name) do
-    conn = gen_conn_from_repo(repo)
-
-    Arangox.get(conn, "/_api/collection/#{collection_name}")
-    |> case do
-      {:ok, _request, %Arangox.Response{body: %{"type" => ^type, "isSystem" => false}}} ->
-        true
-
-      _any ->
-        false
-    end
-  end
-
   defp create_edges_collection(repo, collection_name) do
     conn = gen_conn_from_repo(repo)
 
@@ -584,4 +617,12 @@ defmodule ArangoXEcto do
     Map.put(map, :id, key)
     |> Map.drop([:_id, :_rev, :_key])
   end
+
+  defp collection_type_to_integer(:document), do: 2
+
+  defp collection_type_to_integer(:edge), do: 3
+
+  defp collection_type_to_integer(type) when is_integer(type) and type in [2, 3], do: type
+
+  defp collection_type_to_integer(_), do: 2
 end

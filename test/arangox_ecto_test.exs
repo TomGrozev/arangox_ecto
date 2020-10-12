@@ -7,7 +7,7 @@ defmodule ArangoXEctoTest do
   alias ArangoXEctoTest.Integration.{Post, User, UserPosts}
   alias ArangoXEctoTest.Repo
 
-  @test_collections [:users]
+  @test_collections [users: 2, test_edge: 3]
 
   # Deletes existing collections and creates testing collections
   setup_all do
@@ -30,8 +30,8 @@ defmodule ArangoXEctoTest do
     end
 
     # Create test collections
-    for collection <- @test_collections do
-      Arangox.post(conn, "/_api/collection", %{name: collection, type: 2})
+    for {collection, type} <- @test_collections do
+      Arangox.post(conn, "/_api/collection", %{name: collection, type: type})
     end
 
     [conn: conn]
@@ -39,7 +39,7 @@ defmodule ArangoXEctoTest do
 
   # Empties each collection before every test
   setup %{conn: conn} = context do
-    for collection <- @test_collections do
+    for {collection, _type} <- @test_collections do
       Arangox.put(conn, "/_api/collection/#{collection}/truncate")
     end
 
@@ -156,6 +156,30 @@ defmodule ArangoXEctoTest do
     test "using custom colleciton name" do
       assert ArangoXEcto.edge_module(User, Post, collection_name: "member_blogs") ==
                ArangoXEctoTest.Integration.Edges.MemberBlogs
+    end
+  end
+
+  describe "collection_exists?/3" do
+    test "collection does exist" do
+      assert ArangoXEcto.collection_exists?(Repo, :users)
+    end
+
+    test "collection does not exist" do
+      assert not ArangoXEcto.collection_exists?(Repo, :fake_collection)
+    end
+
+    test "string and atom collection names" do
+      assert ArangoXEcto.collection_exists?(Repo, :users)
+      assert ArangoXEcto.collection_exists?(Repo, "users")
+    end
+
+    test "edge collection exists" do
+      assert ArangoXEcto.collection_exists?(Repo, :test_edge, :edge)
+    end
+
+    test "atom and integer types" do
+      assert ArangoXEcto.collection_exists?(Repo, :users, :document)
+      assert ArangoXEcto.collection_exists?(Repo, :users, 2)
     end
   end
 
