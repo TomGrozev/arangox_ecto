@@ -72,6 +72,11 @@ defmodule ArangoXEcto.Edge do
         unquote(__MODULE__).edges_changeset(edge, attrs)
       end
 
+      @doc """
+      Defines that this schema is an edge
+      """
+      def __edge__, do: true
+
       defoverridable unquote(__MODULE__)
     end
   end

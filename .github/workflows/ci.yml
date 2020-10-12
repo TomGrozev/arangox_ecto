@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+      - release/*
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  test:
+    name: "[${{matrix.otp}}/${{matrix.elixir}}] CI Tests on arangox_ecto [OTP/Elixir]"
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        otp: [21.3, 22.2, 23]
+        elixir: [1.10.4, 1.11.0]
+        exclude: []
+
+    steps:
+      - uses: actions/checkout@v2
+      - uses: xinova/arangodb-action@v1
+        with:
+          arangodb version: 'latest'
+      - uses: actions/setup-elixir@v1
+        with:
+          otp-version: ${{matrix.otp}}
+          elixir-version: ${{matrix.elixir}}
+      - uses: actions/cache@v2
+        with:
+          path: deps
+          key: ${{ runner.os }}-mix-${{ hashFiles(format('{0}{1}', github.workspace, '/mix.lock')) }}
+          restore-keys: |
+            ${{ runner.os }}-mix-
+      - run: mix deps.get
+      - run: mix deps.compile
+      - run: mix format --check-formatted
+      - run: mix compile --warnings-as-errors
+      - run: mix credo
+      - run: mix doctor --summary
+      - run: mix test
+        env:
+          DB_ENDPOINT: 'http://localhost:8529'

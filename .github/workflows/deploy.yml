@@ -1,33 +1,23 @@
 name: Deploy
 
 on:
-  push:
-    tags:
-      - 'v*'
+  pull_request:
+    types: [closed]
+    branches:
+      - master
 
 jobs:
-    test-deploy:
-      name: Test and Deploy
+    deploy:
+      if: github.event.pull_request.merged == 'true'
+      name: Deploy to Hex and create release
       runs-on: ubuntu-latest
 
       steps:
         - uses: actions/checkout@v2
-        - uses: xinova/arangodb-action@v1
-          with:
-            arangodb version: 'latest'
         - uses: actions/setup-elixir@v1
           with:
             otp-version: '23'
-            elixir-version: '1.10.4'
-        - run: mix deps.get
-        - run: mix format --check-formatted
-        - run: mix clean
-        - run: mix compile --warnings-as-errors
-        - run: mix credo --strict --ignore design
-        - run: mix doctor --summary
-        - run: mix test
-          env:
-            DB_ENDPOINT: 'http://localhost:8529'
+            elixir-version: '1.11.0'
         - run: mix hex.publish --yes
           env:
             HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
