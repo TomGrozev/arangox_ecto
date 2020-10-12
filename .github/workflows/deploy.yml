@@ -1,6 +1,9 @@
 name: Deploy
 
-on: push
+on:
+  push:
+    tags:
+      - 'v*'
 
 jobs:
     test-deploy:
@@ -17,7 +20,7 @@ jobs:
             otp-version: '23'
             elixir-version: '1.10.4'
         - run: mix deps.get
-        - run: mix format
+        - run: mix format --check-formatted
         - run: mix clean
         - run: mix compile --warnings-as-errors
         - run: mix credo --strict --ignore design
@@ -28,3 +31,17 @@ jobs:
         - run: mix hex.publish --yes
           env:
             HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
+        - name: Create Release
+            id: create_release
+            uses: actions/create-release@v1
+            env:
+              GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            with:
+              tag_name: ${{ github.ref }}
+              release_name: Release ${{ github.ref }}
+              body: |
+                Changes in this Release
+                - First Change
+                - Second Change
+              draft: false
+              prerelease: false
