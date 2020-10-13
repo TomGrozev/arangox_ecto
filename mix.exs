@@ -2,6 +2,7 @@ defmodule ArangoXEcto.MixProject do
   use Mix.Project
 
   @version "0.6.6"
+  @source_url "https://github.com/TomGrozev/arangox_ecto"
 
   def project do
     [
@@ -39,7 +40,7 @@ defmodule ArangoXEcto.MixProject do
       {:arangox, "~> 0.4.0"},
       {:velocy, "~> 0.1"},
       {:jason, "~> 1.2"},
-      {:ex_doc, "~> 0.22.5", only: :dev, runtime: false},
+      {:ex_doc, "~> 0.22.6", only: :dev, runtime: false},
       {:credo, "~> 1.5.0-rc.2", only: [:dev, :test], runtime: false},
       {:doctor, "~> 0.15.0", only: [:dev, :test], runtime: false},
       {:git_hooks, "~> 0.5.0", only: [:test, :dev], runtime: false}
@@ -58,19 +59,19 @@ defmodule ArangoXEcto.MixProject do
     [
       maintainers: ["Tom Grozev"],
       licenses: ["Apache-2.0"],
-      links: %{"GitHub" => "https://github.com/TomGrozev/arangox_ecto"},
+      links: %{"GitHub" => @source_url},
       files: ~w(.formatter.exs mix.exs README.md lib)
     ]
   end
 
   defp docs do
     [
-      main: "docs",
+      main: "readme",
       logo: "images/logo.png",
-      extras: ["DOCS.md"],
+      extras: ["README.md"],
       source_ref: "v#{@version}",
       canonical: "http://hex.pm/arangox_ecto",
-      source_url: "https://github.com/TomGrozev/arangox_ecto"
+      source_url: @source_url
     ]
   end
 end
