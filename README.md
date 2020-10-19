@@ -1,34 +1,10 @@
-[![Contributors][contributors-shield]][contributors-url]
-[![Forks][forks-shield]][forks-url]
-[![Stargazers][stars-shield]][stars-url]
-[![Issues][issues-shield]][issues-url]
-[![MIT License][license-shield]][license-url]
+# ArangoX Ecto
 
-
-
-<br />
-<p align="center">
-  <a href="https://github.com/TomGrozev/arangox_ecto">
-    <img src="images/logo.png" alt="Logo" width="80" height="80">
-  </a>
-  
-  <h3 align="center">ArangoX Ecto</h3>
-  
-  <span align="center">
-    An adapter for ArangoDB and Ecto that support full graph functionality.
-    <br />
-    <a href="https://hexdocs.pm/arangox_ecto"><strong>Explore the docs »</strong></a>
-    <br />
-    <br />
-    <a href="https://github.com/TomGrozev/arangox_ecto">View Demo</a>
-    ·
-    <a href="https://github.com/TomGrozev/arangox_ecto/issues">Report Bug</a>
-    ·
-    <a href="https://github.com/TomGrozev/arangox_ecto/issues">Request Feature</a>
-  </span>
-</p>
-
-
+[![github.com](https://img.shields.io/github/workflow/status/TomGrozev/arangox_ecto/CI.svg)](https://github.com/TomGrozev/arangox_ecto/actions)
+[![hex.pm](https://img.shields.io/hexpm/v/arangox_ecto.svg)](https://hex.pm/packages/arangox_ecto)
+[![hex.pm](https://img.shields.io/hexpm/dt/arangox_ecto.svg)](https://hex.pm/packages/arangox_ecto)
+[![hex.pm](https://img.shields.io/hexpm/l/arangox_ecto.svg)](https://hex.pm/packages/arangox_ecto)
+[![github.com](https://img.shields.io/github/last-commit/TomGrozev/arangox_ecto.svg)](https://github.com/TomGrozev/arangox_ecto)
 
 <!-- TABLE OF CONTENTS -->
 ## Table of Contents
@@ -49,9 +25,9 @@
 
 ## About The Project
 
-After playing around with different packages that implemented ArangoDB in Elixir, I found that there wasn't a package 
+After playing around with different packages that implemented ArangoDB in Elixir, I found that there wasn't a package
 that suited my needs. I needed ArangoDB to work with Ecto seamlessly but there was no up-to-date adapter for Ecto available.
-ArangoX Ecto uses the power of ArangoX to communicate with ArangoDB and Ecto for the API in Elixir. Ecto is intergrated
+ArangoX Ecto uses the power of ArangoX to communicate with ArangoDB and Ecto for the API in Elixir. Ecto is integrated
 with many other packages and can now be used with ArangoDB thanks to this package.
 
 
@@ -67,7 +43,7 @@ To get the adapter integrated with your project, follow these simple steps.
 
 ### Prerequisites
 
-* Elixir
+* Elixir 1.10+ / Erlang OTP 23+
 
 ### Installation
 
@@ -110,7 +86,7 @@ end
 
 #### Schema Setup
 
-Since ArangoDB uses a slightly different id system, your schema must use the `ArangoXEcto.Schema` instead of 
+Since ArangoDB uses a slightly different id system, your schema must use the `ArangoXEcto.Schema` instead of
 `Ecto.Schema`.
 
 ```elixir
@@ -160,7 +136,7 @@ Using migrations should be avoided unless necessary.
 
 ### Raw AQL queries
 
-A lot of the time it is far more efficient to just run a raw aql query, there's a function for that.
+A lot of the time it is far more efficient to just run a raw AQL query, there's a function for that.
 
 ```elixir
 ArangoXEcto.aql_query(
@@ -230,15 +206,15 @@ schema when they are first used. This will allow for more extensibility through 
 be created under the closest common parent module of the passed modules plus the `Edges` alias. For example, if the
 modules were `MyApp.Apple.User` and `MyApp.Apple.Banana.Post` then the edge would be created at
 `MyApp.Apple.Edges.UsersPosts`. This assumes that the edge collection name was generated and not explicitly defined,
-if it was `UsersPosts` would be replaced with the camelcase of that collection name.
+if it was `UsersPosts` would be replaced with the camel case of that collection name.
 
-To read more about Edge Schemas and how to extend edge schemas to add additional fields, read the docs on 
+To read more about Edge Schemas and how to extend edge schemas to add additional fields, read the docs on
 [ArangoXEcto.Edge](https://hexdocs.pm/arangox_ecto/ArangoXEcto.Edge.html).
 
-To create and delete edges (as well as other useful methods) check out the 
+To create and delete edges (as well as other useful methods) check out the
 [full documentation](https://hexdocs.pm/arangox_ecto/ArangoXEcto.html).
 
-In order to delete a specific edge, you can do it exactly as you would any other ecto struct 
+In order to delete a specific edge, you can do it exactly as you would any other ecto struct
 (since after all it is one).
 
 Querying of edges can be done either through using an AQL query or by using Ecto methods.
