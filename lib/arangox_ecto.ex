@@ -557,6 +557,8 @@ defmodule ArangoXEcto do
     |> Module.concat()
   end
 
+  defp parent_module_list(%module{}), do: parent_module_list(module)
+
   defp parent_module_list(module) do
     Module.split(module)
     |> Enum.drop(-1)

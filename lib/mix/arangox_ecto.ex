@@ -103,10 +103,15 @@ defmodule Mix.ArangoXEcto do
 
   defp config(opts) do
     get_default_repo!().config()
-    |> Keyword.fetch(:endpoints)
-    |> case do
-      {:ok, endpoints} -> [endpoints: endpoints] |> Keyword.merge(opts)
-      :error -> [endpoints: "http://localhost:8529"] |> Keyword.merge(opts)
+    |> Keyword.merge(opts)
+    |> ensure_endpoint_value()
+  end
+
+  defp ensure_endpoint_value(config) do
+    if Keyword.has_key?(config, :endpoints) do
+      config
+    else
+      Keyword.put(config, :endpoints, "http://localhost:8529")
     end
   end
 
