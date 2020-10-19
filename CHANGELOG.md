@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.7
+
+- Various documentation fixes (thanks @kianmeng)
+- Allows ecto queries by `_id` as well as `_key`
+- Fixed a bug when passing config in migrations ignored anything except the `:endpoints` option
+- Fixed a bug when passing a struct to `edge_module/3`
+
+
 ## 0.6.6
 
 - Added this file
