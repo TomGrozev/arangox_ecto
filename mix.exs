@@ -1,7 +1,7 @@
 defmodule ArangoXEcto.MixProject do
   use Mix.Project
 
-  @version "0.6.6"
+  @version "0.6.7"
   @source_url "https://github.com/TomGrozev/arangox_ecto"
 
   def project do
