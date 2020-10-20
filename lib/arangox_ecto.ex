@@ -175,42 +175,26 @@ defmodule ArangoXEcto do
 
   Accepts the following options:
 
-  - `:edge` - A specific edge module to use for the edge. This is required for any additional fields on the edge. Overrides `collection_name`.
-  - `:fields` - The values of the fields to set on the edge. Requires `edge` to be set otherwise it is ignored.
+  - `:edge` - A specific edge module to use for the edge. This is required for any additional fields on the edge. Overrides `:collection_name`.
   - `:collection_name` - The name of the collection to use.
   - `:conditions` - A keyword list of conditions to filter for edge deletion
 
   ## Examples
 
-      iex> ArangoXEcto.create_edge(Repo, user1, user2)
-      %ArangoXEcto.Edge{_from: "users/12345", _to: "users/54321"}
+  Deletes all edges from user1 to user2
 
-  Create an edge with a specific edge collection name
+      iex> ArangoXEcto.delete_all_edges(Repo, user1, user2)
+      :ok
 
-      iex> ArangoXEcto.create_edge(Repo, user1, user2, collection_name: "friends")
-      %ArangoXEcto.Edge{_from: "users/12345", _to: "users/54321"}
+  Deletes all edges from user1 to user2 in specific collection
 
-  Create a edge schema and use it to create an edge relation
+      iex> ArangoXEcto.delete_all_edges(Repo, user1, user2, collection_name: "friends")
+      :ok
 
-      defmodule UserPosts do
-        use ArangoXEcto.Edge
-        import Ecto.Changeset
+  Deletes all edges from user1 to user2 that have matching conditions
 
-        schema "user_posts" do
-          edge_fields()
-
-          field(:type, :string)
-        end
-
-        def changeset(edge, attrs) do
-          edges_changeset(edge, attrs)
-          |> cast(attrs, [:type])
-          |> validate_required([:type])
-        end
-      end
-
-      iex> ArangoXEcto.create_edge(Repo, user1, user2, edge: UserPosts, fields: %{type: "wrote"})
-      %ArangoXEcto.Edge{_from: "users/12345", _to: "users/54321"}
+      iex> ArangoXEcto.delete_all_edges(Repo, user1, user2, conditions: [type: "best_friend"])
+      :ok
   """
   @spec delete_all_edges(Ecto.Repo.t(), mod(), mod(), keyword()) :: :ok
   def delete_all_edges(repo, from, to, opts \\ [])
