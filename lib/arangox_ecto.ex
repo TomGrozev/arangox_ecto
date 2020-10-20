@@ -576,7 +576,7 @@ defmodule ArangoXEcto do
     module.__schema__(:source)
   end
 
-  defp struct_id(%{id: id} = struct) do
+  defp struct_id(%{id: id} = struct) when is_struct(struct) do
     source = source_name(struct)
 
     "#{source}/#{id}"
@@ -585,9 +585,11 @@ defmodule ArangoXEcto do
   defp struct_id(id) when is_binary(id) do
     case String.match?(id, ~r/[a-zA-Z0-9]+\/[a-zA-Z0-9]+/) do
       true -> id
-      false -> raise "Invalid format for ArangoDB document ID"
+      false -> raise ArgumentError, "Invalid format for ArangoDB document ID"
     end
   end
+
+  defp struct_id(_), do: raise(ArgumentError, "Invalid struct or _id")
 
   defp validate_ecto_schema(module) do
     case Keyword.has_key?(module.__info__(:functions), :__schema__) do

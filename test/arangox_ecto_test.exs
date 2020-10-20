@@ -143,6 +143,42 @@ defmodule ArangoXEctoTest do
     end
   end
 
+  describe "delete_all_edges/4" do
+    # TODO Create Tests
+  end
+
+  describe "get_id_from_struct/1" do
+    test "valid struct" do
+      assert ArangoXEcto.get_id_from_struct(%User{id: "12345"}) == "users/12345"
+    end
+
+    test "invalid map" do
+      assert_raise ArgumentError, ~r/Invalid struct or _id/, fn ->
+        ArangoXEcto.get_id_from_struct(%{id: "1234"})
+      end
+    end
+
+    test "does not allow random map" do
+      assert_raise ArgumentError, ~r/Invalid struct or _id/, fn ->
+        ArangoXEcto.get_id_from_struct(%{abc: "jnsdkjfsdfnkj"})
+      end
+    end
+
+    test "valid id passed" do
+      assert ArangoXEcto.get_id_from_struct("users/1235")
+    end
+
+    test "invalid id string" do
+      assert_raise ArgumentError, ~r/Invalid format for ArangoDB document ID/, fn ->
+        ArangoXEcto.get_id_from_struct("sdnkjsdkjf")
+      end
+    end
+  end
+
+  describe "raw_to_struct/2" do
+    # TODO Create Tests
+  end
+
   describe "edge_module/3" do
     test "two modules with same parents" do
       assert ArangoXEcto.edge_module(User, Post) == ArangoXEctoTest.Integration.Edges.UsersPosts
@@ -181,6 +217,18 @@ defmodule ArangoXEctoTest do
       assert ArangoXEcto.collection_exists?(Repo, :users, :document)
       assert ArangoXEcto.collection_exists?(Repo, :users, 2)
     end
+  end
+
+  describe "is_edge?/1" do
+    # TODO Create tests
+  end
+
+  describe "is_document?/1" do
+    # TODO Create tests
+  end
+
+  describe "schema_type!/1" do
+    # TODO Create tests
   end
 
   defp id_from_user(%{id: id}), do: "users/" <> id
