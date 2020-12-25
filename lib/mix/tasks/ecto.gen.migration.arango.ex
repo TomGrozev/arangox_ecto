@@ -1,4 +1,4 @@
-defmodule Mix.Tasks.Ecto.Gen.Migration do
+defmodule Mix.Tasks.Ecto.Gen.Migration.Arango do
   use Mix.Task
 
   import Mix.Ecto

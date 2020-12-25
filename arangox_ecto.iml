@@ -72,5 +72,7 @@
     <orderEntry type="library" name="erlex" level="project" />
     <orderEntry type="library" name="blankable" level="project" />
     <orderEntry type="library" name="recase" level="project" />
+    <orderEntry type="library" name="unicode_set" level="project" />
+    <orderEntry type="library" name="benchee_markdown" level="project" />
   </component>
 </module>

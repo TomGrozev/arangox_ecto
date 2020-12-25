@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.8
+
+- (#10) Fixed mix task conflict with ecto
+- (#8) Fixes some incorrect documentation
+- Bump versions of dependencies
+
 ## 0.6.7
 
 - Various documentation fixes (thanks @kianmeng)
