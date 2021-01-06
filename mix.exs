@@ -51,7 +51,7 @@ defmodule ArangoXEcto.MixProject do
     if path = System.get_env("ECTO_PATH") do
       {:ecto, path: path}
     else
-      {:ecto, "~> 3.4.4"}
+      {:ecto, "~> 3.5.5"}
     end
   end
 
