@@ -15,8 +15,10 @@ defmodule Mix.Tasks.Ecto.Setup.Arango do
     case create_database() do
       :ok ->
         Mix.shell().info("Created database")
+
       {:error, 409} ->
         Mix.shell().info("Database already exists")
+
       {:error, _} ->
         Mix.shell().info("Error creating database")
     end
