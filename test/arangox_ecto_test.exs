@@ -7,7 +7,7 @@ defmodule ArangoXEctoTest do
   alias ArangoXEctoTest.Integration.{Post, User, UserPosts}
   alias ArangoXEctoTest.Repo
 
-  @test_collections [users: 2, test_edge: 3]
+  @test_collections [users: 2, test_edge: 3, posts: 2, user_posts: 3, magics: 2]
 
   # Deletes existing collections and creates testing collections
   setup_all do
@@ -145,6 +145,35 @@ defmodule ArangoXEctoTest do
 
   describe "delete_all_edges/4" do
     # TODO Create Tests
+    test "no edges to delete" do
+      user1 = %User{first_name: "John", last_name: "Smith"} |> Repo.insert!()
+      user2 = %User{first_name: "Jane", last_name: "Doe"} |> Repo.insert!()
+
+      assert ArangoXEcto.delete_all_edges(Repo, user1, user2)
+    end
+
+    test "deletes edges" do
+      user1 = %User{first_name: "John", last_name: "Smith"} |> Repo.insert!()
+      user2 = %User{first_name: "Jane", last_name: "Doe"} |> Repo.insert!()
+
+      edge = ArangoXEcto.create_edge(Repo, user1, user2, fields: %{type: "wrote"})
+
+      ArangoXEcto.delete_all_edges(Repo, user1, user2)
+
+      assert Repo.one(from e in "user_post", select: count(e.id))) == 0
+    end
+
+    test "deletes edges for edge module" do
+      user1 = %User{first_name: "John", last_name: "Smith"} |> Repo.insert!()
+      user2 = %User{first_name: "Jane", last_name: "Doe"} |> Repo.insert!()
+
+      edge =
+        ArangoXEcto.create_edge(Repo, user1, user2, edge: UserPosts, fields: %{type: "wrote"})
+
+      ArangoXEcto.delete_all_edges(Repo, user1, user2, edge: UserPosts)
+
+      assert Repo.one(from e in UserPosts, select: count(e.id))) == 0
+    end
   end
 
   describe "get_id_from_struct/1" do
