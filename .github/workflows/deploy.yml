@@ -2,12 +2,11 @@ name: Deploy
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches:
+      - master
 
 jobs:
     deploy:
-      if: github.ref == 'refs/heads/master'
       name: Deploy to Hex and create release
       runs-on: ubuntu-latest
 
