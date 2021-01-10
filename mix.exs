@@ -1,7 +1,7 @@
 defmodule ArangoXEcto.MixProject do
   use Mix.Project
 
-  @version "0.6.8"
+  @version "0.6.9"
   @source_url "https://github.com/TomGrozev/arangox_ecto"
 
   def project do
@@ -51,7 +51,7 @@ defmodule ArangoXEcto.MixProject do
     if path = System.get_env("ECTO_PATH") do
       {:ecto, path: path}
     else
-      {:ecto, "~> 3.4.4"}
+      {:ecto, "~> 3.5.5"}
     end
   end
 

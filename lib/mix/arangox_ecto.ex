@@ -15,6 +15,19 @@ defmodule Mix.ArangoXEcto do
   end
 
   @doc false
+  def create_database do
+    {:ok, conn} = system_db()
+    config = config([])
+
+    case Arangox.post(conn, "/_api/database", %{
+           name: Keyword.get(config, :database)
+         }) do
+      {:ok, _, _} -> :ok
+      {:error, %{status: status}} -> {:error, status}
+    end
+  end
+
+  @doc false
   def create_migrations do
     {:ok, conn} = system_db()
 
