@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.9
+
+- (#12) Ecto 3.5 version bump
+- Format fixes
+
 ## 0.6.8
 
 - (#10) Fixed mix task conflict with ecto
