@@ -144,6 +144,16 @@ defmodule ArangoXEcto.Adapter do
   defdelegate update(adapter_meta, schema_meta, fields, filters, returning, options),
     to: ArangoXEcto.Behaviour.Schema
 
+  @behaviour Ecto.Adapter.Transaction
+  defdelegate in_transaction?(adapter_meta),
+              to: ArangoXEcto.Behaviour.Transaction
+
+  defdelegate transaction(adapter_meta, options, function),
+              to: ArangoXEcto.Behaviour.Transaction
+
+  defdelegate rollback(adapter_meta, value),
+              to: ArangoXEcto.Behaviour.Transaction
+
   #  defp validate_struct(module, %{} = params),
   #    do: module.changeset(struct(module.__struct__), params)
 
