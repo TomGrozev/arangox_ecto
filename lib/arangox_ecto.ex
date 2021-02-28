@@ -250,11 +250,9 @@ defmodule ArangoXEcto do
   """
   @spec get_id_from_module(Ecto.Schema.t(), binary()) :: binary()
   def get_id_from_module(module, key) when is_atom(module) and (is_atom(key) or is_binary(key)) do
-    if function_exported?(module, :__schema__, 1) do
-      module.__schema__(:source) <> "/" <> key
-    else
-      raise ArgumentError, "Invalid module"
-    end
+    schema_type!(module)
+
+    module.__schema__(:source) <> "/" <> key
   end
 
   def get_id_from_module(_, _), do: raise(ArgumentError, "Invalid module or key")
@@ -299,17 +297,22 @@ defmodule ArangoXEcto do
       ]
   """
   @spec raw_to_struct(map() | [map()], Ecto.Schema.t()) :: struct()
-  def raw_to_struct(map, module) when is_list(map) do
+  def raw_to_struct(map, module) when is_list(map) and is_atom(module) do
     Enum.map(map, &raw_to_struct(&1, module))
   end
 
-  def raw_to_struct(map, module) when is_map(map) do
+  def raw_to_struct(%{"_id" => _id, "_key" => _key} = map, module)
+      when is_map(map) and is_atom(module) do
+    schema_type!(module)
+
     args =
       patch_map(map)
       |> filter_keys_for_struct()
 
     struct(module, args)
   end
+
+  def raw_to_struct(_, _), do: raise(ArgumentError, "Invalid input map or module")
 
   @doc """
   Generates a edge schema dynamically
@@ -389,14 +392,16 @@ defmodule ArangoXEcto do
           boolean()
   def collection_exists?(repo_or_conn, collection_name, type \\ :document)
       when is_binary(collection_name) or is_atom(collection_name) do
-    int_type = collection_type_to_integer(type)
-
     conn = gen_conn_from_repo(repo_or_conn)
 
     Arangox.get(conn, "/_api/collection/#{collection_name}")
     |> case do
-      {:ok, _request, %Arangox.Response{body: %{"type" => ^int_type, "isSystem" => false}}} ->
-        true
+      {:ok, _request, %Arangox.Response{body: %{"isSystem" => false} = body}} ->
+        if is_nil(type) do
+          true
+        else
+          Map.get(body, "type") == collection_type_to_integer(type)
+        end
 
       _any ->
         false
@@ -423,6 +428,32 @@ defmodule ArangoXEcto do
   @doc """
   Returns the type of a module
 
+  This is just a shortcut to using `is_edge/1` and `is_document/1`. If it is neither nil is returned.
+
+  ## Examples
+
+  A real edge schema
+
+      iex> ArangoXEcto.schema_type(MyApp.RealEdge)
+      :edge
+
+  Some module that is not an Ecto schema
+
+      iex> ArangoXEcto.schema_type(MyApp.RandomModule)
+      nil
+  """
+  @spec schema_type(atom()) :: :document | :edge
+  def schema_type(module) do
+    cond do
+      is_edge?(module) -> :edge
+      is_document?(module) -> :document
+      true -> nil
+    end
+  end
+
+  @doc """
+  Same as schema_type/1 but throws an error on none
+
   This is just a shortcut to using `is_edge/1` and `is_document/1`. If it is neither an error is raised.
 
   ## Examples
@@ -439,10 +470,10 @@ defmodule ArangoXEcto do
   """
   @spec schema_type!(atom()) :: :document | :edge
   def schema_type!(module) do
-    cond do
-      is_edge?(module) -> :edge
-      is_document?(module) -> :document
-      true -> raise ArgumentError, "Not an Ecto Schema"
+    schema_type(module)
+    |> case do
+      nil -> raise ArgumentError, "Not an Ecto Schema"
+      any -> any
     end
   end
 
