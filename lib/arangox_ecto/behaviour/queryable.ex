@@ -46,9 +46,7 @@ defmodule ArangoXEcto.Behaviour.Queryable do
       }
     })
 
-    params = key_from_id(collection, params)
-
-    collection_type = ArangoXEcto.schema_type!(source_module)
+    collection_type = ArangoXEcto.schema_type(source_module)
 
     if ArangoXEcto.collection_exists?(conn, collection, collection_type) do
       options =
@@ -91,19 +89,4 @@ defmodule ArangoXEcto.Behaviour.Queryable do
       {0, []}
     end
   end
-
-  defp key_from_id(source, ids) when is_list(ids) do
-    Enum.map(ids, &key_from_id(source, &1))
-  end
-
-  defp key_from_id(source, id) when is_binary(id) do
-    String.split(id, "/", trim: true)
-    |> case do
-      [^source | tail] -> tail
-      any -> any
-    end
-    |> List.first()
-  end
-
-  defp key_from_id(_, any), do: any
 end
