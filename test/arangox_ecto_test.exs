@@ -7,7 +7,17 @@ defmodule ArangoXEctoTest do
   alias ArangoXEctoTest.Integration.{Post, User, UserPosts}
   alias ArangoXEctoTest.Repo
 
-  @test_collections [users: 2, test_edge: 3, posts: 2, user_posts: 3, magics: 2]
+  import Ecto.Query
+
+  @test_collections [
+    users: 2,
+    test_edge: 3,
+    posts: 2,
+    user_posts: 3,
+    users_posts: 3,
+    users_users: 3,
+    magics: 2
+  ]
 
   # Deletes existing collections and creates testing collections
   setup_all do
@@ -105,7 +115,7 @@ defmodule ArangoXEctoTest do
   end
 
   describe "create_edge/4" do
-    test "create edge with no fields or custom name" do
+    test "create edge with no fields and no custom name" do
       user1 = %User{first_name: "John", last_name: "Smith"} |> Repo.insert!()
       user2 = %User{first_name: "Jane", last_name: "Doe"} |> Repo.insert!()
 
@@ -144,35 +154,33 @@ defmodule ArangoXEctoTest do
   end
 
   describe "delete_all_edges/4" do
-    # TODO Create Tests
     test "no edges to delete" do
-      user1 = %User{first_name: "John", last_name: "Smith"} |> Repo.insert!()
-      user2 = %User{first_name: "Jane", last_name: "Doe"} |> Repo.insert!()
+      user = %User{first_name: "John", last_name: "Smith"} |> Repo.insert!()
+      post = %Post{title: "test"} |> Repo.insert!()
 
-      assert ArangoXEcto.delete_all_edges(Repo, user1, user2)
+      assert ArangoXEcto.delete_all_edges(Repo, user, post)
     end
 
     test "deletes edges" do
       user1 = %User{first_name: "John", last_name: "Smith"} |> Repo.insert!()
       user2 = %User{first_name: "Jane", last_name: "Doe"} |> Repo.insert!()
 
-      edge = ArangoXEcto.create_edge(Repo, user1, user2, fields: %{type: "wrote"})
+      ArangoXEcto.create_edge(Repo, user1, user2, fields: %{type: "wrote"})
 
       ArangoXEcto.delete_all_edges(Repo, user1, user2)
 
-      assert Repo.one(from e in "user_post", select: count(e.id))) == 0
+      assert Repo.one(from(e in "users_users", select: count(e.id))) || 0 == 0
     end
 
     test "deletes edges for edge module" do
-      user1 = %User{first_name: "John", last_name: "Smith"} |> Repo.insert!()
-      user2 = %User{first_name: "Jane", last_name: "Doe"} |> Repo.insert!()
+      user = %User{first_name: "John", last_name: "Smith"} |> Repo.insert!()
+      post = %Post{title: "test"} |> Repo.insert!()
 
-      edge =
-        ArangoXEcto.create_edge(Repo, user1, user2, edge: UserPosts, fields: %{type: "wrote"})
+      ArangoXEcto.create_edge(Repo, user, post, edge: UserPosts, fields: %{type: "wrote"})
 
-      ArangoXEcto.delete_all_edges(Repo, user1, user2, edge: UserPosts)
+      ArangoXEcto.delete_all_edges(Repo, user, post, edge: UserPosts)
 
-      assert Repo.one(from e in UserPosts, select: count(e.id))) == 0
+      assert Repo.one(from(e in UserPosts, select: count(e.id))) || 0 == 0
     end
   end
 
@@ -187,7 +195,7 @@ defmodule ArangoXEctoTest do
       end
     end
 
-    test "does not allow random map" do
+    test "does not allow regular map" do
       assert_raise ArgumentError, ~r/Invalid struct or _id/, fn ->
         ArangoXEcto.get_id_from_struct(%{abc: "jnsdkjfsdfnkj"})
       end
@@ -204,8 +212,75 @@ defmodule ArangoXEctoTest do
     end
   end
 
+  describe "get_id_from_module/2" do
+    test "valid module and key" do
+      assert ArangoXEcto.get_id_from_module(User, "12345") == "users/12345"
+    end
+
+    test "invalid module" do
+      assert_raise ArgumentError, ~r/Not an Ecto Schema/, fn ->
+        ArangoXEcto.get_id_from_module(Ecto, "1234")
+      end
+    end
+
+    test "does not allow regular atom as module" do
+      assert_raise ArgumentError, ~r/Not an Ecto Schema/, fn ->
+        ArangoXEcto.get_id_from_module(:test, "1234")
+      end
+    end
+
+    test "does not allow other types" do
+      assert_raise ArgumentError, ~r/Invalid module/, fn ->
+        ArangoXEcto.get_id_from_module(%{}, 123)
+      end
+    end
+  end
+
   describe "raw_to_struct/2" do
     # TODO Create Tests
+    test "valid map" do
+      out =
+        %{
+          "_id" => "users/12345",
+          "_key" => "12345",
+          "_rev" => "_bHZ8PAK---",
+          "first_name" => "John",
+          "last_name" => "Smith"
+        }
+        |> ArangoXEcto.raw_to_struct(User)
+
+      assert Kernel.match?(%User{id: "12345", first_name: "John", last_name: "Smith"}, out)
+    end
+
+    test "invalid map" do
+      assert_raise ArgumentError, ~r/Invalid input map or module/, fn ->
+        %{
+          "_rev" => "_bHZ8PAK---",
+          "first_name" => "John",
+          "last_name" => "Smith"
+        }
+        |> ArangoXEcto.raw_to_struct(User)
+      end
+    end
+
+    test "invalid module" do
+      assert_raise ArgumentError, ~r/Not an Ecto Schema/, fn ->
+        %{
+          "_id" => "users/12345",
+          "_key" => "12345",
+          "_rev" => "_bHZ8PAK---",
+          "first_name" => "John",
+          "last_name" => "Smith"
+        }
+        |> ArangoXEcto.raw_to_struct(Ecto)
+      end
+    end
+
+    test "invalid argument types" do
+      assert_raise ArgumentError, ~r/Invalid input map or module/, fn ->
+        ArangoXEcto.raw_to_struct("test", 123)
+      end
+    end
   end
 
   describe "edge_module/3" do
@@ -218,7 +293,7 @@ defmodule ArangoXEctoTest do
                ArangoXEctoTest.Integration.Edges.UsersMagics
     end
 
-    test "using custom colleciton name" do
+    test "using custom collection name" do
       assert ArangoXEcto.edge_module(User, Post, collection_name: "member_blogs") ==
                ArangoXEctoTest.Integration.Edges.MemberBlogs
     end
