@@ -233,7 +233,7 @@ defmodule ArangoXEcto do
       "users/123456"
   """
   @spec get_id_from_struct(mod()) :: binary()
-  def get_id_from_struct(struct), do: struct_id(struct)
+  def get_id_from_struct(struct) when is_map(struct) or is_binary(struct), do: struct_id(struct)
 
   @doc """
   Gets an ID from a module and a key
@@ -249,9 +249,15 @@ defmodule ArangoXEcto do
       "users/123456"
   """
   @spec get_id_from_module(Ecto.Schema.t(), binary()) :: binary()
-  def get_id_from_module(module, key) do
-    module.__schema__(:source) <> "/" <> key
+  def get_id_from_module(module, key) when is_atom(module) and (is_atom(key) or is_binary(key)) do
+    if function_exported?(module, :__schema__, 1) do
+      module.__schema__(:source) <> "/" <> key
+    else
+      raise ArgumentError, "Invalid module"
+    end
   end
+
+  def get_id_from_module(_, _), do: raise(ArgumentError, "Invalid module or key")
 
   @doc """
   Converts raw output of a query into a struct
