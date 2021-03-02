@@ -446,7 +446,7 @@ defmodule ArangoXEcto do
       iex> ArangoXEcto.schema_type(MyApp.RandomModule)
       nil
   """
-  @spec schema_type(atom()) :: :document | :edge
+  @spec schema_type(atom()) :: :document | :edge | nil
   def schema_type(module) do
     cond do
       is_edge?(module) -> :edge

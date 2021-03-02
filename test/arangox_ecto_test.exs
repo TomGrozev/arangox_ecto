@@ -359,8 +359,44 @@ defmodule ArangoXEctoTest do
     end
   end
 
+  describe "schema_type/1" do
+    test "valid document schema" do
+      assert ArangoXEcto.schema_type(User) == :document
+    end
+
+    test "valid edge schema" do
+      assert ArangoXEcto.schema_type(UserPosts) == :edge
+    end
+
+    test "not an ecto schema" do
+      assert ArangoXEcto.schema_type(Ecto) == nil
+    end
+
+    test "not a module" do
+      assert ArangoXEcto.schema_type(123) == nil
+    end
+  end
+
   describe "schema_type!/1" do
-    # TODO Create tests
+    test "valid document schema" do
+      assert ArangoXEcto.schema_type!(User) == :document
+    end
+
+    test "valid edge schema" do
+      assert ArangoXEcto.schema_type!(UserPosts) == :edge
+    end
+
+    test "not an ecto schema" do
+      assert_raise ArgumentError, ~r/Not an Ecto Schema/, fn ->
+        ArangoXEcto.schema_type!(Ecto)
+      end
+    end
+
+    test "not a module" do
+      assert_raise ArgumentError, ~r/Not an Ecto Schema/, fn ->
+        ArangoXEcto.schema_type!(123)
+      end
+    end
   end
 
   defp id_from_user(%{id: id}), do: "users/" <> id
