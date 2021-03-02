@@ -2,8 +2,6 @@ defmodule ArangoXEctoTest do
   use ExUnit.Case
   @moduletag :supported
 
-  #  doctest ArangoXEcto
-
   alias ArangoXEctoTest.Integration.{Post, User, UserPosts}
   alias ArangoXEctoTest.Repo
 
@@ -237,7 +235,6 @@ defmodule ArangoXEctoTest do
   end
 
   describe "raw_to_struct/2" do
-    # TODO Create Tests
     test "valid map" do
       out =
         %{
