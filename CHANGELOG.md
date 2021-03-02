@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.7.0
+
+### Enhancements
+
+- Add support for database transactions
+- Decimal support in database
+- Add schema_type/1 for non error thrown version
+- Additional testing
+
+### Fixes
+
+- Fixes duplicate migration entries
+- Stops running migrations again
+- Additional catch in core functions
+- Fix ID key conversion
+
 ## 0.6.9
 
 - (#12) Ecto 3.5 version bump
