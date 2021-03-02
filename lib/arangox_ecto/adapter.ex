@@ -91,6 +91,7 @@ defmodule ArangoXEcto.Adapter do
   def loaders(:utc_datetime, _type), do: [&load_utc_datetime/1]
   def loaders(:naive_datetime, _type), do: [&NaiveDateTime.from_iso8601/1]
   def loaders(:float, _type), do: [&load_float/1]
+  def loaders(:decimal, _type), do: [&load_decimal/1]
   def loaders(_primitive, type), do: [type]
 
   @doc """
@@ -111,6 +112,9 @@ defmodule ArangoXEcto.Adapter do
 
   def dumpers(:naive_datetime, type) when type in [:naive_datetime, NaiveDateTime],
     do: [fn %NaiveDateTime{} = dt -> {:ok, NaiveDateTime.to_iso8601(dt)} end]
+
+  def dumpers(:decimal, type) when type in [:decimal, Decimal],
+    do: [fn %Decimal{} = d -> {:ok, Decimal.to_string(d)} end]
 
   def dumpers(_primitive, type), do: [type]
 
@@ -144,6 +148,16 @@ defmodule ArangoXEcto.Adapter do
   defdelegate update(adapter_meta, schema_meta, fields, filters, returning, options),
     to: ArangoXEcto.Behaviour.Schema
 
+  @behaviour Ecto.Adapter.Transaction
+  defdelegate in_transaction?(adapter_meta),
+    to: ArangoXEcto.Behaviour.Transaction
+
+  defdelegate transaction(adapter_meta, options, function),
+    to: ArangoXEcto.Behaviour.Transaction
+
+  defdelegate rollback(adapter_meta, value),
+    to: ArangoXEcto.Behaviour.Transaction
+
   #  defp validate_struct(module, %{} = params),
   #    do: module.changeset(struct(module.__struct__), params)
 
@@ -170,4 +184,6 @@ defmodule ArangoXEcto.Adapter do
 
   def load_float(arg) when is_number(arg), do: {:ok, :erlang.float(arg)}
   def load_float(_), do: :error
+
+  def load_decimal(arg), do: {:ok, Decimal.new(arg)}
 end

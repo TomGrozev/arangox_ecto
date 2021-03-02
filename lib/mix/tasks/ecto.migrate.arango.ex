@@ -56,8 +56,20 @@ defmodule Mix.Tasks.Ecto.Migrate.Arango do
   end
 
   defp up do
+    migrated = migrated_versions()
+
     pending_migrations()
-    |> Enum.each(fn file_path ->
+    |> Enum.filter(fn file_path ->
+      t_stamp = timestamp(file_path)
+      not Enum.member?(migrated, t_stamp)
+    end)
+    |> maybe_up_migrations()
+  end
+
+  defp maybe_up_migrations([]), do: Mix.shell().info("No migrations to action :)")
+
+  defp maybe_up_migrations(migrations) do
+    Enum.each(migrations, fn file_path ->
       case apply(migration_module(file_path), :up, []) do
         :ok ->
           file_path

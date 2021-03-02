@@ -68,12 +68,18 @@ defmodule Mix.ArangoXEcto do
   def update_versions(version) do
     {:ok, conn} = system_db()
 
-    new_versions = [version | migrated_versions()]
+    migrated = migrated_versions()
 
-    {:ok, _, _} =
-      Arangox.patch(conn, "/_api/document/_migrations/MASTER", %{migrations: new_versions})
+    if Enum.member?(migrated, version) do
+      migrated
+    else
+      new_versions = [version | migrated]
 
-    new_versions
+      {:ok, _, _} =
+        Arangox.patch(conn, "/_api/document/_migrations/MASTER", %{migrations: new_versions})
+
+      new_versions
+    end
   end
 
   @doc false

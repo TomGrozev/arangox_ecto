@@ -233,7 +233,7 @@ defmodule ArangoXEcto do
       "users/123456"
   """
   @spec get_id_from_struct(mod()) :: binary()
-  def get_id_from_struct(struct), do: struct_id(struct)
+  def get_id_from_struct(struct) when is_map(struct) or is_binary(struct), do: struct_id(struct)
 
   @doc """
   Gets an ID from a module and a key
@@ -249,9 +249,13 @@ defmodule ArangoXEcto do
       "users/123456"
   """
   @spec get_id_from_module(Ecto.Schema.t(), binary()) :: binary()
-  def get_id_from_module(module, key) do
+  def get_id_from_module(module, key) when is_atom(module) and (is_atom(key) or is_binary(key)) do
+    schema_type!(module)
+
     module.__schema__(:source) <> "/" <> key
   end
+
+  def get_id_from_module(_, _), do: raise(ArgumentError, "Invalid module or key")
 
   @doc """
   Converts raw output of a query into a struct
@@ -293,17 +297,22 @@ defmodule ArangoXEcto do
       ]
   """
   @spec raw_to_struct(map() | [map()], Ecto.Schema.t()) :: struct()
-  def raw_to_struct(map, module) when is_list(map) do
+  def raw_to_struct(map, module) when is_list(map) and is_atom(module) do
     Enum.map(map, &raw_to_struct(&1, module))
   end
 
-  def raw_to_struct(map, module) when is_map(map) do
+  def raw_to_struct(%{"_id" => _id, "_key" => _key} = map, module)
+      when is_map(map) and is_atom(module) do
+    schema_type!(module)
+
     args =
       patch_map(map)
       |> filter_keys_for_struct()
 
     struct(module, args)
   end
+
+  def raw_to_struct(_, _), do: raise(ArgumentError, "Invalid input map or module")
 
   @doc """
   Generates a edge schema dynamically
@@ -383,14 +392,16 @@ defmodule ArangoXEcto do
           boolean()
   def collection_exists?(repo_or_conn, collection_name, type \\ :document)
       when is_binary(collection_name) or is_atom(collection_name) do
-    int_type = collection_type_to_integer(type)
-
     conn = gen_conn_from_repo(repo_or_conn)
 
     Arangox.get(conn, "/_api/collection/#{collection_name}")
     |> case do
-      {:ok, _request, %Arangox.Response{body: %{"type" => ^int_type, "isSystem" => false}}} ->
-        true
+      {:ok, _request, %Arangox.Response{body: %{"isSystem" => false} = body}} ->
+        if is_nil(type) do
+          true
+        else
+          Map.get(body, "type") == collection_type_to_integer(type)
+        end
 
       _any ->
         false
@@ -403,7 +414,9 @@ defmodule ArangoXEcto do
   Checks for the presence of the `__edge__/0` function on the module.
   """
   @spec is_edge?(atom()) :: boolean()
-  def is_edge?(module), do: function_exported?(module, :__edge__, 0)
+  def is_edge?(module) when is_atom(module), do: function_exported?(module, :__edge__, 0)
+
+  def is_edge?(_), do: false
 
   @doc """
   Returns if a Schema is a document schema or not
@@ -411,11 +424,39 @@ defmodule ArangoXEcto do
   Checks for the presence of the `__schema__/1` function on the module and not an edge.
   """
   @spec is_document?(atom()) :: boolean()
-  def is_document?(module),
+  def is_document?(module) when is_atom(module),
     do: function_exported?(module, :__schema__, 1) and not is_edge?(module)
+
+  def is_document?(_), do: false
 
   @doc """
   Returns the type of a module
+
+  This is just a shortcut to using `is_edge/1` and `is_document/1`. If it is neither nil is returned.
+
+  ## Examples
+
+  A real edge schema
+
+      iex> ArangoXEcto.schema_type(MyApp.RealEdge)
+      :edge
+
+  Some module that is not an Ecto schema
+
+      iex> ArangoXEcto.schema_type(MyApp.RandomModule)
+      nil
+  """
+  @spec schema_type(atom()) :: :document | :edge | nil
+  def schema_type(module) do
+    cond do
+      is_edge?(module) -> :edge
+      is_document?(module) -> :document
+      true -> nil
+    end
+  end
+
+  @doc """
+  Same as schema_type/1 but throws an error on none
 
   This is just a shortcut to using `is_edge/1` and `is_document/1`. If it is neither an error is raised.
 
@@ -433,10 +474,10 @@ defmodule ArangoXEcto do
   """
   @spec schema_type!(atom()) :: :document | :edge
   def schema_type!(module) do
-    cond do
-      is_edge?(module) -> :edge
-      is_document?(module) -> :document
-      true -> raise ArgumentError, "Not an Ecto Schema"
+    schema_type(module)
+    |> case do
+      nil -> raise ArgumentError, "Not an Ecto Schema"
+      any -> any
     end
   end
 
@@ -576,7 +617,7 @@ defmodule ArangoXEcto do
     module.__schema__(:source)
   end
 
-  defp struct_id(%{id: id} = struct) do
+  defp struct_id(%{id: id} = struct) when is_struct(struct) do
     source = source_name(struct)
 
     "#{source}/#{id}"
@@ -585,9 +626,11 @@ defmodule ArangoXEcto do
   defp struct_id(id) when is_binary(id) do
     case String.match?(id, ~r/[a-zA-Z0-9]+\/[a-zA-Z0-9]+/) do
       true -> id
-      false -> raise "Invalid format for ArangoDB document ID"
+      false -> raise ArgumentError, "Invalid format for ArangoDB document ID"
     end
   end
+
+  defp struct_id(_), do: raise(ArgumentError, "Invalid struct or _id")
 
   defp validate_ecto_schema(module) do
     case Keyword.has_key?(module.__info__(:functions), :__schema__) do

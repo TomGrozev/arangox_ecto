@@ -25,7 +25,7 @@ jobs:
       - uses: xinova/arangodb-action@v1
         with:
           arangodb version: 'latest'
-      - uses: actions/setup-elixir@v1
+      - uses: erlef/setup-elixir@v1
         with:
           otp-version: ${{matrix.otp}}
           elixir-version: ${{matrix.elixir}}
