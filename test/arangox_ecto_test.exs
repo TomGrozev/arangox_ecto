@@ -324,7 +324,6 @@ defmodule ArangoXEctoTest do
   end
 
   describe "is_edge?/1" do
-    # TODO Create tests
     test "valid edge schema" do
       assert ArangoXEcto.is_edge?(UserPosts)
     end
@@ -343,7 +342,21 @@ defmodule ArangoXEctoTest do
   end
 
   describe "is_document?/1" do
-    # TODO Create tests
+    test "valid document schema" do
+      assert ArangoXEcto.is_document?(User)
+    end
+
+    test "valid edge schema" do
+      refute ArangoXEcto.is_document?(UserPosts)
+    end
+
+    test "not an ecto schema" do
+      refute ArangoXEcto.is_document?(Ecto)
+    end
+
+    test "not a module" do
+      refute ArangoXEcto.is_document?(123)
+    end
   end
 
   describe "schema_type!/1" do

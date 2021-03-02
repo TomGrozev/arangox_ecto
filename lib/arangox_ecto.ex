@@ -424,8 +424,10 @@ defmodule ArangoXEcto do
   Checks for the presence of the `__schema__/1` function on the module and not an edge.
   """
   @spec is_document?(atom()) :: boolean()
-  def is_document?(module),
+  def is_document?(module) when is_atom(module),
     do: function_exported?(module, :__schema__, 1) and not is_edge?(module)
+
+  def is_document?(_), do: false
 
   @doc """
   Returns the type of a module
