@@ -112,6 +112,26 @@ defmodule ArangoXEctoTest do
     end
   end
 
+  describe "api_query/3" do
+    test "invalid function passed" do
+      assert_raise ArgumentError, ~r/Invalid function passed to `Arangox` module/, fn ->
+        ArangoXEcto.api_query(Repo, :non_existent, ["/_api/collections"])
+      end
+    end
+
+    test "valid function but not allowed" do
+      assert_raise ArgumentError, ~r/Invalid function passed to `Arangox` module/, fn ->
+        ArangoXEcto.api_query(Repo, :start_link)
+      end
+    end
+
+    test "valid Arangox function" do
+      db_version = ArangoXEcto.api_query(Repo, :get, ["/_admin/database/target-version"])
+
+      assert Kernel.match?({:ok, _, %Arangox.Response{body: %{"version" => _, "error" => _, "code" => _}}}, db_version)
+    end
+  end
+
   describe "create_edge/4" do
     test "create edge with no fields and no custom name" do
       user1 = %User{first_name: "John", last_name: "Smith"} |> Repo.insert!()

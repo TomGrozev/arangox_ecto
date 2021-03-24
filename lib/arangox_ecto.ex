@@ -67,6 +67,86 @@ defmodule ArangoXEcto do
   end
 
   @doc """
+  Runs an Arangox function using a repo
+
+  This is simply a helper function that extracts the connection from the repo and runs a regular query.
+
+  ## Parameters
+
+  - `repo` - The Ecto repo module used for connection
+  - `function` - An atom of the Arangox function to run
+  - `args` - The options passed to the function (not including the conn argument)
+
+  The `conn` argument is automatically prepended to your supplied `args`
+
+  ## Supported Functions
+
+  - `:abort`
+  - `:cursor`
+  - `:delete`
+  - `:delete!`
+  - `:get`
+  - `:get!`
+  - `:head`
+  - `:head!`
+  - `:options`
+  - `:options!`
+  - `:patch`
+  - `:patch!`
+  - `:post`
+  - `:post!`
+  - `:put`
+  - `:put!`
+  - `:request`
+  - `:request!`
+  - `:run`
+  - `:status`
+  - `:transaction` (use built in `Ecto.Repo.transaction/2` instead)
+
+  ## Examples
+
+      iex> ArangoXEcto.api_query(Repo, :get, ["/_api/collection"])
+      {:ok, %Arangox.Response{body: ...}}
+
+      iex> ArangoXEcto.api_query(Repo, :non_existent, ["/_api/collection"])
+      ** (ArgumentError) Invalid function passed to `Arangox` module
+
+  """
+  @allowed_arangox_funcs [
+    :abort,
+    :cursor,
+    :delete,
+    :delete!,
+    :get,
+    :get!,
+    :head,
+    :head!,
+    :options,
+    :options!,
+    :patch,
+    :patch!,
+    :post,
+    :post!,
+    :put,
+    :put!,
+    :request,
+    :request!,
+    :run,
+    :status,
+    :transaction
+  ]
+  @spec api_query(mod(), atom(), list()) :: {:ok, Arangox.Response.t()} | {:error, any()}
+  def api_query(repo, function, args \\ []) do
+    conn = gen_conn_from_repo(repo)
+
+    if function in @allowed_arangox_funcs and function in Keyword.keys(Arangox.__info__(:functions)) do
+      apply(Arangox, function, [conn | args])
+    else
+      raise ArgumentError, "Invalid function passed to `Arangox` module"
+    end
+  end
+
+  @doc """
   Creates an edge between two modules
 
   This can create an edge collection dynamically if no additional fields are required,
