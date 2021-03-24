@@ -40,6 +40,7 @@ defmodule ArangoXEcto.MixProject do
       {:arangox, "~> 0.4.0"},
       {:velocy, "~> 0.1"},
       {:jason, "~> 1.2"},
+      {:geo, "~> 3.0"},
       {:ex_doc, "~> 0.22.6", only: :dev, runtime: false},
       {:credo, "~> 1.5.0-rc.2", only: [:dev, :test], runtime: false},
       {:doctor, "~> 0.15.0", only: [:dev, :test], runtime: false},
