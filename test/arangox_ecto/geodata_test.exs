@@ -127,7 +127,7 @@ defmodule ArangoXEctoTest.GeodataTest do
   describe "polygon/1" do
     test "it takes valid simple polygon" do
       coords = [{0, 100}, {9, 10}]
-      correct = %Geo.Polygon{coordinates: [{100.0, 0.0}, {10.0, 9.0}]}
+      correct = %Geo.Polygon{coordinates: [[{100.0, 0.0}, {10.0, 9.0}]]}
 
       assert ArangoXEcto.GeoData.polygon(coords) == correct
     end
