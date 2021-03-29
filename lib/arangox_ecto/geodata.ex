@@ -50,14 +50,14 @@ defmodule ArangoXEcto.GeoData do
   """
   @spec polygon([[{coordinate(), coordinate()}]]) :: Geo.Polygon.t()
   def polygon(coords),
-    do: %Geo.Polygon{coordinates: filter_coordinates(coords)}
+    do: %Geo.Polygon{coordinates: filter_coordinates(coords) |> maybe_embed_in_list()}
 
   @doc """
   Generates a Geo multi polygon
   """
   @spec multi_polygon([[[{coordinate(), coordinate()}]]]) :: Geo.MultiPolygon.t()
   def multi_polygon(coords),
-    do: %Geo.MultiPolygon{coordinates: filter_coordinates(coords)}
+    do: %Geo.MultiPolygon{coordinates: filter_coordinates(coords) |> maybe_embed_in_list()}
 
   @doc """
   Sanitizes coordinates to ensure they are valid
@@ -93,4 +93,8 @@ defmodule ArangoXEcto.GeoData do
     do: [filter_valid_coordinates(h) | filter_valid_coordinates(t)]
 
   defp filter_valid_coordinates([]), do: []
+
+  defp maybe_embed_in_list([{_, _} | _] = coords), do: [coords]
+
+  defp maybe_embed_in_list(coords), do: coords
 end
