@@ -8,7 +8,7 @@ defmodule ArangoXEctoTest.Types.GeojsonTest do
     test "it can convert to a map" do
       location = %Geo.Point{coordinates: {100.0, 0.0}}
 
-      assert GeoJSON.load(%{"type" => "Point", "coordinates" => [101.0, 0.0]}) ==
+      assert GeoJSON.load(%{"type" => "Point", "coordinates" => [100.0, 0.0]}) ==
                {:ok, location}
     end
   end
