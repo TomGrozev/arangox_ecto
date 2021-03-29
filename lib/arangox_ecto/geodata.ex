@@ -68,7 +68,8 @@ defmodule ArangoXEcto.GeoData do
   defp filter_valid_coordinates({lat, lon}) when is_latitude(lat) and is_longitude(lon),
     do: {lon, lat}
 
-  defp filter_valid_coordinates({_, _}), do: raise(ArgumentError, "Invalid coordinates provided")
+  defp filter_valid_coordinates({lat, lon}),
+    do: raise(ArgumentError, "Invalid coordinates provided: {#{lat}, #{lon}}")
 
   defp filter_valid_coordinates(coords) when is_tuple(coords),
     do: raise(ArgumentError, "Invalid number of coordinate tuple")
