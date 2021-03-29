@@ -59,8 +59,23 @@ defmodule ArangoXEcto.GeoData do
   def multi_polygon(coords),
     do: %Geo.MultiPolygon{coordinates: filter_coordinates(coords)}
 
-  @spec filter_coordinates(list()) :: list()
-  def filter_coordinates(coords_list) do
+  @doc """
+  Sanitizes coordinates to ensure they are valid
+
+  This function is not automatically applied to Geo constructors and must be applied before hand
+  """
+  @spec sanitize(list() | {coordinate(), coordinate()}) :: list() | {coordinate(), coordinate()}
+  def sanitize({lat, lon} = coords) when is_latitude(lat) and is_longitude(lon), do: coords
+
+  def sanitize({lat, lon}) when lat < -90, do: {lat + 180, lon} |> sanitize()
+  def sanitize({lat, lon}) when lat > 90, do: {lat - 180, lon} |> sanitize()
+  def sanitize({lat, lon}) when lon < -180, do: {lat, lon + 360} |> sanitize()
+  def sanitize({lat, lon}) when lon > 180, do: {lat, lon - 360} |> sanitize()
+
+  def sanitize(coord_list) when is_list(coord_list),
+    do: Enum.map(coord_list, &sanitize/1)
+
+  defp filter_coordinates(coords_list) do
     coords_list
     |> Enum.map(&filter_valid_coordinates/1)
   end
