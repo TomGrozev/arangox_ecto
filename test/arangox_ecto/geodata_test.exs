@@ -227,4 +227,14 @@ defmodule ArangoXEctoTest.GeodataTest do
     #         }
     # end
   end
+
+  describe "sanitize/1" do
+    test "it converts out of bounds latitude to inbounds" do
+      assert ArangoXEcto.GeoData.sanitize({-91.0, 90.0}) == {89.0, 90.0}
+    end
+
+    test "it converts out of bounds longitude to inbounds" do
+      assert ArangoXEcto.GeoData.sanitize({-15.294722, 181.731667}) == {-15.294722, -178.268333}
+    end
+  end
 end
