@@ -8,18 +8,19 @@ defmodule ArangoXEctoTest.Types.GeojsonTest do
     test "it can convert a point to a map" do
       location = %Geo.Point{coordinates: {100.0, 0.0}}
 
-      assert GeoJSON.cast(%{"type" => "Point", "coordinates" => [100.0, 0.0]}) ==
-               {:ok, location}
+      assert GeoJSON.cast(location) ==
+               {:ok, %{"type" => "Point", "coordinates" => [100.0, 0.0]}}
     end
 
     test "it can convert a polygon to a map" do
       polygon = %Geo.Polygon{coordinates: [[{100.0, 0.0}, {99.0, 0.0}, {98.0, 1.0}]]}
 
-      assert GeoJSON.cast(%{
-               "type" => "Polygon",
-               "coordinates" => [[[100.0, 0.0], [99.0, 0.0], [98.0, 1.0]]]
-             }) ==
-               {:ok, polygon}
+      assert GeoJSON.cast(polygon) ==
+               {:ok,
+                %{
+                  "type" => "Polygon",
+                  "coordinates" => [[[100.0, 0.0], [99.0, 0.0], [98.0, 1.0]]]
+                }}
     end
   end
 

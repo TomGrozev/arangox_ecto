@@ -18,10 +18,10 @@ defmodule ArangoXEcto.Types.GeoJSON do
   @impl true
   @spec cast(Geo.geometry()) :: {:ok, map()} | :error
   def cast(geodata) when is_map(geodata),
-    do: Geo.JSON.decode(geodata)
+    do: Geo.JSON.encode(geodata)
 
   def cast(geodata) when is_binary(geodata),
-    do: Geo.WKT.decode(geodata)
+    do: Geo.WKT.encode(geodata)
 
   def cast(_), do: :error
 
@@ -39,7 +39,7 @@ defmodule ArangoXEcto.Types.GeoJSON do
     Geo.JSON.encode(data)
   end
 
-  def dump(data) when is_map(data), do: data
+  def dump(data) when is_map(data), do: {:ok, data}
 
   def dump(_), do: :error
 end
