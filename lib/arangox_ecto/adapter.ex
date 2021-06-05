@@ -75,6 +75,18 @@ defmodule ArangoXEcto.Adapter do
   defdelegate storage_down(options), to: ArangoXEcto.Behaviour.Storage
 
   @doc """
+  Returns true if a connection has been checked out
+  """
+  @impl Ecto.Adapter
+  def checked_out?(_adapter_meta) do
+    Logger.debug(
+      "#{inspect(__MODULE__)}.checked_out?: #{inspect(__MODULE__)} does not currently support checkout"
+    )
+
+    false
+  end
+
+  @doc """
   Checks out a connection for the duration of the given function.
   """
   @impl Ecto.Adapter
@@ -151,6 +163,7 @@ defmodule ArangoXEcto.Adapter do
                 list,
                 on_conflict,
                 returning,
+                placeholders,
                 options
               ),
               to: ArangoXEcto.Behaviour.Schema

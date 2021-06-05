@@ -396,7 +396,7 @@ defmodule ArangoXEcto do
 
     Arangox.get(conn, "/_api/collection/#{collection_name}")
     |> case do
-      {:ok, _request, %Arangox.Response{body: %{"isSystem" => false} = body}} ->
+      {:ok, %Arangox.Response{body: %{"isSystem" => false} = body}} ->
         if is_nil(type) do
           true
         else

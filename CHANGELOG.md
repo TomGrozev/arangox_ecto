@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.2
+
+### Fixes
+
+- Updates deps to latest
+- Update to ecto 3.6
+
 ## 0.7.1
 
 ### Fixes

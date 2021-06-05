@@ -24,7 +24,7 @@ defmodule ArangoXEctoTest do
     # Get all collection names
     res =
       case Arangox.get(conn, "/_api/collection") do
-        {:ok, _, %Arangox.Response{body: %{"error" => false, "result" => result}}} -> result
+        {:ok, %Arangox.Response{body: %{"error" => false, "result" => result}}} -> result
         {:error, _} -> []
       end
 
