@@ -169,7 +169,7 @@ defmodule ArangoXEcto.Migration do
     {:ok, conn} = get_db_conn()
 
     case Arangox.post(conn, "/_api/collection", Map.from_struct(collection)) do
-      {:ok, _, _} -> :ok
+      {:ok, _} -> :ok
       {:error, %{status: status, message: message}} -> {:error, "#{status} - #{message}"}
     end
   end
@@ -182,7 +182,7 @@ defmodule ArangoXEcto.Migration do
            "/_api/index?collection=" <> get_collection_name(collection_name),
            Map.from_struct(index)
          ) do
-      {:ok, _, _} -> :ok
+      {:ok, _} -> :ok
       {:error, %{status: status, message: message}} -> {:error, "#{status} - #{message}"}
     end
   end
@@ -203,7 +203,7 @@ defmodule ArangoXEcto.Migration do
 
     # TODO: Check type??
     case Arangox.delete(conn, "/_api/collection/" <> get_collection_name(collection_name)) do
-      {:ok, _, _} -> :ok
+      {:ok, _} -> :ok
       {:error, %{status: status, message: message}} -> {:error, "#{status} - #{message}"}
     end
   end

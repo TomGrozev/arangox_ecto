@@ -81,7 +81,7 @@ defmodule ArangoXEcto.Behaviour.Schema do
            "/_api/document/#{collection}" <> options,
            docs
          ) do
-      {:ok, _, %{body: body}} ->
+      {:ok, %{body: body}} ->
         get_insert_fields(body, returning, return_new)
 
       {:error, %{status: status}} ->
@@ -99,7 +99,7 @@ defmodule ArangoXEcto.Behaviour.Schema do
     })
 
     case Arangox.delete(conn, "/_api/document/#{collection}/#{key}") do
-      {:ok, _, _} -> {:ok, []}
+      {:ok, _} -> {:ok, []}
       {:error, %{status: status}} -> {:error, status}
     end
   end
@@ -160,11 +160,11 @@ defmodule ArangoXEcto.Behaviour.Schema do
       Enum.any?(returning, &(&1 not in [:_id, :_key, :_rev]))
   end
 
-  defp single_doc_result({:ok, _, %Arangox.Response{body: %{"new" => doc}}}, returning, true) do
+  defp single_doc_result({:ok, %Arangox.Response{body: %{"new" => doc}}}, returning, true) do
     {:ok, Enum.map(returning, &{&1, Map.get(doc, Atom.to_string(&1))})}
   end
 
-  defp single_doc_result({:ok, _, %Arangox.Response{body: doc}}, returning, false) do
+  defp single_doc_result({:ok, %Arangox.Response{body: doc}}, returning, false) do
     doc = patch_body_keys(doc)
     {:ok, Enum.map(returning, &{&1, Map.get(doc, Atom.to_string(&1))})}
   end
@@ -186,7 +186,7 @@ defmodule ArangoXEcto.Behaviour.Schema do
   defp collection_exists?(conn, collection_name) when is_binary(collection_name) do
     Arangox.get(conn, "/_api/collection/#{collection_name}")
     |> case do
-      {:ok, _request, %Arangox.Response{body: %{"isSystem" => false}}} ->
+      {:ok, %Arangox.Response{body: %{"isSystem" => false}}} ->
         true
 
       _any ->
