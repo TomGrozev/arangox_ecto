@@ -252,7 +252,7 @@ defmodule ArangoXEcto do
   def get_id_from_module(module, key) when is_atom(module) and (is_atom(key) or is_binary(key)) do
     schema_type!(module)
 
-    module.__schema__(:source) <> "/" <> key
+    to_string(module.__schema__(:source)) <> "/" <> to_string(key)
   end
 
   def get_id_from_module(_, _), do: raise(ArgumentError, "Invalid module or key")

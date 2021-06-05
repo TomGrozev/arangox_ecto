@@ -62,9 +62,7 @@ defmodule Mix.Tasks.Ecto.Gen.Migration.Arango do
 
           if Path.wildcard(fuzzy_path) != [] do
             Mix.raise(
-              "Migration can't be created since there is already a migration file with the name #{
-                name
-              }"
+              "Migration can't be created since there is already a migration file with the name #{name}"
             )
           end
 

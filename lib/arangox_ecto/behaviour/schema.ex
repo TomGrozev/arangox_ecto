@@ -156,7 +156,7 @@ defmodule ArangoXEcto.Behaviour.Schema do
 
   defp should_return_new?(returning, options) do
     Keyword.get(options, :return_new, false) or
-      Enum.any?(returning, &(not (&1 in [:_id, :_key, :_rev])))
+      Enum.any?(returning, &(&1 not in [:_id, :_key, :_rev]))
   end
 
   defp single_doc_result({:ok, _, %Arangox.Response{body: %{"new" => doc}}}, returning, true) do

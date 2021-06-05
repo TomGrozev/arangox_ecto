@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.1
+
+### Fixes
+
+- Fix warnings in typecasting
+- Fix ecto version requirement issue with phoenix
+
 ## 0.7.0
 
 ### Enhancements
