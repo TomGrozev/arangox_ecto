@@ -37,13 +37,13 @@ defmodule ArangoXEcto.MixProject do
   defp deps do
     [
       ecto_dep(),
-      {:arangox, "~> 0.4.0"},
+      {:arangox, "~> 0.5"},
       {:velocy, "~> 0.1"},
       {:jason, "~> 1.2"},
-      {:ex_doc, "~> 0.22.6", only: :dev, runtime: false},
-      {:credo, "~> 1.5.0-rc.2", only: [:dev, :test], runtime: false},
-      {:doctor, "~> 0.15.0", only: [:dev, :test], runtime: false},
-      {:git_hooks, "~> 0.5.0", only: [:test, :dev], runtime: false}
+      {:ex_doc, "~> 0.24", only: :dev, runtime: false},
+      {:credo, "~> 1.5.0", only: [:dev, :test], runtime: false},
+      {:doctor, "~> 0.18.0", only: [:dev, :test], runtime: false},
+      {:git_hooks, "~> 0.6.0", only: [:test, :dev], runtime: false}
     ]
   end
 
@@ -51,7 +51,7 @@ defmodule ArangoXEcto.MixProject do
     if path = System.get_env("ECTO_PATH") do
       {:ecto, path: path}
     else
-      {:ecto, "~> 3.0"}
+      {:ecto, "~> 3.6"}
     end
   end
 
