@@ -63,6 +63,7 @@ defmodule ArangoXEcto.Behaviour.Schema do
         list,
         _on_conflict,
         returning,
+        _placeholders,
         options
       ) do
     docs = build_docs(list)
