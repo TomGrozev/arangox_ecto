@@ -4,6 +4,8 @@ defmodule ArangoXEctoTest.Integration.User do
   schema "users" do
     field(:first_name, :string)
     field(:last_name, :string)
+
+    many_outgoing(:posts, ArangoXEctoTest.Integration.Post)
   end
 end
 
@@ -13,6 +15,8 @@ defmodule ArangoXEctoTest.Integration.Post do
   schema "posts" do
     field(:title, :string)
     field(:text, :string)
+
+    incoming(:user, ArangoXEctoTest.Integration.User)
   end
 end
 
@@ -26,7 +30,10 @@ defmodule ArangoXEctoTest.Integration.Deep.Magic do
 end
 
 defmodule ArangoXEctoTest.Integration.UserPosts do
-  use ArangoXEcto.Edge
+  use ArangoXEcto.Edge,
+    from: ArangoXEctoTest.Integration.User,
+    to: ArangoXEctoTest.Integration.Post
+
   import Ecto.Changeset
 
   schema "user_posts" do

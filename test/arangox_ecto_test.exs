@@ -1,4 +1,6 @@
 defmodule ArangoXEctoTest do
+  @moduledoc false
+
   use ExUnit.Case
   @moduletag :supported
 
@@ -282,12 +284,12 @@ defmodule ArangoXEctoTest do
 
   describe "edge_module/3" do
     test "two modules with same parents" do
-      assert ArangoXEcto.edge_module(User, Post) == ArangoXEctoTest.Integration.Edges.UsersPosts
+      assert ArangoXEcto.edge_module(User, Post) == ArangoXEctoTest.Integration.Edges.PostUser
     end
 
     test "one module with extra depth in parent" do
       assert ArangoXEcto.edge_module(User, ArangoXEctoTest.Integration.Deep.Magic) ==
-               ArangoXEctoTest.Integration.Edges.UsersMagics
+               ArangoXEctoTest.Integration.Edges.MagicUser
     end
 
     test "using custom collection name" do
