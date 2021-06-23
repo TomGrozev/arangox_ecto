@@ -13,9 +13,8 @@ defmodule ArangoXEctoTest do
     users: 2,
     test_edge: 3,
     posts: 2,
-    user_posts: 3,
-    users_posts: 3,
-    users_users: 3,
+    post_user: 3,
+    user_user: 3,
     magics: 2
   ]
 
