@@ -136,6 +136,7 @@ defmodule ArangoXEcto.Behaviour.Schema do
 
     case Arangox.delete(conn, "/_api/document/#{collection}/#{key}") do
       {:ok, _} -> {:ok, []}
+      {:error, %{status: 404}} -> {:error, :stale}
       {:error, %{status: status}} -> {:error, status}
     end
   end
