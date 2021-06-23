@@ -47,20 +47,24 @@ defmodule ArangoXEcto.Edge do
 
   import Ecto.Changeset
 
-  require ArangoXEcto.Schema.Fields
-
-  alias ArangoXEcto.Schema.Fields
-
   @type t :: %__MODULE__{}
+
+  defstruct [:_from, :to]
 
   @callback changeset(Ecto.Schema.t() | Changeset.t(), map()) :: Changeset.t()
 
-  defmacro __using__(_opts) do
+  defmacro __using__(opts) do
+    from = Keyword.fetch!(opts, :from)
+    to = Keyword.fetch!(opts, :to)
+
     quote do
       use ArangoXEcto.Schema
       import unquote(__MODULE__)
 
       @behaviour unquote(__MODULE__)
+
+      @from unquote(from)
+      @to unquote(to)
 
       @doc """
       Default Changeset for an Edge
@@ -94,14 +98,9 @@ defmodule ArangoXEcto.Edge do
   """
   defmacro edge_fields do
     quote do
-      require unquote(Fields)
-
-      unquote(Fields).define_fields(:edge)
+      belongs_to(:from, @from, foreign_key: :_from)
+      belongs_to(:to, @to, foreign_key: :_to)
     end
-  end
-
-  schema "" do
-    Fields.define_fields(:edge)
   end
 
   @doc """
@@ -128,10 +127,5 @@ defmodule ArangoXEcto.Edge do
     edge
     |> cast(attrs, [:_from, :_to])
     |> validate_required([:_from, :_to])
-    |> validate_id([:_from, :_to])
-  end
-
-  defp validate_id(changeset, fields) when is_list(fields) do
-    Enum.reduce(fields, changeset, &validate_format(&2, &1, ~r/[a-zA-Z0-9]+\/[a-zA-Z0-9]+/))
   end
 end
