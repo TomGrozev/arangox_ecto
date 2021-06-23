@@ -1,11 +1,18 @@
 defmodule ArangoXEctoTest.Integration.User do
   use ArangoXEcto.Schema
+  import Ecto.Changeset
 
   schema "users" do
     field(:first_name, :string)
     field(:last_name, :string)
 
     many_outgoing(:posts, ArangoXEctoTest.Integration.Post)
+  end
+
+  def changeset(struct, attrs) do
+    struct
+    |> cast(attrs, [:first_name, :last_name])
+    |> validate_required([:first_name, :last_name])
   end
 end
 
