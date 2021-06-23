@@ -641,7 +641,9 @@ defmodule ArangoXEcto do
     unless function_exported?(module_name, :__info__, 1) do
       contents =
         quote do
-          use ArangoXEcto.Edge
+          use ArangoXEcto.Edge,
+            from: unquote(from_module),
+            to: unquote(to_module)
 
           schema unquote(collection_name) do
             edge_fields()
@@ -677,11 +679,22 @@ defmodule ArangoXEcto do
   defp common_ordered_list(_, _, acc), do: Enum.reverse(acc)
 
   defp gen_edge_collection_name(mod1, mod2) do
-    name1 = source_name(mod1)
-    name2 = source_name(mod2)
+    name1 = last_mod(mod1)
+    name2 = last_mod(mod2)
+
+    sorted_elements = Enum.sort([name1, name2])
+
+    name1 = List.first(sorted_elements) |> String.downcase()
+    name2 = List.last(sorted_elements) |> String.downcase()
 
     # TODO: Think of naming convention (make sure is unique)
     "#{name1}_#{name2}"
+  end
+
+  defp last_mod(module) do
+    module
+    |> Module.split()
+    |> List.last()
   end
 
   defp source_name(%{} = struct) do

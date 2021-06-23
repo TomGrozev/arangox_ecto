@@ -38,4 +38,59 @@ defmodule ArangoXEcto.Schema do
       @foreign_key_type :binary_id
     end
   end
+
+  @doc """
+  Defines an outgoing relationship of many objects
+  """
+  defmacro many_outgoing(name, target, opts \\ []) do
+    quote do
+      opts = unquote(opts)
+
+      many_to_many(unquote(name), unquote(target),
+        join_through:
+          Keyword.get(opts, :edge, ArangoXEcto.edge_module(__MODULE__, unquote(target))),
+        join_keys: [_from: :id, _to: :id],
+        on_replace: :delete
+      )
+    end
+  end
+
+  @doc """
+  Defines an outgoing relationship of one object
+  """
+  # TODO: Setup only one outgoing
+  defmacro one_outgoing(name, target, opts \\ []) do
+    quote do
+      opts = unquote(opts)
+
+      has_one(unquote(name), unquote(target),
+        foreign_key: unquote(name) |> build_foreign_key(),
+        on_replace: :delete
+      )
+    end
+  end
+
+  @doc """
+  Defines an incoming relationship
+  """
+  defmacro incoming(name, source, opts \\ []) do
+    quote do
+      opts = unquote(opts)
+
+      many_to_many(unquote(name), unquote(source),
+        join_through:
+          Keyword.get(opts, :edge, ArangoXEcto.edge_module(__MODULE__, unquote(source))),
+        join_keys: [_to: :id, _from: :id],
+        on_replace: :delete
+      )
+    end
+  end
+
+  @spec build_foreign_key(atom()) :: atom()
+  def build_foreign_key(name) do
+    name
+    |> Atom.to_string()
+    |> Kernel.<>("_id")
+    |> String.to_atom()
+  end
 end
