@@ -8,6 +8,8 @@ defmodule ArangoXEctoTest.Integration.User do
     field(:location, ArangoXEcto.Types.GeoJSON)
 
     many_outgoing(:posts, ArangoXEctoTest.Integration.Post)
+
+    timestamps()
   end
 
   def changeset(struct, attrs) do
