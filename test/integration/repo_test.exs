@@ -238,4 +238,96 @@ defmodule ArangoXEctoTest.Integration.RepoTest do
       assert exception.message =~ "test_constraint (unique_constraint)"
     end
   end
+
+  describe "Repo.get/3 and Repo.get!/3" do
+    test "get items" do
+      user = Repo.insert!(%User{first_name: "John", last_name: "Smith"})
+      post = Repo.insert!(%Post{title: "My Blog"})
+
+      assert user == Repo.get(User, user.id)
+      # with casting
+      assert post == Repo.get(Post, to_string(post.id))
+
+      assert user == Repo.get!(User, user.id)
+      # with casting
+      assert post == Repo.get!(Post, to_string(post.id))
+    end
+
+    test "can't get non existent" do
+      assert nil == Repo.get(User, "1")
+
+      assert_raise Ecto.NoResultsError, fn ->
+        Repo.get!(Post, "1")
+      end
+    end
+  end
+
+  describe "Repo.get_by/3 and Repo.get_by!/3" do
+    test "get items" do
+      user = Repo.insert!(%User{first_name: "John", last_name: "Smith"})
+      post = Repo.insert!(%Post{title: "My Blog"})
+
+      assert user == Repo.get_by(User, id: user.id)
+      assert user == Repo.get_by(User, first_name: user.first_name)
+      assert user == Repo.get_by(User, id: user.id, first_name: user.first_name)
+      # with casting
+      assert post == Repo.get_by(Post, id: to_string(post.id))
+
+      assert user == Repo.get_by!(User, id: user.id)
+      assert user == Repo.get_by!(User, first_name: user.first_name)
+      assert user == Repo.get_by!(User, id: user.id, first_name: user.first_name)
+      # with casting
+      assert post == Repo.get_by!(Post, id: to_string(post.id))
+    end
+
+    test "can't find wrong values" do
+      user = Repo.insert!(%User{first_name: "John", last_name: "Smith"})
+      post = Repo.insert!(%Post{title: "My Blog"})
+
+      assert nil == Repo.get_by(Post, title: "abc")
+      assert nil == Repo.get_by(Post, id: post.id, title: "abc")
+
+      assert_raise Ecto.NoResultsError, fn ->
+        Repo.get_by!(Post, id: "1", title: "hello")
+      end
+    end
+  end
+
+  describe "first, last and one / one!" do
+    test "first" do
+      user1 = Repo.insert!(%User{first_name: "John", last_name: "Smith"})
+      user2 = Repo.insert!(%User{first_name: "Ben", last_name: "Bark"})
+
+      assert user1 == User |> first |> Repo.one()
+
+      assert user2 == from(u in User, order_by: u.first_name) |> first |> Repo.one()
+
+      assert user1 == from(u in User, order_by: [desc: u.first_name]) |> first |> Repo.one()
+
+      query = from(u in User, where: is_nil(u.id))
+      refute query |> first |> Repo.one()
+
+      assert_raise Ecto.NoResultsError, fn ->
+        query |> first |> Repo.one!()
+      end
+    end
+
+    test "last" do
+      user1 = Repo.insert!(%User{first_name: "John", last_name: "Smith"})
+      user2 = Repo.insert!(%User{first_name: "Ben", last_name: "Bark"})
+
+      assert user2 == User |> last |> Repo.one()
+
+      assert user1 == from(u in User, order_by: u.first_name) |> last |> Repo.one()
+
+      assert user2 == from(u in User, order_by: [desc: u.first_name]) |> last |> Repo.one()
+
+      query = from(u in User, where: is_nil(u.id))
+      refute query |> last |> Repo.one()
+
+      assert_raise Ecto.NoResultsError, fn ->
+        query |> last |> Repo.one!()
+      end
+    end
+  end
 end
