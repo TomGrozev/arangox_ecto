@@ -7,6 +7,8 @@ defmodule ArangoXEctoTest.Integration.User do
     field(:last_name, :string)
 
     many_outgoing(:posts, ArangoXEctoTest.Integration.Post)
+
+    timestamps()
   end
 
   def changeset(struct, attrs) do

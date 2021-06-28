@@ -227,6 +227,8 @@ defmodule ArangoXEcto.Behaviour.Schema do
 
   defp single_doc_result({:error, _} = res, _), do: res
 
+  defp single_doc_result({:invalid, _} = res, _), do: res
+
   defp maybe_create_collection(schema, conn) do
     type = ArangoXEcto.schema_type!(schema) |> collection_type_to_integer()
     collection_name = schema.__schema__(:source)

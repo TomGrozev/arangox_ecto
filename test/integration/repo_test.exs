@@ -109,6 +109,13 @@ defmodule ArangoXEctoTest.Integration.RepoTest do
     end
   end
 
+  test "can insert and fetch with timestamps" do
+    datetime = NaiveDateTime.utc_now()
+    assert %User{} = Repo.insert!(%User{inserted_at: datetime})
+
+    assert [%{inserted_at: datetime}] = Repo.all(User)
+  end
+
   test "can provide primary key" do
     user = %User{id: "123456", first_name: "John", last_name: "Smith"}
 
@@ -191,6 +198,44 @@ defmodule ArangoXEctoTest.Integration.RepoTest do
       assert_raise Ecto.NoPrimaryKeyValueError, ~r/struct .* is missing primary key value/, fn ->
         Repo.delete!(user)
       end
+    end
+  end
+
+  describe "unqiue constraints" do
+    test "unique constraint" do
+      changeset =
+        User.changeset(%User{id: "1234", first_name: "Bob", last_name: "Bobington"}, %{})
+
+      {:ok, _} = Repo.insert(changeset)
+
+      exception =
+        assert_raise Ecto.ConstraintError,
+                     ~r/constraint error when attempting to insert struct/,
+                     fn ->
+                       changeset
+                       |> Repo.insert!()
+                     end
+
+      assert exception.message =~ "unique constraint violated"
+      assert exception.message =~ "The changeset has not defined any constraint."
+    end
+
+    test "custom unique constraint" do
+      changeset =
+        User.changeset(%User{id: "1234", first_name: "Bob", last_name: "Bobington"}, %{})
+
+      {:ok, _} = Repo.insert(changeset)
+
+      exception =
+        assert_raise Ecto.ConstraintError,
+                     ~r/constraint error when attempting to insert struct/,
+                     fn ->
+                       changeset
+                       |> Ecto.Changeset.unique_constraint(:id, name: :test_constraint)
+                       |> Repo.insert!()
+                     end
+
+      assert exception.message =~ "test_constraint (unique_constraint)"
     end
   end
 end
