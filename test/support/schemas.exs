@@ -27,6 +27,8 @@ defmodule ArangoXEctoTest.Integration.Post do
     field(:text, :string)
 
     incoming(:user, ArangoXEctoTest.Integration.User)
+
+    timestamps()
   end
 end
 
