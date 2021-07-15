@@ -330,4 +330,60 @@ defmodule ArangoXEctoTest.Integration.RepoTest do
       end
     end
   end
+
+  describe "insert_all/3" do
+    test "regular insert_all" do
+      assert {2, nil} = Repo.insert_all(Post, [[title: "abc"], %{title: "cba"}])
+      assert {2, nil} = Repo.insert_all({"posts", Post}, [[title: "def"], %{title: "fed"}])
+
+      assert [%Post{title: "abc"}, %Post{title: "cba"}, %Post{title: "def"}, %Post{title: "fed"}] =
+               Repo.all(Post |> order_by(:title))
+
+      # Does not allow string collection name
+      assert_raise ArgumentError, ~r/Not an Ecto Schema/, fn ->
+        Repo.insert_all("posts", [[title: "abc"], %{title: "cba"}])
+      end
+    end
+
+    test "insert_all with no fields" do
+      assert {2, nil} = Repo.insert_all(Post, [[], []])
+      assert [%Post{}, %Post{}] = Repo.all(Post)
+    end
+
+    test "insert_all no objects" do
+      assert {0, nil} = Repo.insert_all("posts", [])
+      assert {0, nil} = Repo.insert_all({"posts", Post}, [])
+    end
+
+    @tag :returning
+    test "insert_all with returning schema" do
+      assert {0, []} = Repo.insert_all(Post, [], returning: true)
+      assert {0, nil} = Repo.insert_all(Post, [], returning: false)
+    end
+
+    @tag :returning
+    test "insert_all with returning some fields" do
+      {2, [p1, p2]} =
+        Repo.insert_all(Post, [[title: "abc"], [title: "cba"]], returning: [:id, :title])
+
+      assert %Post{title: "abc", __meta__: %{state: :loaded}} = p1
+      assert %Post{title: "cba", __meta__: %{state: :loaded}} = p2
+    end
+
+    @tag :returning
+    test "insert_all with returning all fields" do
+      {2, [p1, p2]} = Repo.insert_all(Post, [[title: "abc"], [title: "cba"]], returning: true)
+
+      assert %Post{title: "abc", __meta__: %{state: :loaded}} = p1
+      assert %Post{title: "cba", __meta__: %{state: :loaded}} = p2
+    end
+
+    test "insert_all with dumping" do
+      datetime = ~N[2021-01-01 01:20:30.000000]
+      assert {2, nil} = Repo.insert_all(Post, [%{inserted_at: datetime}, %{title: "abc"}])
+
+      assert [%Post{inserted_at: ^datetime, title: nil}, %Post{inserted_at: nil, title: "abc"}] =
+               Repo.all(Post |> order_by(:title))
+    end
+  end
 end

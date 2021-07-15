@@ -273,8 +273,13 @@ defmodule ArangoXEcto.Behaviour.Schema do
 
   defp process_docs(docs, []), do: {length(docs), nil}
 
-  defp process_docs(docs, _returning) do
-    {length(docs), docs}
+  defp process_docs(docs, returning) do
+    new_docs =
+      Enum.map(docs, fn doc ->
+        Enum.map(returning, &Map.get(doc, Atom.to_string(&1)))
+      end)
+
+    {length(docs), new_docs}
   end
 
   defp collection_type_to_integer(:document), do: 2
