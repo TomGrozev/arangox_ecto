@@ -386,4 +386,98 @@ defmodule ArangoXEctoTest.Integration.RepoTest do
                Repo.all(Post |> order_by(:title))
     end
   end
+
+  describe "update_all/3" do
+    test "regular updates" do
+      assert %Post{id: id1} = Repo.insert!(%Post{title: "abc"})
+      assert %Post{id: id2} = Repo.insert!(%Post{title: "def"})
+      assert %Post{id: id3} = Repo.insert!(%Post{title: "ghi"})
+
+      assert {0, []} =
+               Repo.update_all(
+                 from(p in Post, where: false, select: [:id]),
+                 set: [title: "123"]
+               )
+
+      assert {3, []} = Repo.update_all(Post, set: [title: "123"])
+
+      assert %Post{title: "123"} = Repo.get(Post, id1)
+      assert %Post{title: "123"} = Repo.get(Post, id2)
+      assert %Post{title: "123"} = Repo.get(Post, id3)
+    end
+
+    # `:returning` attribute no longer is included in query evaluation
+    # I am unlikely to implement this features as it would require a rework of some code. PRs are welcome.
+    # @tag :returning
+    # test "update_all with returning" do
+    #  assert %Post{id: id1} = Repo.insert!(%Post{title: "abc"})
+    #  assert %Post{id: id2} = Repo.insert!(%Post{title: "def"})
+    #  assert %Post{id: id3} = Repo.insert!(%Post{title: "ghi"})
+
+    #  assert {3, posts} = Repo.update_all(Post, [set: [title: "123"]], returning: true)
+
+    #  [p1, p2, p3] = Enum.sort_by(posts, & &1.id)
+    #  assert %Post{id: ^id1, title: "123"} = p1
+    #  assert %Post{id: ^id2, title: "123"} = p2
+    #  assert %Post{id: ^id3, title: "123"} = p3
+
+    #  assert {3, posts} = Repo.update_all(Post, [set: [text: "hello"]], returning: [:id, :text])
+
+    #  [p1, p2, p3] = Enum.sort_by(posts, & &1.id)
+    #  assert %Post{id: ^id1, title: nil, text: "hello"} = p1
+    #  assert %Post{id: ^id2, title: nil, text: "hello"} = p2
+    #  assert %Post{id: ^id3, title: nil, text: "hello"} = p3
+    # end
+
+    test "update_all with no entries" do
+      assert %Post{id: id1} = Repo.insert!(%Post{title: "abc"})
+      assert %Post{id: id2} = Repo.insert!(%Post{title: "def"})
+      assert %Post{id: id3} = Repo.insert!(%Post{title: "ghi"})
+
+      assert {0, []} =
+               Repo.update_all(from(p in Post, where: p.title == "jkl"), set: [title: "123"])
+
+      assert %Post{title: "abc"} = Repo.get(Post, id1)
+      assert %Post{title: "def"} = Repo.get(Post, id2)
+      assert %Post{title: "ghi"} = Repo.get(Post, id3)
+    end
+
+    test "update_all increment syntax" do
+      assert %Post{id: id1} = Repo.insert!(%Post{title: "abc", views: 0})
+      assert %Post{id: id2} = Repo.insert!(%Post{title: "def", views: 1})
+
+      # Positive increment
+      assert {2, []} = Repo.update_all(Post, inc: [views: 5])
+
+      assert %Post{views: 5} = Repo.get(Post, id1)
+      assert %Post{views: 6} = Repo.get(Post, id2)
+
+      # Negative increment
+      assert {2, []} = Repo.update_all(Post, inc: [views: -1])
+
+      assert %Post{views: 4} = Repo.get(Post, id1)
+      assert %Post{views: 5} = Repo.get(Post, id2)
+    end
+
+    test "update_all in query" do
+      assert %Post{id: id1} = Repo.insert!(%Post{title: "abc"})
+      assert %Post{id: id2} = Repo.insert!(%Post{title: "def"})
+      assert %Post{id: id3} = Repo.insert!(%Post{title: "ghi"})
+
+      assert {3, []} = Repo.update_all(from(p in Post, update: [set: [title: "123"]]), [])
+
+      assert %Post{title: "123"} = Repo.get(Post, id1)
+      assert %Post{title: "123"} = Repo.get(Post, id2)
+      assert %Post{title: "123"} = Repo.get(Post, id3)
+    end
+
+    test "update_all with casting and dumping" do
+      title = "abc"
+      inserted_at = ~N[2021-01-02 03:04:05]
+      assert %Post{id: id} = Repo.insert!(%Post{})
+
+      assert {1, []} = Repo.update_all(Post, set: [title: title, inserted_at: inserted_at])
+      assert %Post{title: ^title, inserted_at: ^inserted_at} = Repo.get(Post, id)
+    end
+  end
 end
