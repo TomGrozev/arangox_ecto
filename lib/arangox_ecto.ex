@@ -127,19 +127,11 @@ defmodule ArangoXEcto do
           {:ok, Ecto.Schema.t()} | {:error, Ecto.Changeset.t()}
   def create_edge(repo, from, to, opts \\ [])
 
-  def create_edge(repo, from, to, [edge: edge_module, fields: _fields] = opts) do
-    from_id = struct_id(from)
-    to_id = struct_id(to)
-
-    edge_module
-    |> do_create_edge(repo, from_id, to_id, opts)
-  end
-
   def create_edge(repo, from, to, opts) do
     from_id = struct_id(from)
     to_id = struct_id(to)
 
-    edge_module(from, to, opts)
+    Keyword.get(opts, :edge, edge_module(from, to, opts))
     |> do_create_edge(repo, from_id, to_id, opts)
   end
 
@@ -215,6 +207,7 @@ defmodule ArangoXEcto do
     |> do_delete_all_edges(repo, from_id, to_id, opts)
   end
 
+  # TODO: Maybe remove?
   @doc """
   Gets an ID from a schema struct
 
@@ -235,6 +228,7 @@ defmodule ArangoXEcto do
   @spec get_id_from_struct(mod()) :: binary()
   def get_id_from_struct(struct) when is_map(struct) or is_binary(struct), do: struct_id(struct)
 
+  # TODO: Maybe remove?
   @doc """
   Gets an ID from a module and a key
 

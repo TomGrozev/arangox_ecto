@@ -35,7 +35,7 @@ defmodule ArangoXEcto.Behaviour.Queryable do
   @impl true
   def execute(
         %{pid: conn},
-        %{sources: {{collection, source_module, _}}, select: selecting},
+        %{sources: sources, select: selecting},
         {:nocache, query},
         params,
         _options
@@ -46,18 +46,12 @@ defmodule ArangoXEcto.Behaviour.Queryable do
       }
     })
 
-    collection_type = ArangoXEcto.schema_type(source_module)
+    is_write_operation = selecting != nil or String.match?(query, ~r/^.*[update|delete].*+$/i)
 
-    write_operation = selecting != nil or String.match?(query, ~r/^.*[update|delete].*+$/i)
+    {run_query, options} = process_sources(conn, sources, is_write_operation)
 
-    if ArangoXEcto.collection_exists?(conn, collection, collection_type) do
-      options =
-        if write_operation,
-          do: [
-            write: collection
-          ],
-          else: []
-
+    # TODO: Make collection checking optional in config or options
+    if run_query do
       zipped_args =
         Stream.zip(
           Stream.iterate(1, &(&1 + 1))
@@ -77,7 +71,7 @@ defmodule ArangoXEcto.Behaviour.Queryable do
               {0, []},
               fn resp, {_len, acc} ->
                 len =
-                  case write_operation do
+                  case is_write_operation do
                     true -> resp.body["extra"]["stats"]["writesExecuted"]
                     false -> resp.body["extra"]["stats"]["scannedFull"]
                   end
@@ -96,5 +90,30 @@ defmodule ArangoXEcto.Behaviour.Queryable do
     else
       {0, []}
     end
+  end
+
+  defp process_sources(conn, sources, is_write_operation) do
+    sources = Tuple.to_list(sources)
+    run_query = ensure_all_collections_exist(conn, sources)
+
+    {run_query, build_options(sources, is_write_operation)}
+  end
+
+  defp build_options(sources, is_write_operation) do
+    collections = Enum.map(sources, fn {collection, _, _} -> collection end)
+
+    if is_write_operation, do: [write: collections], else: []
+  end
+
+  defp ensure_all_collections_exist(conn, sources) when is_list(sources) do
+    sources
+    |> Enum.reduce(true, fn {collection, source_module, _}, acc ->
+      if acc do
+        collection_type = ArangoXEcto.schema_type(source_module)
+        acc && ArangoXEcto.collection_exists?(conn, collection, collection_type)
+      else
+        acc
+      end
+    end)
   end
 end

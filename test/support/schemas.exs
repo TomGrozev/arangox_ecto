@@ -8,6 +8,10 @@ defmodule ArangoXEctoTest.Integration.User do
 
     many_outgoing(:posts, ArangoXEctoTest.Integration.Post)
 
+    many_outgoing(:posts_two, ArangoXEctoTest.Integration.Post,
+      edge: ArangoXEctoTest.Integration.UserPosts
+    )
+
     timestamps()
   end
 
@@ -28,6 +32,10 @@ defmodule ArangoXEctoTest.Integration.Post do
     field(:virt, :string, default: "iamavirtualfield", vitrual: true)
 
     incoming(:user, ArangoXEctoTest.Integration.User)
+
+    incoming(:user_two, ArangoXEctoTest.Integration.User,
+      edge: ArangoXEctoTest.Integration.UserPosts
+    )
 
     timestamps()
   end
@@ -58,6 +66,5 @@ defmodule ArangoXEctoTest.Integration.UserPosts do
   def changeset(edge, attrs) do
     edges_changeset(edge, attrs)
     |> cast(attrs, [:type])
-    |> validate_required([:type])
   end
 end

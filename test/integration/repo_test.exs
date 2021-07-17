@@ -4,7 +4,7 @@ defmodule ArangoXEctoTest.Integration.RepoTest do
   import Ecto.Query
 
   alias ArangoXEctoTest.Repo
-  alias ArangoXEctoTest.Integration.{Post, User, UserPosts}
+  alias ArangoXEctoTest.Integration.{Post, User}
 
   @test_collections [
     users: 2,
@@ -113,7 +113,7 @@ defmodule ArangoXEctoTest.Integration.RepoTest do
     datetime = NaiveDateTime.utc_now()
     assert %User{} = Repo.insert!(%User{inserted_at: datetime})
 
-    assert [%{inserted_at: datetime}] = Repo.all(User)
+    assert [%{inserted_at: ^datetime}] = Repo.all(User)
   end
 
   test "can provide primary key" do
@@ -143,7 +143,7 @@ defmodule ArangoXEctoTest.Integration.RepoTest do
       assert {:ok, user} = Repo.update(changeset)
 
       changeset = User.changeset(user, %{})
-      assert user = Repo.update!(changeset)
+      assert Repo.update!(changeset) = user
     end
 
     test "cannot update removing required fields" do
@@ -281,7 +281,6 @@ defmodule ArangoXEctoTest.Integration.RepoTest do
     end
 
     test "can't find wrong values" do
-      user = Repo.insert!(%User{first_name: "John", last_name: "Smith"})
       post = Repo.insert!(%Post{title: "My Blog"})
 
       assert nil == Repo.get_by(Post, title: "abc")
