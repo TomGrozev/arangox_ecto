@@ -48,7 +48,7 @@ defmodule ArangoXEcto.Behaviour.Queryable do
 
     collection_type = ArangoXEcto.schema_type(source_module)
 
-    write_operation = selecting != nil or String.match?(query, ~r/^.*update.*+$/i)
+    write_operation = selecting != nil or String.match?(query, ~r/^.*[update|delete].*+$/i)
 
     if ArangoXEcto.collection_exists?(conn, collection, collection_type) do
       options =
