@@ -107,6 +107,7 @@ defmodule ArangoXEcto.Adapter do
   def loaders(:utc_datetime, _type), do: [&load_utc_datetime/1]
   def loaders(:naive_datetime, _type), do: [&NaiveDateTime.from_iso8601/1]
   def loaders(:float, _type), do: [&load_float/1]
+  def loaders(:integer, _type), do: [&load_integer/1]
   def loaders(:decimal, _type), do: [&load_decimal/1]
   def loaders(_primitive, type), do: [type]
 
@@ -208,6 +209,9 @@ defmodule ArangoXEcto.Adapter do
       {:error, _reason} -> :error
     end
   end
+
+  def load_integer(arg) when is_number(arg), do: {:ok, trunc(arg)}
+  def load_integer(_), do: :error
 
   def load_float(arg) when is_number(arg), do: {:ok, :erlang.float(arg)}
   def load_float(_), do: :error
