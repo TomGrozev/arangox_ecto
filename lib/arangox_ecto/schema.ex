@@ -41,6 +41,29 @@ defmodule ArangoXEcto.Schema do
 
   @doc """
   Defines an outgoing relationship of many objects
+
+  Behind the scenes this defines a many to many relationship so that Ecto can load the relationship using the built
+  in functions.
+
+  The use of this function **MUST** be accompanied by a `incoming/3` definition in the other target node.
+
+  This will also define the `__id__` field if it is not already defined so that ecto can map the relationship.
+
+  ## Example
+
+      defmodule MyProject.User do
+        use ArangoXEcto.Schema
+
+        schema "users" do
+          field :name, :string
+
+          # Will use the automatically generated edge
+          many_outgoing :posts, MyProject.Post
+
+          # Will use the UserPosts edge
+          many_outgoing :posts, MyProject.Post, edge: MyProject.UserPosts
+        end
+      end
   """
   defmacro many_outgoing(name, target, opts \\ []) do
     quote do
@@ -78,6 +101,30 @@ defmodule ArangoXEcto.Schema do
 
   @doc """
   Defines an incoming relationship
+
+  Behind the scenes this defines a many to many relationship so that Ecto can load the relationship using the built
+  in functions.
+
+  The use of this function **MUST** be accompanied by a `many_outgoing/3` or `one_outgoing/3` definition in the
+  other target node.
+
+  This will also define the `__id__` field if it is not already defined so that ecto can map the relationship.
+
+  ## Example
+
+      defmodule MyProject.Post do
+        use ArangoXEcto.Schema
+
+        schema "posts" do
+          field :title, :string
+
+          # Will use the automatically generated edge
+          incoming :users, MyProject.User
+
+          # Will use the UserPosts edge
+          incoming :users, MyProject.User, edge: MyProject.UserPosts
+        end
+      end
   """
   defmacro incoming(name, source, opts \\ []) do
     quote do
