@@ -48,13 +48,15 @@ defmodule ArangoXEcto.Behaviour.Queryable do
 
     collection_type = ArangoXEcto.schema_type(source_module)
 
+    write_operation = selecting != nil or String.match?(query, ~r/^.*update.*+$/i)
+
     if ArangoXEcto.collection_exists?(conn, collection, collection_type) do
       options =
-        if selecting == nil,
-          do: [],
-          else: [
+        if write_operation,
+          do: [
             write: collection
-          ]
+          ],
+          else: []
 
       zipped_args =
         Stream.zip(
@@ -72,9 +74,15 @@ defmodule ArangoXEcto.Behaviour.Queryable do
 
             Enum.reduce(
               stream,
-              [],
-              fn resp, acc ->
-                acc ++ resp.body["result"]
+              {0, []},
+              fn resp, {_len, acc} ->
+                len =
+                  case write_operation do
+                    true -> resp.body["extra"]["stats"]["writesExecuted"]
+                    false -> resp.body["extra"]["stats"]["scannedFull"]
+                  end
+
+                {len, acc ++ resp.body["result"]}
               end
             )
           end,
@@ -82,7 +90,7 @@ defmodule ArangoXEcto.Behaviour.Queryable do
         )
 
       case res do
-        {:ok, result} -> {length(result), result}
+        {:ok, {len, result}} -> {len, result}
         {:error, _reason} -> {0, nil}
       end
     else
