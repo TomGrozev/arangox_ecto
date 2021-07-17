@@ -480,4 +480,37 @@ defmodule ArangoXEctoTest.Integration.RepoTest do
       assert %Post{title: ^title, inserted_at: ^inserted_at} = Repo.get(Post, id)
     end
   end
+
+  describe "delete_all/3" do
+    test "regular delete_all" do
+      assert %Post{} = Repo.insert!(%Post{title: "abc", text: "cba"})
+      assert %Post{} = Repo.insert!(%Post{title: "def", text: "fed"})
+      assert %Post{} = Repo.insert!(%Post{title: "ghi", text: "ihg"})
+
+      assert {3, []} = Repo.delete_all(Post)
+      assert [] = Repo.all(Post)
+    end
+
+    test "delete_all with filter" do
+      assert %Post{} = Repo.insert!(%Post{title: "abc", text: "cba"})
+      assert %Post{} = Repo.insert!(%Post{title: "def", text: "fed"})
+      assert %Post{} = Repo.insert!(%Post{title: "ghi", text: "ihg"})
+
+      assert {2, []} =
+               Repo.delete_all(from(p in Post, where: p.title == "abc" or p.title == "def"))
+
+      assert [%Post{}] = Repo.all(Post)
+    end
+
+    test "delete_all with no entries" do
+      assert %Post{id: id1} = Repo.insert!(%Post{title: "abc", text: "cba"})
+      assert %Post{id: id2} = Repo.insert!(%Post{title: "def", text: "fed"})
+      assert %Post{id: id3} = Repo.insert!(%Post{title: "ghi", text: "ihg"})
+
+      assert {0, []} = Repo.delete_all(from(p in Post, where: p.title == "jkl"))
+      assert %Post{title: "abc"} = Repo.get(Post, id1)
+      assert %Post{title: "def"} = Repo.get(Post, id2)
+      assert %Post{title: "ghi"} = Repo.get(Post, id3)
+    end
+  end
 end
