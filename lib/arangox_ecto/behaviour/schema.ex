@@ -262,10 +262,9 @@ defmodule ArangoXEcto.Behaviour.Schema do
     process_docs(Enum.map(docs, & &1["new"]), returning)
   end
 
+  @replacements %{"1" => "_key", "2" => "_rev", "3" => "_id"}
   defp replacement_key(key) do
-    replacements = %{"1" => "_key", "2" => "_rev", "3" => "_id"}
-
-    case Map.get(replacements, to_string(key)) do
+    case Map.get(@replacements, to_string(key)) do
       nil -> key
       k -> k
     end

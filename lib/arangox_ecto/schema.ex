@@ -46,10 +46,16 @@ defmodule ArangoXEcto.Schema do
     quote do
       opts = unquote(opts)
 
+      try do
+        field(:__id__, :binary_id, source: :_id, read_after_writes: true)
+      rescue
+        ArgumentError -> :ok
+      end
+
       many_to_many(unquote(name), unquote(target),
         join_through:
           Keyword.get(opts, :edge, ArangoXEcto.edge_module(__MODULE__, unquote(target))),
-        join_keys: [_from: :id, _to: :id],
+        join_keys: [_from: :__id__, _to: :__id__],
         on_replace: :delete
       )
     end
@@ -77,10 +83,16 @@ defmodule ArangoXEcto.Schema do
     quote do
       opts = unquote(opts)
 
+      try do
+        field(:__id__, :binary_id, source: :_id, read_after_writes: true)
+      rescue
+        ArgumentError -> :ok
+      end
+
       many_to_many(unquote(name), unquote(source),
         join_through:
           Keyword.get(opts, :edge, ArangoXEcto.edge_module(__MODULE__, unquote(source))),
-        join_keys: [_to: :id, _from: :id],
+        join_keys: [_to: :__id__, _from: :__id__],
         on_replace: :delete
       )
     end
