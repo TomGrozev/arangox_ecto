@@ -31,9 +31,9 @@ defmodule ArangoXEctoTest.Integration.Post do
     field(:views, :integer)
     field(:virt, :string, default: "iamavirtualfield", vitrual: true)
 
-    incoming(:user, ArangoXEctoTest.Integration.User)
+    incoming(:users, ArangoXEctoTest.Integration.User)
 
-    incoming(:user_two, ArangoXEctoTest.Integration.User,
+    incoming(:users_two, ArangoXEctoTest.Integration.User,
       edge: ArangoXEctoTest.Integration.UserPosts
     )
 

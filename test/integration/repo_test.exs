@@ -143,7 +143,7 @@ defmodule ArangoXEctoTest.Integration.RepoTest do
       assert {:ok, user} = Repo.update(changeset)
 
       changeset = User.changeset(user, %{})
-      assert Repo.update!(changeset) = user
+      assert ^user = Repo.update!(changeset)
     end
 
     test "cannot update removing required fields" do
