@@ -24,6 +24,7 @@ defmodule ArangoXEctoTest.Integration.Post do
   schema "posts" do
     field(:title, :string)
     field(:text, :string)
+    field(:views, :integer)
 
     incoming(:user, ArangoXEctoTest.Integration.User)
 
