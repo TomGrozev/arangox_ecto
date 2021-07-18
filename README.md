@@ -199,14 +199,15 @@ This is clearly a much better representation of the result and can be used in fu
 
 ### Graph Relations
 
-After a lot of tinkering, the best solution to graph relations in with Arango and Ecto was to not use Ecto a lot.
-
 The adapter will dynamically create and manage edge collections. Each edge collection will be created as an Ecto
 schema when they are first used. This will allow for more extensibility through ecto onto the edges. The module will
 be created under the closest common parent module of the passed modules plus the `Edges` alias. For example, if the
 modules were `MyApp.Apple.User` and `MyApp.Apple.Banana.Post` then the edge would be created at
 `MyApp.Apple.Edges.UsersPosts`. This assumes that the edge collection name was generated and not explicitly defined,
 if it was `UsersPosts` would be replaced with the camel case of that collection name.
+
+To learn about using the schema functions for representing graph relationships, read the docs at
+[ArangoXEcto.Schema](https://hexdocs.pm/arangox_ecto/ArangoXEcto.Schema.html).
 
 To read more about Edge Schemas and how to extend edge schemas to add additional fields, read the docs on
 [ArangoXEcto.Edge](https://hexdocs.pm/arangox_ecto/ArangoXEcto.Edge.html).
@@ -230,9 +231,9 @@ For more examples and full documentation, please refer to the [Documentation](ht
 See the [open issues](https://github.com/TomGrozev/arangox_ecto/issues) for a list of proposed features (and known issues).
 
 ##### Some planned ideas:
-* Named Graph integrations
-* Easier Graph level functions
-* Multi-tenancy
+* ☐ Named Graph integrations
+* ☑ Easier Graph level functions
+* ☐ Multi-tenancy
 
 
 ## Contributing
