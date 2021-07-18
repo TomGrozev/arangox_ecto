@@ -155,6 +155,9 @@ defmodule ArangoXEcto do
   The collection name can be passed as an option or is obtained from the provided schema,
   otherwise it is generated dynamically.
 
+  Since ArangoDB does not care about the order of the from and two options in anonymous graphs, the order of the
+  from and to attributes used in this function will work either way.
+
   ## Parameters
 
   - `repo` - The Ecto repo module to use for queries
