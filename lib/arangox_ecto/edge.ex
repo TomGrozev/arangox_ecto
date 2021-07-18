@@ -7,8 +7,8 @@ defmodule ArangoXEcto.Edge do
   This will define the required fields of an edge (`_from` and `_to`) and will define the default changeset.
 
   Edges utilise Ecto relationships so that the powerful Ecto features can be used. Each Node requires a relationship
-  to be set, either a `many_outgoing/3`, `one_outgoing/3` or `incoming/3`. Behind the scenes this creates an
-  Ecto many_to_many relationship and generates (or uses the provided) edge module as the intermediary schema.
+  to be set, either a `outgoing/3` or `incoming/3`. Behind the scenes this creates an Ecto many_to_many relationship
+  and generates (or uses the provided) edge module as the intermediary schema.
   Since the edge collection uses the full `_id` instead of the `_key` for the `_from` and `_to` fields, once
   using any of the previously specified relationships a `__id__` field will be added to structs that will store
   the value of the `_id` field so that relations can be loaded by Ecto.

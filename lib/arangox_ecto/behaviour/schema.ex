@@ -106,12 +106,7 @@ defmodule ArangoXEcto.Behaviour.Schema do
     |> Keyword.update!(:_to, &key_to_id(&1, to))
   end
 
-  defp process_fields(:document, schema, fields) do
-    foreign_keys = get_foreign_keys(schema)
-
-    fields
-    |> Keyword.drop(foreign_keys)
-  end
+  defp process_fields(:document, _schema, fields), do: fields
 
   defp get_edge_associations(schema) do
     Enum.reduce(schema.__schema__(:associations), {nil, nil}, fn assoc_key, acc ->
