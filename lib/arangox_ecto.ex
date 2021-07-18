@@ -139,7 +139,8 @@ defmodule ArangoXEcto do
   def api_query(repo, function, args \\ []) do
     conn = gen_conn_from_repo(repo)
 
-    if function in @allowed_arangox_funcs and function in Keyword.keys(Arangox.__info__(:functions)) do
+    if function in @allowed_arangox_funcs and
+         function in Keyword.keys(Arangox.__info__(:functions)) do
       apply(Arangox, function, [conn | args])
     else
       raise ArgumentError, "Invalid function passed to `Arangox` module"
