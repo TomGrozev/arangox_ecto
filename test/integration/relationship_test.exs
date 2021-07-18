@@ -147,7 +147,7 @@ defmodule ArangoxEctoTest.Integration.RelationshipTest do
                Repo.get(User, user_id) |> Repo.preload(:best_post)
 
       assert %Post{id: ^post_id, title: "abc", user: %User{id: ^user_id}} =
-               Repo.get(User, user_id) |> Repo.preload(:best_post)
+               Repo.get(Post, post_id) |> Repo.preload(:user)
     end
   end
 end

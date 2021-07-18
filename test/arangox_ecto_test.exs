@@ -127,12 +127,8 @@ defmodule ArangoXEctoTest do
     end
 
     test "valid Arangox function" do
-      db_version = ArangoXEcto.api_query(Repo, :get, ["/_admin/database/target-version"])
-
-      assert Kernel.match?(
-               {:ok, _, %Arangox.Response{body: %{"version" => _, "error" => _, "code" => _}}},
-               db_version
-             )
+      assert {:ok, %Arangox.Response{body: %{"version" => _, "error" => _, "code" => _}}} =
+               ArangoXEcto.api_query(Repo, :get, ["/_admin/database/target-version"])
     end
   end
 
