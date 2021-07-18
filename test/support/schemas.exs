@@ -6,11 +6,13 @@ defmodule ArangoXEctoTest.Integration.User do
     field(:first_name, :string)
     field(:last_name, :string)
 
-    many_outgoing(:posts, ArangoXEctoTest.Integration.Post)
+    outgoing(:posts, ArangoXEctoTest.Integration.Post)
 
-    many_outgoing(:posts_two, ArangoXEctoTest.Integration.Post,
+    outgoing(:posts_two, ArangoXEctoTest.Integration.Post,
       edge: ArangoXEctoTest.Integration.UserPosts
     )
+
+    one_outgoing(:best_post, ArangoXEctoTest.Integration.Post)
 
     timestamps()
   end
@@ -36,6 +38,8 @@ defmodule ArangoXEctoTest.Integration.Post do
     incoming(:users_two, ArangoXEctoTest.Integration.User,
       edge: ArangoXEctoTest.Integration.UserPosts
     )
+
+    one_incoming(:user, ArangoXEctoTest.Integration.User)
 
     timestamps()
   end

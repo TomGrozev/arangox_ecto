@@ -135,4 +135,19 @@ defmodule ArangoxEctoTest.Integration.RelationshipTest do
       assert [%{_from: ^post_id, _to: ^user_id}] = Repo.all(UserPosts)
     end
   end
+
+  describe "one relationship" do
+    test "one to other one" do
+      post = %Post{title: "abc"}
+      user = %User{first_name: "John", last_name: "Smith", best_post: post}
+
+      assert %User{id: user_id, best_post: %Post{id: post_id}} = Repo.insert!(user)
+
+      assert %User{id: ^user_id, best_post: %Post{id: ^post_id, title: "abc"}} =
+               Repo.get(User, user_id) |> Repo.preload(:best_post)
+
+      assert %Post{id: ^post_id, title: "abc", user: %User{id: ^user_id}} =
+               Repo.get(User, user_id) |> Repo.preload(:best_post)
+    end
+  end
 end
