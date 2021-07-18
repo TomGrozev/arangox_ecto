@@ -155,6 +155,9 @@ defmodule ArangoXEcto do
   The collection name can be passed as an option or is obtained from the provided schema,
   otherwise it is generated dynamically.
 
+  Since ArangoDB does not care about the order of the from and two options in anonymous graphs, the order of the
+  from and to attributes used in this function will work either way.
+
   ## Parameters
 
   - `repo` - The Ecto repo module to use for queries
@@ -173,17 +176,20 @@ defmodule ArangoXEcto do
   ## Examples
 
       iex> ArangoXEcto.create_edge(Repo, user1, user2)
-      %ArangoXEcto.Edge{_from: "users/12345", _to: "users/54321"}
+      %UserUser{_from: "users/12345", _to: "users/54321"}
 
   Create an edge with a specific edge collection name
 
       iex> ArangoXEcto.create_edge(Repo, user1, user2, collection_name: "friends")
-      %ArangoXEcto.Edge{_from: "users/12345", _to: "users/54321"}
+      %Friends{_from: "users/12345", _to: "users/54321"}
 
   Create a edge schema and use it to create an edge relation
 
       defmodule UserPosts do
-        use ArangoXEcto.Edge
+        use ArangoXEcto.Edge,
+            from: User,
+            to: Post
+
         import Ecto.Changeset
 
         schema "user_posts" do
@@ -200,26 +206,18 @@ defmodule ArangoXEcto do
       end
 
       iex> ArangoXEcto.create_edge(Repo, user1, user2, edge: UserPosts, fields: %{type: "wrote"})
-      %ArangoXEcto.Edge{_from: "users/12345", _to: "users/54321"}
+      %UserPosts{_from: "users/12345", _to: "users/54321", from: #Ecto.Association.NotLoaded<association :from is not loaded>, to: #Ecto.Association.NotLoaded<association :to is not loaded>, type: "wrote"}
 
   """
   @spec create_edge(Ecto.Repo.t(), mod(), mod(), keyword()) ::
           {:ok, Ecto.Schema.t()} | {:error, Ecto.Changeset.t()}
   def create_edge(repo, from, to, opts \\ [])
 
-  def create_edge(repo, from, to, [edge: edge_module, fields: _fields] = opts) do
-    from_id = struct_id(from)
-    to_id = struct_id(to)
-
-    edge_module
-    |> do_create_edge(repo, from_id, to_id, opts)
-  end
-
   def create_edge(repo, from, to, opts) do
     from_id = struct_id(from)
     to_id = struct_id(to)
 
-    edge_module(from, to, opts)
+    Keyword.get(opts, :edge, edge_module(from, to, opts))
     |> do_create_edge(repo, from_id, to_id, opts)
   end
 
@@ -295,6 +293,7 @@ defmodule ArangoXEcto do
     |> do_delete_all_edges(repo, from_id, to_id, opts)
   end
 
+  # TODO: Maybe remove?
   @doc """
   Gets an ID from a schema struct
 
@@ -315,6 +314,7 @@ defmodule ArangoXEcto do
   @spec get_id_from_struct(mod()) :: binary()
   def get_id_from_struct(struct) when is_map(struct) or is_binary(struct), do: struct_id(struct)
 
+  # TODO: Maybe remove?
   @doc """
   Gets an ID from a module and a key
 
@@ -397,13 +397,14 @@ defmodule ArangoXEcto do
   @doc """
   Generates a edge schema dynamically
 
-  If no collection name is passed in the options, then one is generated using the passed modules.
+  If a collection name is not provided one will be dynamically generated. The naming convention
+  is the names of the two modules is alphabetical order. E.g. `User` and `Post` will combine for a collection
+  name of `post_user` and an edge module name of `PostUser`. This order is used to prevent duplicates if the
+  from and to orders are switched.
 
   This will create the Ecto Module in the environment dynamically. It will create it under the closest
   common parent module of the passed modules plus the `Edges` alias. For example, if the modules were
-  `MyApp.Apple.User` and `MyApp.Apple.Banana.Post` then the edge would be created at `MyApp.Apple.Edges.UsersPosts`.
-  This assumes that the edge collection name was generated and not passed in, if it was `UsersPosts` would be
-  replaced with the camelcase of that collection name.
+  `MyApp.Apple.User` and `MyApp.Apple.Banana.Post` then the edge would be created at `MyApp.Apple.Edges.PostUser`.
 
   Returns the Edge Module name as an atom.
 
@@ -641,7 +642,9 @@ defmodule ArangoXEcto do
     unless function_exported?(module_name, :__info__, 1) do
       contents =
         quote do
-          use ArangoXEcto.Edge
+          use ArangoXEcto.Edge,
+            from: unquote(from_module),
+            to: unquote(to_module)
 
           schema unquote(collection_name) do
             edge_fields()
@@ -677,11 +680,22 @@ defmodule ArangoXEcto do
   defp common_ordered_list(_, _, acc), do: Enum.reverse(acc)
 
   defp gen_edge_collection_name(mod1, mod2) do
-    name1 = source_name(mod1)
-    name2 = source_name(mod2)
+    name1 = last_mod(mod1)
+    name2 = last_mod(mod2)
+
+    sorted_elements = Enum.sort([name1, name2])
+
+    name1 = List.first(sorted_elements) |> String.downcase()
+    name2 = List.last(sorted_elements) |> String.downcase()
 
     # TODO: Think of naming convention (make sure is unique)
     "#{name1}_#{name2}"
+  end
+
+  defp last_mod(module) do
+    module
+    |> Module.split()
+    |> List.last()
   end
 
   defp source_name(%{} = struct) do

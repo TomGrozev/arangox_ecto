@@ -1,4 +1,6 @@
 defmodule ArangoXEctoTest do
+  @moduledoc false
+
   use ExUnit.Case
   @moduletag :supported
 
@@ -11,9 +13,8 @@ defmodule ArangoXEctoTest do
     users: 2,
     test_edge: 3,
     posts: 2,
-    user_posts: 3,
-    users_posts: 3,
-    users_users: 3,
+    post_user: 3,
+    user_user: 3,
     magics: 2
   ]
 
@@ -142,7 +143,7 @@ defmodule ArangoXEctoTest do
 
       edge = ArangoXEcto.create_edge(Repo, user1, user2)
 
-      assert Kernel.match?(%{_from: ^from, _to: ^to}, edge)
+      assert %{_from: ^from, _to: ^to} = edge
     end
 
     test "create edge with no fields and a custom name" do
@@ -154,20 +155,19 @@ defmodule ArangoXEctoTest do
 
       edge = ArangoXEcto.create_edge(Repo, user1, user2, collection_name: "friends")
 
-      assert Kernel.match?(%{_from: ^from, _to: ^to}, edge)
+      assert %{_from: ^from, _to: ^to} = edge
     end
 
     test "create edge with fields and a custom module" do
-      user1 = %User{first_name: "John", last_name: "Smith"} |> Repo.insert!()
-      user2 = %User{first_name: "Jane", last_name: "Doe"} |> Repo.insert!()
+      user = %User{first_name: "John", last_name: "Smith"} |> Repo.insert!()
+      post = %Post{title: "abc", text: "cba"} |> Repo.insert!()
 
-      from = id_from_user(user1)
-      to = id_from_user(user2)
+      from = id_from_user(user)
+      to = "posts/" <> post.id
 
-      edge =
-        ArangoXEcto.create_edge(Repo, user1, user2, edge: UserPosts, fields: %{type: "wrote"})
+      edge = ArangoXEcto.create_edge(Repo, user, post, edge: UserPosts, fields: %{type: "wrote"})
 
-      assert Kernel.match?(%UserPosts{_from: ^from, _to: ^to, type: "wrote"}, edge)
+      assert %UserPosts{_from: ^from, _to: ^to, type: "wrote"} = edge
     end
   end
 
@@ -302,12 +302,12 @@ defmodule ArangoXEctoTest do
 
   describe "edge_module/3" do
     test "two modules with same parents" do
-      assert ArangoXEcto.edge_module(User, Post) == ArangoXEctoTest.Integration.Edges.UsersPosts
+      assert ArangoXEcto.edge_module(User, Post) == ArangoXEctoTest.Integration.Edges.PostUser
     end
 
     test "one module with extra depth in parent" do
       assert ArangoXEcto.edge_module(User, ArangoXEctoTest.Integration.Deep.Magic) ==
-               ArangoXEctoTest.Integration.Edges.UsersMagics
+               ArangoXEctoTest.Integration.Edges.MagicUser
     end
 
     test "using custom collection name" do

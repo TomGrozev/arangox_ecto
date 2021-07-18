@@ -30,11 +30,9 @@ defmodule ArangoXEcto.Behaviour.Schema do
     return_new = should_return_new?(returning, options)
     options = if return_new, do: "?returnNew=true", else: ""
 
-    foreign_keys = get_foreign_keys(schema)
-
     insert_fields =
       fields
-      |> Keyword.drop(foreign_keys)
+      |> process_fields(schema)
 
     doc = Enum.into(insert_fields, %{})
 
@@ -42,14 +40,16 @@ defmodule ArangoXEcto.Behaviour.Schema do
       "#{inspect(__MODULE__)}.insert-params" => %{document: inspect(doc)}
     })
 
-    maybe_create_collection(collection, conn)
+    maybe_create_collection(schema, conn)
 
     Arangox.post(
       conn,
       "/_api/document/#{collection}" <> options,
       doc
     )
-    |> single_doc_result(returning, return_new)
+    |> extract_doc(return_new)
+    #    |> ArangoXEcto.Behaviour.Relationship.process_relationships()
+    |> single_doc_result(returning)
   end
 
   @doc """
@@ -58,7 +58,7 @@ defmodule ArangoXEcto.Behaviour.Schema do
   @impl true
   def insert_all(
         %{pid: conn},
-        %{source: collection},
+        %{source: collection, schema: schema},
         _header,
         list,
         _on_conflict,
@@ -74,7 +74,7 @@ defmodule ArangoXEcto.Behaviour.Schema do
       "#{inspect(__MODULE__)}.insert_all-params" => %{documents: inspect(docs)}
     })
 
-    maybe_create_collection(collection, conn)
+    maybe_create_collection(schema, conn)
 
     case Arangox.post(
            conn,
@@ -89,6 +89,37 @@ defmodule ArangoXEcto.Behaviour.Schema do
     end
   end
 
+  defp process_fields(fields, schema) do
+    process_fields(ArangoXEcto.schema_type!(schema), schema, fields)
+  end
+
+  defp process_fields(:edge, schema, fields) when is_list(fields) do
+    {from, to} = get_edge_associations(schema)
+
+    foreign_keys =
+      get_foreign_keys(schema)
+      |> Enum.reject(&(&1 in [:_from, :_to]))
+
+    fields
+    |> Keyword.drop(foreign_keys)
+    |> Keyword.update!(:_from, &key_to_id(&1, from))
+    |> Keyword.update!(:_to, &key_to_id(&1, to))
+  end
+
+  defp process_fields(:document, _schema, fields), do: fields
+
+  defp get_edge_associations(schema) do
+    Enum.reduce(schema.__schema__(:associations), {nil, nil}, fn assoc_key, acc ->
+      assoc = schema.__schema__(:association, assoc_key)
+
+      case assoc.owner_key do
+        :_from -> {assoc.queryable, elem(acc, 1)}
+        :_to -> {elem(acc, 0), assoc.queryable}
+        _ -> acc
+      end
+    end)
+  end
+
   @doc """
   Deletes a single struct with the given filters.
   """
@@ -100,6 +131,7 @@ defmodule ArangoXEcto.Behaviour.Schema do
 
     case Arangox.delete(conn, "/_api/document/#{collection}/#{key}") do
       {:ok, _} -> {:ok, []}
+      {:error, %{status: 404}} -> {:error, :stale}
       {:error, %{status: status}} -> {:error, status}
     end
   end
@@ -113,7 +145,14 @@ defmodule ArangoXEcto.Behaviour.Schema do
   Updates a single struct with the given filters.
   """
   @impl true
-  def update(%{pid: conn}, %{source: collection}, fields, [{:_key, key}], returning, options) do
+  def update(
+        %{pid: conn},
+        %{source: collection, schema: schema},
+        fields,
+        [{:_key, key}],
+        returning,
+        options
+      ) do
     document = Enum.into(fields, %{})
 
     return_new = should_return_new?(returning, options)
@@ -123,14 +162,15 @@ defmodule ArangoXEcto.Behaviour.Schema do
       "#{inspect(__MODULE__)}.update-params" => %{document: inspect(document)}
     })
 
-    maybe_create_collection(collection, conn)
+    maybe_create_collection(schema, conn)
 
     Arangox.patch(
       conn,
       "/_api/document/#{collection}/#{key}" <> options,
       document
     )
-    |> single_doc_result(returning, return_new)
+    |> extract_doc(return_new)
+    |> single_doc_result(returning)
   end
 
   def update(_adapter_meta, _schema_meta, _fields, _filters, _returning, _options) do
@@ -160,42 +200,41 @@ defmodule ArangoXEcto.Behaviour.Schema do
       Enum.any?(returning, &(&1 not in [:_id, :_key, :_rev]))
   end
 
-  defp single_doc_result({:ok, %Arangox.Response{body: %{"new" => doc}}}, returning, true) do
-    {:ok, Enum.map(returning, &{&1, Map.get(doc, Atom.to_string(&1))})}
+  defp extract_doc({:ok, %Arangox.Response{body: %{"new" => doc}}}, true) do
+    {:ok, doc}
   end
 
-  defp single_doc_result({:ok, %Arangox.Response{body: doc}}, returning, false) do
-    doc = patch_body_keys(doc)
-    {:ok, Enum.map(returning, &{&1, Map.get(doc, Atom.to_string(&1))})}
+  defp extract_doc({:ok, %Arangox.Response{body: doc}}, false) do
+    {:ok, patch_body_keys(doc)}
   end
 
-  defp single_doc_result({:error, %{error_num: 1210, message: msg}}, _, _) do
+  defp extract_doc({:error, %{error_num: 1210, message: msg}}, _) do
     {:invalid, [unique: msg]}
   end
 
-  defp single_doc_result({:error, %{error_num: error_num, message: msg}}, _, _) do
+  defp extract_doc({:error, %{error_num: error_num, message: msg}}, _) do
     raise "#{inspect(__MODULE__)} Error(#{error_num}): #{msg}"
   end
 
-  defp maybe_create_collection(collection_name, conn) do
-    if not collection_exists?(conn, collection_name) do
-      create_collection(conn, collection_name)
+  defp single_doc_result({:ok, doc}, returning) do
+    {:ok, Enum.map(returning, &{&1, Map.get(doc, Atom.to_string(&1))})}
+  end
+
+  defp single_doc_result({:error, _} = res, _), do: res
+
+  defp single_doc_result({:invalid, _} = res, _), do: res
+
+  defp maybe_create_collection(schema, conn) do
+    type = ArangoXEcto.schema_type!(schema) |> collection_type_to_integer()
+    collection_name = schema.__schema__(:source)
+
+    if not ArangoXEcto.collection_exists?(conn, collection_name, type) do
+      create_collection(conn, collection_name, type)
     end
   end
 
-  defp collection_exists?(conn, collection_name) when is_binary(collection_name) do
-    Arangox.get(conn, "/_api/collection/#{collection_name}")
-    |> case do
-      {:ok, %Arangox.Response{body: %{"isSystem" => false}}} ->
-        true
-
-      _any ->
-        false
-    end
-  end
-
-  defp create_collection(conn, collection_name) do
-    Arangox.post!(conn, "/_api/collection", %{name: collection_name, type: 2})
+  defp create_collection(conn, collection_name, type) do
+    Arangox.post!(conn, "/_api/collection", %{name: collection_name, type: type})
   end
 
   defp build_docs(fields) when is_list(fields) do
@@ -218,10 +257,9 @@ defmodule ArangoXEcto.Behaviour.Schema do
     process_docs(Enum.map(docs, & &1["new"]), returning)
   end
 
+  @replacements %{"1" => "_key", "2" => "_rev", "3" => "_id"}
   defp replacement_key(key) do
-    replacements = %{"1" => "_key", "2" => "_rev", "3" => "_id"}
-
-    case Map.get(replacements, to_string(key)) do
+    case Map.get(@replacements, to_string(key)) do
       nil -> key
       k -> k
     end
@@ -229,7 +267,25 @@ defmodule ArangoXEcto.Behaviour.Schema do
 
   defp process_docs(docs, []), do: {length(docs), nil}
 
-  defp process_docs(docs, _returning) do
-    {length(docs), docs}
+  defp process_docs(docs, returning) do
+    new_docs =
+      Enum.map(docs, fn doc ->
+        Enum.map(returning, &Map.get(doc, Atom.to_string(&1)))
+      end)
+
+    {length(docs), new_docs}
+  end
+
+  defp collection_type_to_integer(:document), do: 2
+
+  defp collection_type_to_integer(:edge), do: 3
+
+  defp collection_type_to_integer(_), do: 2
+
+  defp key_to_id(key, module) when is_binary(key) do
+    case String.match?(key, ~r/[a-zA-Z0-9]+\/[a-zA-Z0-9]+/) do
+      true -> key
+      false -> module.__schema__(:source) <> "/" <> key
+    end
   end
 end
