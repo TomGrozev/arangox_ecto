@@ -90,6 +90,10 @@ defmodule ArangoXEctoTest.Integration.RepoTest do
 
       assert [_] = Repo.all(from(u in "users", select: u.id))
     end
+
+    test "query from non existent collection" do
+      assert [] = Repo.all(from(a in "abc", select: a.id))
+    end
   end
 
   describe "Repo.insert/2 and Repo.insert!/2" do
