@@ -2,10 +2,16 @@ defmodule ArangoXEcto.Edge do
   @moduledoc """
   Defines an Arango Edge collection as an Ecto Schema Module.
 
-  Edge modules are dynamically created in the environment if they don't already exist.
+  Edge modules are dynamically created in the environment if they don't already exist. For more on how edge modules
+  are dynamically generated, please read `ArangoXEcto.edge_module/3`.
   This will define the required fields of an edge (`_from` and `_to`) and will define the default changeset.
 
-  Collections in ArangoDB are automatically created if they don't exist already.
+  Edges utilise Ecto relationships so that the powerful Ecto features can be used. Each Node requires a relationship
+  to be set, either a `outgoing/3` or `incoming/3`. Behind the scenes this creates an Ecto many_to_many relationship
+  and generates (or uses the provided) edge module as the intermediary schema.
+  Since the edge collection uses the full `_id` instead of the `_key` for the `_from` and `_to` fields, once
+  using any of the previously specified relationships a `__id__` field will be added to structs that will store
+  the value of the `_id` field so that relations can be loaded by Ecto.
 
   ## Extending Edge Schemas
 
@@ -13,10 +19,14 @@ defmodule ArangoXEcto.Edge do
   and defining the required fields as well as any additional fields. Luckily there are some helper macros
   so you don't have to do this manually again.
 
-  A custom schema module must use this module by adding `use ArangoXEcto.Edge`.
+  When using a custom edge module, it must be passed to the relationship macros in the nodes using the `:edge`
+  option, read more about these relationships at `ArangoXEcto.Schema`. Additionally, the `:edge` option must
+  also be passed to the `ArangoXEcto.create_edge/4` function.
+
+  A custom schema module must use this module by adding `use ArangoXEcto.Edge, from: FromSchema, to: ToSchema`.
 
   When defining the fields in your schema, make sure to call `edge_fields/1`. This will add the `_from`
-  and `_to` fields to the schema. It does not have to be before any custom fields but it good convention
+  and `_to` foreign keys to the schema. It does not have to be before any custom fields but it good convention
   to do so.
 
   A `changeset/2` function is automatically defined on the custom schema module but this must be overridden
@@ -27,7 +37,10 @@ defmodule ArangoXEcto.Edge do
   ### Example
 
       defmodule MyProject.UserPosts do
-        use ArangoXEcto.Edge
+        use ArangoXEcto.Edge,
+            from: User,
+            to: Post
+
         import Ecto.Changeset
 
         schema "user_posts" do
@@ -47,20 +60,24 @@ defmodule ArangoXEcto.Edge do
 
   import Ecto.Changeset
 
-  require ArangoXEcto.Schema.Fields
-
-  alias ArangoXEcto.Schema.Fields
-
   @type t :: %__MODULE__{}
+
+  defstruct [:_from, :to]
 
   @callback changeset(Ecto.Schema.t() | Changeset.t(), map()) :: Changeset.t()
 
-  defmacro __using__(_opts) do
+  defmacro __using__(opts) do
+    from = Keyword.fetch!(opts, :from)
+    to = Keyword.fetch!(opts, :to)
+
     quote do
       use ArangoXEcto.Schema
       import unquote(__MODULE__)
 
       @behaviour unquote(__MODULE__)
+
+      @from unquote(from)
+      @to unquote(to)
 
       @doc """
       Default Changeset for an Edge
@@ -94,14 +111,9 @@ defmodule ArangoXEcto.Edge do
   """
   defmacro edge_fields do
     quote do
-      require unquote(Fields)
-
-      unquote(Fields).define_fields(:edge)
+      belongs_to(:from, @from, foreign_key: :_from)
+      belongs_to(:to, @to, foreign_key: :_to)
     end
-  end
-
-  schema "" do
-    Fields.define_fields(:edge)
   end
 
   @doc """
@@ -128,10 +140,5 @@ defmodule ArangoXEcto.Edge do
     edge
     |> cast(attrs, [:_from, :_to])
     |> validate_required([:_from, :_to])
-    |> validate_id([:_from, :_to])
-  end
-
-  defp validate_id(changeset, fields) when is_list(fields) do
-    Enum.reduce(fields, changeset, &validate_format(&2, &1, ~r/[a-zA-Z0-9]+\/[a-zA-Z0-9]+/))
   end
 end

@@ -16,7 +16,7 @@ defmodule ArangoXEcto.Behaviour.Storage do
     {:ok, conn} = Utils.get_system_db(options)
 
     case Arangox.post(conn, "/_api/database", %{name: database}) do
-      {:ok, _, _} -> :ok
+      {:ok, _} -> :ok
       {:error, %{error_num: 1207}} -> {:error, :already_up}
       {:error, reason} -> {:error, reason}
     end
@@ -33,7 +33,7 @@ defmodule ArangoXEcto.Behaviour.Storage do
     {:ok, conn} = Utils.get_system_db(options)
 
     case Arangox.get(conn, "/_api/database") do
-      {:ok, _, %{body: %{"result" => result}}} when is_list(result) ->
+      {:ok, %{body: %{"result" => result}}} when is_list(result) ->
         if database in result do
           :ok
         else
@@ -56,7 +56,7 @@ defmodule ArangoXEcto.Behaviour.Storage do
     {:ok, conn} = Utils.get_system_db(options)
 
     case Arangox.delete(conn, "/_api/database/#{database}") do
-      {:ok, _, _} -> :ok
+      {:ok, _} -> :ok
       {:error, reason} -> {:error, reason}
     end
   end

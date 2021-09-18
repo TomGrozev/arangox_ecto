@@ -22,7 +22,7 @@ defmodule Mix.ArangoXEcto do
     case Arangox.post(conn, "/_api/database", %{
            name: Keyword.get(config, :database)
          }) do
-      {:ok, _, _} -> :ok
+      {:ok, _} -> :ok
       {:error, %{status: status}} -> {:error, status}
     end
   end
@@ -36,7 +36,7 @@ defmodule Mix.ArangoXEcto do
            isSystem: true,
            name: "_migrations"
          }) do
-      {:ok, _, _} -> :ok
+      {:ok, _} -> :ok
       {:error, %{status: status}} -> {:error, status}
     end
   end
@@ -45,8 +45,7 @@ defmodule Mix.ArangoXEcto do
   def create_master_document do
     {:ok, conn} = system_db()
 
-    {:ok, _, _} =
-      Arangox.post(conn, "/_api/document/_migrations", %{_key: "MASTER", migrations: []})
+    {:ok, _} = Arangox.post(conn, "/_api/document/_migrations", %{_key: "MASTER", migrations: []})
   end
 
   @doc false
@@ -75,7 +74,7 @@ defmodule Mix.ArangoXEcto do
     else
       new_versions = [version | migrated]
 
-      {:ok, _, _} =
+      {:ok, _} =
         Arangox.patch(conn, "/_api/document/_migrations/MASTER", %{migrations: new_versions})
 
       new_versions
@@ -93,7 +92,7 @@ defmodule Mix.ArangoXEcto do
       migrated_versions()
       |> List.delete(version)
 
-    {:ok, _, _} =
+    {:ok, _} =
       Arangox.patch(conn, "/_api/document/_migrations/MASTER", %{migrations: new_versions})
 
     new_versions
