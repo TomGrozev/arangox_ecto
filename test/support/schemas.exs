@@ -5,6 +5,7 @@ defmodule ArangoXEctoTest.Integration.User do
   schema "users" do
     field(:first_name, :string)
     field(:last_name, :string)
+    field(:location, ArangoXEcto.Types.GeoJSON)
 
     outgoing(:posts, ArangoXEctoTest.Integration.Post)
 
