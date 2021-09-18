@@ -53,6 +53,8 @@ defmodule ArangoXEcto do
   def aql_query(repo, query, vars \\ [], opts \\ []) do
     conn = gen_conn_from_repo(repo)
 
+    {query, vars} = process_vars(query, vars)
+
     Arangox.transaction(
       conn,
       fn cursor ->
@@ -780,6 +782,18 @@ defmodule ArangoXEcto do
 
     Arangox.post!(conn, "/_api/collection", %{name: collection_name, type: 3})
   end
+
+  defp process_vars(query, vars) when is_list(vars),
+    do: Enum.reduce(vars, {query, []}, &process_vars(&2, &1))
+
+  defp process_vars({query, vars}, {key, %Ecto.Query{} = res}) do
+    val = ArangoXEcto.Query.all(res)
+
+    {String.replace(query, "@" <> Atom.to_string(key), val), vars}
+  end
+
+  defp process_vars({query, vars}, {_key, _val} = res),
+    do: {query, [res | vars]}
 
   defp patch_map(map) do
     for {k, v} <- map, into: %{}, do: {String.to_atom(k), v}
