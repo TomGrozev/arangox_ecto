@@ -164,7 +164,11 @@ defmodule ArangoXEcto.Schema do
 
       many_to_many(unquote(name), unquote(source),
         join_through:
-          Keyword.get(opts, :edge, ArangoXEcto.edge_module(__MODULE__, unquote(source))),
+          Keyword.get(
+            opts,
+            :edge,
+            ArangoXEcto.edge_module(__MODULE__, unquote(source), create: false)
+          ),
         join_keys: [_to: :__id__, _from: :__id__],
         on_replace: :delete
       )
