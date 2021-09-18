@@ -66,6 +66,12 @@ defmodule ArangoXEcto.Query do
   # Helpers
   #
 
+  defp create_names(%{sources: nil, from: %{source: {source, mod}}} = query) do
+    query
+    |> Map.put(:sources, {{source, mod, nil}})
+    |> create_names()
+  end
+
   defp create_names(%{sources: sources}) do
     create_names(sources, 0, tuple_size(sources)) |> List.to_tuple()
   end
