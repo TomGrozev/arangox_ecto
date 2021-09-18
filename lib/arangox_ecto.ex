@@ -435,12 +435,12 @@ defmodule ArangoXEcto do
   def edge_module(%from_module{}, %to_module{}, opts),
     do: edge_module(from_module, to_module, opts)
 
-  def edge_module(from_module, to_module, collection_name: name),
-    do: create_edge_module(name, from_module, to_module)
-
-  def edge_module(from_module, to_module, _) do
-    gen_edge_collection_name(from_module, to_module)
-    |> create_edge_module(from_module, to_module)
+  def edge_module(from_module, to_module, opts) do
+    case Keyword.fetch(opts, :collection_name) do
+      {:ok, name} -> name
+      :error -> gen_edge_collection_name(from_module, to_module)
+    end
+    |> create_edge_module(from_module, to_module, opts)
   end
 
   @doc """
@@ -638,11 +638,12 @@ defmodule ArangoXEcto do
 
   defp collection_from_id(id), do: source_name(id)
 
-  defp create_edge_module(collection_name, from_module, to_module) do
+  defp create_edge_module(collection_name, from_module, to_module, opts) do
     project_prefix = Module.concat(common_parent_module(from_module, to_module), "Edges")
     module_name = Module.concat(project_prefix, Macro.camelize(collection_name))
 
-    unless function_exported?(module_name, :__info__, 1) do
+    unless Keyword.get(opts, :create, true) == false or
+             function_exported?(module_name, :__info__, 1) do
       contents =
         quote do
           use ArangoXEcto.Edge,
