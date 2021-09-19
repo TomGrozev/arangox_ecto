@@ -1,6 +1,63 @@
 defmodule Mix.ArangoXEcto do
-  # Based off of https://github.com/SquashConsulting/ecto_aql.
-  @moduledoc false
+  @moduledoc """
+  Migration task helper functions
+  """
+
+  @doc """
+  Creates the database specified in the config
+  """
+  @spec create_base_database() :: {:ok, String.t()} | {:error, Integer.t()}
+  def create_base_database do
+    config()
+    |> Keyword.get(:database)
+    |> create_database()
+  end
+
+  @doc """
+  Creates a new database of `name`
+  """
+  @spec create_database(String.t()) :: {:ok, String.t()} | {:error, Integer.t()}
+  def create_database(name) when is_binary(name) do
+    {:ok, conn} = system_db()
+
+    Arangox.post(conn, "/_api/database", %{name: name})
+    |> format_response(name)
+  end
+
+  @doc """
+  Creates the migrations collection
+
+  Creates an empty system collection to store migrations.
+  """
+  @spec create_migrations :: :ok | {:error, Integer.t()}
+  def create_migrations do
+    {:ok, conn} = system_db()
+
+    Arangox.post(conn, "/_api/collection", %{
+      type: 2,
+      isSystem: true,
+      name: "_migrations"
+    })
+    |> format_response()
+  end
+
+  @doc """
+  Creates a document to store migrations
+
+  Creates a document with key of the database name. Seperating the migrations
+  into seperate documents allow for more organisation and better debugging.
+  """
+  @spec create_migration_document() :: :ok | {:error, Integer.t()}
+  def create_migration_document do
+    {:ok, conn} = system_db()
+
+    key =
+      config()
+      |> Keyword.fetch!(:database)
+
+    Arangox.post(conn, "/_api/document/_migrations", %{_key: key, migrations: []})
+    |> format_response()
+  end
 
   @doc false
   def path_to_priv_repo(repo) do
@@ -12,40 +69,6 @@ defmodule Mix.ArangoXEcto do
   def timestamp do
     {{y, m, d}, {hh, mm, ss}} = :calendar.universal_time()
     "#{y}#{pad(m)}#{pad(d)}#{pad(hh)}#{pad(mm)}#{pad(ss)}"
-  end
-
-  @doc false
-  def create_database do
-    {:ok, conn} = system_db()
-    config = config([])
-
-    case Arangox.post(conn, "/_api/database", %{
-           name: Keyword.get(config, :database)
-         }) do
-      {:ok, _} -> :ok
-      {:error, %{status: status}} -> {:error, status}
-    end
-  end
-
-  @doc false
-  def create_migrations do
-    {:ok, conn} = system_db()
-
-    case Arangox.post(conn, "/_api/collection", %{
-           type: 2,
-           isSystem: true,
-           name: "_migrations"
-         }) do
-      {:ok, _} -> :ok
-      {:error, %{status: status}} -> {:error, status}
-    end
-  end
-
-  @doc false
-  def create_master_document do
-    {:ok, conn} = system_db()
-
-    {:ok, _} = Arangox.post(conn, "/_api/document/_migrations", %{_key: "MASTER", migrations: []})
   end
 
   @doc false
@@ -119,7 +142,7 @@ defmodule Mix.ArangoXEcto do
     end)
   end
 
-  defp config(opts) do
+  defp config(opts \\ []) do
     get_default_repo!().config()
     |> Keyword.merge(opts)
     |> ensure_endpoint_value()
@@ -142,6 +165,16 @@ defmodule Mix.ArangoXEcto do
 
     Arangox.start_link(options)
   end
+
+  defp format_response(response, pass_arg \\ nil)
+
+  defp format_response({:ok, _}, nil), do: :ok
+
+  defp format_response({:ok, _}, pass_arg) when not is_nil(pass_arg), do: {:ok, pass_arg}
+
+  defp format_response({:error, %{status: status}}, _), do: {:error, status}
+
+  defp format_response({:error, _reason}, _), do: {:error, 0}
 
   defp pad(i) when i < 10, do: <<?0, ?0 + i>>
   defp pad(i), do: to_string(i)

@@ -1,35 +1,81 @@
 defmodule Mix.Tasks.Ecto.Setup.Arango do
   @moduledoc """
-  Sets up all necessary collection in _systems db for migrations and creates database
+  Sets up all necessary aspects of the adapter
+
+  Adds migrations collection in _systems db for migrations and creates the database
   """
 
   use Mix.Task
-  import Mix.ArangoXEcto
 
-  @shortdoc "Sets up all necessary collections in _systems db for migrations"
+  alias Mix.ArangoXEcto, as: Helpers
 
   @impl true
   def run(_args) do
     Mix.Task.run("app.start")
 
-    case create_database() do
+    Mix.shell().info("\n=====[ Running ArangoXEcto Setup ]=====")
+
+    Helpers.create_base_database()
+    |> process_response(
+      {&"1 >> Created database `#{&1}`", "1 >> Database already exists",
+       &"1 >> Error creating database, returned Arango API status `#{&1}`"},
+      &Helpers.create_migrations/0
+    )
+    |> process_response(
+      {"2 >> Created migrations collection in system database",
+       "2 >> System database already has migrations collection",
+       &"2 >> Error creating migrations collection, returned Arango API status `#{&1}`"},
+      &Helpers.create_migration_document/0
+    )
+    |> process_response(
+      {"3 >> Created migation document. \nSetup Complete",
+       "3 >> Migrations collection already contains database document",
+       &"3 >> Error creating migration database document, returned Arango API status `#{&1}`"},
+      nil
+    )
+  end
+
+  defp process_response(:fail, _, _), do: :fail
+
+  defp process_response(response, {success_msg, exists_msg, error_msg}, success_func) do
+    case response do
+      {:ok, pass_arg} ->
+        build_msg(success_msg, pass_arg)
+        |> Mix.shell().info()
+
+        maybe_run_success_func(success_func)
+
       :ok ->
-        Mix.shell().info("Created database")
+        build_msg(success_msg)
+        |> Mix.shell().info()
+
+        maybe_run_success_func(success_func)
 
       {:error, 409} ->
-        Mix.shell().info("Database already exists")
+        build_msg(exists_msg)
+        |> Mix.shell().info()
 
-      {:error, _} ->
-        Mix.shell().info("Error creating database")
-    end
+        maybe_run_success_func(success_func)
 
-    case create_migrations() do
-      :ok ->
-        create_master_document()
-        Mix.shell().info("Setup Complete")
+      {:error, status} ->
+        build_msg(error_msg, status)
+        |> Mix.shell().error()
 
-      {:error, 409} ->
-        Mix.shell().info("ArangoDB already setup for ecto")
+        :fail
     end
   end
+
+  defp maybe_run_success_func(func) when is_function(func) and not is_nil(func),
+    do: func.()
+
+  defp maybe_run_success_func(_), do: :ok
+
+  defp build_msg(func, args \\ [])
+
+  defp build_msg(func, arg) when not is_list(arg), do: build_msg(func, [arg])
+
+  defp build_msg(func, args) when is_function(func),
+    do: apply(func, args)
+
+  defp build_msg(msg, _), do: msg
 end
