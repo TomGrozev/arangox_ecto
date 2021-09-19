@@ -224,20 +224,6 @@ defmodule ArangoXEcto do
     |> do_create_edge(repo, from_id, to_id, opts)
   end
 
-  # TODO: Maybe remove
-  @doc """
-  Same as create_edge/4 but specific for custom edge and fields.
-  """
-  @spec create_edge(Ecto.Repo.t(), mod(), mod(), mod(), map(), keyword()) ::
-          {:ok, Ecto.Schema.t()} | {:error, Ecto.Changeset.t()}
-  def create_edge(repo, from, to, edge, %{} = fields, opts \\ []) do
-    opts =
-      opts
-      |> Keyword.merge(edge: edge, fields: fields)
-
-    create_edge(repo, from, to, opts)
-  end
-
   @doc """
   Deletes all edges matching matching the query
 
