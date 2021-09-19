@@ -68,6 +68,7 @@ defmodule Mix.ArangoXEcto do
 
   Will return a full file path to the priv/repo folder.
   """
+  @spec path_to_priv_repo(Ecto.Repo.t()) :: String.t()
   def path_to_priv_repo(repo) do
     app = Keyword.fetch!(repo.config(), :otp_app)
     Path.join(Mix.Project.deps_paths()[app] || File.cwd!(), "priv/repo")
@@ -76,6 +77,7 @@ defmodule Mix.ArangoXEcto do
   @doc """
   Creates a timestamp for the migration file
   """
+  @spec timestamp() :: String.t()
   def timestamp do
     {{y, m, d}, {hh, mm, ss}} = :calendar.universal_time()
     "#{y}#{pad(m)}#{pad(d)}#{pad(hh)}#{pad(mm)}#{pad(ss)}"
@@ -154,6 +156,7 @@ defmodule Mix.ArangoXEcto do
 
   The first in the list of running repos is used.
   """
+  @spec get_default_repo!() :: Ecto.Repo.t()
   def get_default_repo! do
     Mix.Ecto.parse_repo([])
     |> List.first()
@@ -162,6 +165,8 @@ defmodule Mix.ArangoXEcto do
       repo -> repo
     end
   end
+
+  ## Helpers
 
   defp query(conn, query_str) do
     Arangox.transaction(conn, fn cursor ->
