@@ -3,13 +3,17 @@ defmodule Mix.ArangoXEcto do
   Migration task helper functions
   """
 
+  @typedoc """
+  Specifies a migration version type
+  """
+  @type version :: String.t() | Integer.t()
+
   @doc """
   Creates the database specified in the config
   """
   @spec create_base_database() :: {:ok, String.t()} | {:error, Integer.t()}
   def create_base_database do
-    config()
-    |> Keyword.get(:database)
+    get_database_name!()
     |> create_database()
   end
 
@@ -77,26 +81,41 @@ defmodule Mix.ArangoXEcto do
     "#{y}#{pad(m)}#{pad(d)}#{pad(hh)}#{pad(mm)}#{pad(ss)}"
   end
 
-  @doc false
-  def migrated_versions do
+  @doc """
+  Gets the default repo's database name
+  """
+  @spec get_database_name!() :: String.t()
+  def get_database_name! do
+    config()
+    |> Keyword.fetch!(:database)
+  end
+
+  @doc """
+  Gets all the migrated versions
+  """
+  @spec migrated_versions(String.t()) :: [String.t() | Integer.t()]
+  def migrated_versions(db_name) do
     {:ok, conn} = system_db()
 
     {:ok, versions} =
       query(conn, """
-        RETURN DOCUMENT("_migrations/MASTER").migrations
+        RETURN DOCUMENT("_migrations/#{db_name}").migrations
       """)
 
     versions
   end
 
-  @doc false
-  def update_versions(version) when is_binary(version),
-    do: update_versions(String.to_integer(version))
+  @doc """
+  Updates the migrated versions in the migration collection
+  """
+  @spec update_versions(version(), String.t()) :: [version()]
+  def update_versions(version, db_name) when is_binary(version),
+    do: update_versions(String.to_integer(version), db_name)
 
-  def update_versions(version) do
+  def update_versions(version, db_name) do
     {:ok, conn} = system_db()
 
-    migrated = migrated_versions()
+    migrated = migrated_versions(db_name)
 
     if Enum.member?(migrated, version) do
       migrated
@@ -104,25 +123,28 @@ defmodule Mix.ArangoXEcto do
       new_versions = [version | migrated]
 
       {:ok, _} =
-        Arangox.patch(conn, "/_api/document/_migrations/MASTER", %{migrations: new_versions})
+        Arangox.patch(conn, "/_api/document/_migrations/#{db_name}", %{migrations: new_versions})
 
       new_versions
     end
   end
 
-  @doc false
-  def remove_version(version) when is_binary(version),
-    do: remove_version(String.to_integer(version))
+  @doc """
+  Removes a version from the migrations collection
+  """
+  @spec remove_version(version(), String.t()) :: [version()]
+  def remove_version(version, db_name) when is_binary(version),
+    do: remove_version(String.to_integer(version), db_name)
 
-  def remove_version(version) do
+  def remove_version(version, db_name) do
     {:ok, conn} = system_db()
 
     new_versions =
-      migrated_versions()
+      migrated_versions(db_name)
       |> List.delete(version)
 
     {:ok, _} =
-      Arangox.patch(conn, "/_api/document/_migrations/MASTER", %{migrations: new_versions})
+      Arangox.patch(conn, "/_api/document/_migrations/#{db_name}", %{migrations: new_versions})
 
     new_versions
   end
