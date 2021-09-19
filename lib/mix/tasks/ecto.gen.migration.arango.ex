@@ -30,9 +30,10 @@ defmodule Mix.Tasks.Ecto.Gen.Migration.Arango do
   use Mix.Task
 
   import Mix.Ecto
-  import Mix.ArangoXEcto
   import Mix.Generator
   import Macro, only: [camelize: 1, underscore: 1]
+
+  alias Mix.ArangoXEcto, as: Helpers
 
   @aliases [
     r: :repo
@@ -50,9 +51,9 @@ defmodule Mix.Tasks.Ecto.Gen.Migration.Arango do
     for repo <- repos do
       case OptionParser.parse!(args, strict: @switches, aliases: @aliases) do
         {_, [name]} ->
-          path = Path.join(path_to_priv_repo(repo), "migrations")
+          path = Path.join(Helpers.path_to_priv_repo(repo), "migrations")
           base_name = "#{underscore(name)}.exs"
-          file = Path.join(path, "#{timestamp()}_#{base_name}")
+          file = Path.join(path, "#{Helpers.timestamp()}_#{base_name}")
 
           unless File.dir?(path), do: create_directory(path)
 
