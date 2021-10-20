@@ -49,7 +49,7 @@ defmodule ArangoXEcto do
       ]}
   """
   @spec aql_query(Ecto.Repo.t(), query(), vars(), [DBConnection.option()]) ::
-          {:ok, map()} | {:error, any()}
+          {:ok, list(map)} | {:error, any()}
   def aql_query(repo, query, vars \\ [], opts \\ []) do
     conn = gen_conn_from_repo(repo)
 
