@@ -572,7 +572,7 @@ defmodule ArangoXEcto do
     |> validate_ecto_schema()
     |> validate_edge_module()
     |> maybe_create_edges_collection(repo)
-    |> ensure_collections_exists(repo, id1, id2)
+    |> ensure_collections_exists!(repo, id1, id2)
     |> edge_changeset(id1, id2, opts)
     |> repo.insert!()
   end
@@ -602,7 +602,7 @@ defmodule ArangoXEcto do
     repo.all(query)
   end
 
-  defp ensure_collections_exists(module, repo, id1, id2) do
+  defp ensure_collections_exists!(module, repo, id1, id2) do
     collection_from_id(id1)
     |> collection_exists!(repo)
 
