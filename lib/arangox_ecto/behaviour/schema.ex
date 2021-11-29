@@ -20,7 +20,7 @@ defmodule ArangoXEcto.Behaviour.Schema do
   """
   @impl true
   def insert(
-        %{pid: conn},
+        %{pid: conn, repo: repo},
         %{source: collection, schema: schema},
         fields,
         _on_conflict,
@@ -40,7 +40,7 @@ defmodule ArangoXEcto.Behaviour.Schema do
       "#{inspect(__MODULE__)}.insert-params" => %{document: inspect(doc)}
     })
 
-    maybe_create_collection(schema, conn)
+    maybe_create_collection(repo, schema, conn)
 
     Arangox.post(
       conn,
@@ -57,7 +57,7 @@ defmodule ArangoXEcto.Behaviour.Schema do
   """
   @impl true
   def insert_all(
-        %{pid: conn},
+        %{pid: conn, repo: repo},
         %{source: collection, schema: schema},
         _header,
         list,
@@ -74,7 +74,7 @@ defmodule ArangoXEcto.Behaviour.Schema do
       "#{inspect(__MODULE__)}.insert_all-params" => %{documents: inspect(docs)}
     })
 
-    maybe_create_collection(schema, conn)
+    maybe_create_collection(repo, schema, conn)
 
     case Arangox.post(
            conn,
@@ -146,7 +146,7 @@ defmodule ArangoXEcto.Behaviour.Schema do
   """
   @impl true
   def update(
-        %{pid: conn},
+        %{pid: conn, repo: repo},
         %{source: collection, schema: schema},
         fields,
         [{:_key, key}],
@@ -162,7 +162,7 @@ defmodule ArangoXEcto.Behaviour.Schema do
       "#{inspect(__MODULE__)}.update-params" => %{document: inspect(document)}
     })
 
-    maybe_create_collection(schema, conn)
+    maybe_create_collection(repo, schema, conn)
 
     Arangox.patch(
       conn,
@@ -224,11 +224,12 @@ defmodule ArangoXEcto.Behaviour.Schema do
 
   defp single_doc_result({:invalid, _} = res, _), do: res
 
-  defp maybe_create_collection(schema, conn) do
+  defp maybe_create_collection(repo, schema, conn) when is_atom(repo) do
     type = ArangoXEcto.schema_type!(schema) |> collection_type_to_integer()
     collection_name = schema.__schema__(:source)
+    is_dynamic = not Keyword.get(repo.config(), :static, false)
 
-    if not ArangoXEcto.collection_exists?(conn, collection_name, type) do
+    if is_dynamic and not ArangoXEcto.collection_exists?(conn, collection_name, type) do
       create_collection(conn, collection_name, type)
     end
   end
