@@ -34,7 +34,7 @@ defmodule ArangoXEcto.Behaviour.Queryable do
   """
   @impl true
   def execute(
-        %{pid: conn},
+        %{pid: conn, repo: repo},
         %{sources: sources, select: selecting},
         {:nocache, query},
         params,
@@ -47,8 +47,9 @@ defmodule ArangoXEcto.Behaviour.Queryable do
     })
 
     is_write_operation = selecting != nil or String.match?(query, ~r/^.*[update|delete].*+$/i)
+    is_static = Keyword.get(repo.config(), :static, false)
 
-    {run_query, options} = process_sources(conn, sources, is_write_operation)
+    {run_query, options} = process_sources(conn, sources, is_static, is_write_operation)
 
     # TODO: Make collection checking optional in config or options
     if run_query do
@@ -92,9 +93,9 @@ defmodule ArangoXEcto.Behaviour.Queryable do
     end
   end
 
-  defp process_sources(conn, sources, is_write_operation) do
+  defp process_sources(conn, sources, is_static, is_write_operation) do
     sources = Tuple.to_list(sources)
-    run_query = ensure_all_collections_exist(conn, sources)
+    run_query = ensure_all_collections_exist(conn, sources, is_static)
 
     {run_query, build_options(sources, is_write_operation)}
   end
@@ -105,15 +106,26 @@ defmodule ArangoXEcto.Behaviour.Queryable do
     if is_write_operation, do: [write: collections], else: []
   end
 
-  defp ensure_all_collections_exist(conn, sources) when is_list(sources) do
+  defp ensure_all_collections_exist(conn, sources, is_static) when is_list(sources) do
     sources
-    |> Enum.reduce(true, fn {collection, source_module, _}, acc ->
-      if acc do
-        collection_type = ArangoXEcto.schema_type(source_module)
-        acc && ArangoXEcto.collection_exists?(conn, collection, collection_type)
+    |> Enum.find_value(fn {collection, source_module, _} ->
+      collection_type = ArangoXEcto.schema_type(source_module)
+
+      if ArangoXEcto.collection_exists?(conn, collection, collection_type) do
+        false
       else
-        acc
+        maybe_raise_collection_error(is_static, collection)
       end
     end)
+    |> case do
+      nil -> true
+      true -> false
+    end
   end
+
+  defp maybe_raise_collection_error(true, collection),
+    do: raise("Collection (#{collection}) does not exist. Maybe a migration is missing.")
+
+  defp maybe_raise_collection_error(false, _),
+    do: true
 end
