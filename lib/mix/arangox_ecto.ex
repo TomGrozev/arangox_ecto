@@ -41,11 +41,16 @@ defmodule Mix.ArangoXEcto do
     end
   end
 
+  defp get_migrations_record_name() do
+    config = config([])
+    db_name = Keyword.get(config, :database)
+  end
+
   @doc false
   def create_master_document do
     {:ok, conn} = system_db()
 
-    {:ok, _} = Arangox.post(conn, "/_api/document/_migrations", %{_key: "MASTER", migrations: []})
+    {:ok, _} = Arangox.post(conn, "/_api/document/_migrations", %{_key: get_migrations_record_name(), migrations: []})
   end
 
   @doc false
@@ -54,7 +59,7 @@ defmodule Mix.ArangoXEcto do
 
     {:ok, versions} =
       query(conn, """
-        RETURN DOCUMENT("_migrations/MASTER").migrations
+        RETURN DOCUMENT("_migrations/#{get_migrations_record_name()}").migrations
       """)
 
     versions
@@ -75,7 +80,7 @@ defmodule Mix.ArangoXEcto do
       new_versions = [version | migrated]
 
       {:ok, _} =
-        Arangox.patch(conn, "/_api/document/_migrations/MASTER", %{migrations: new_versions})
+        Arangox.patch(conn, "/_api/document/_migrations/#{get_migrations_record_name()}", %{migrations: new_versions})
 
       new_versions
     end
@@ -93,7 +98,7 @@ defmodule Mix.ArangoXEcto do
       |> List.delete(version)
 
     {:ok, _} =
-      Arangox.patch(conn, "/_api/document/_migrations/MASTER", %{migrations: new_versions})
+      Arangox.patch(conn, "/_api/document/_migrations/#{get_migrations_record_name()}", %{migrations: new_versions})
 
     new_versions
   end
