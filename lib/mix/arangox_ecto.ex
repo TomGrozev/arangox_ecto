@@ -43,7 +43,7 @@ defmodule Mix.ArangoXEcto do
 
   defp get_migrations_record_name() do
     config = config([])
-    db_name = Keyword.get(config, :database)
+    Keyword.get(config, :database)
   end
 
   @doc false
