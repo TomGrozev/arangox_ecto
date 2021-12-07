@@ -29,6 +29,7 @@ defmodule Mix.Tasks.Ecto.Setup.Arango do
         Mix.shell().info("Setup Complete")
 
       {:error, 409} ->
+        create_master_document()
         Mix.shell().info("ArangoDB already setup for ecto")
     end
   end
