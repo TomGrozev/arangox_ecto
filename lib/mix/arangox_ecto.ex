@@ -22,6 +22,7 @@ defmodule Mix.ArangoXEcto do
     case Arangox.post(conn, "/_api/database", %{
            name: Keyword.get(config, :database)
          }) do
+      {:ok, _} -> :ok
       {:ok, _, _} -> :ok
       {:error, %{status: status}} -> {:error, status}
     end
