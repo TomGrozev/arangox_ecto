@@ -50,7 +50,11 @@ defmodule Mix.ArangoXEcto do
   def create_master_document do
     {:ok, conn} = system_db()
 
-    {:ok, _} = Arangox.post(conn, "/_api/document/_migrations", %{_key: get_migrations_record_name(), migrations: []})
+    case Arangox.post(conn, "/_api/document/_migrations", %{_key: get_migrations_record_name(), migrations: []}) do
+      {:ok, _} -> :ok
+      {:error, %{status: 409}} -> :ok
+      {:error, _} = err -> err
+    end
   end
 
   @doc false
