@@ -51,7 +51,6 @@ defmodule ArangoXEcto.Behaviour.Queryable do
 
     {run_query, options} = process_sources(conn, sources, is_static, is_write_operation)
 
-    # TODO: Make collection checking optional in config or options
     if run_query do
       zipped_args =
         Stream.zip(

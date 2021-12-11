@@ -201,7 +201,6 @@ defmodule ArangoXEcto.Migration do
   def drop(%Collection{name: collection_name}) do
     {:ok, conn} = get_db_conn()
 
-    # TODO: Check type??
     case Arangox.delete(conn, "/_api/collection/" <> get_collection_name(collection_name)) do
       {:ok, _} -> :ok
       {:error, %{status: status, message: message}} -> {:error, "#{status} - #{message}"}
