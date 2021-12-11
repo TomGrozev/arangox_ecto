@@ -70,6 +70,12 @@ The database should be setup using
 $ mix ecto.setup.arango
 ```
 
+### Static or Dynamic
+In addition to default config variables, the `static` boolean config option can be passed to force the use of migrations. By default the value is `false` and collections that don't exist will be created on insert and on query no error will be raised. If set to `true`, any collections that do not exist on insert or query will result in an error to be raised.
+
+Whether dynamic (default) or static is chosen defends on the database design of the project. For a production setup where lots of control is required, it is recommended to have `static` set to `true`.
+
+
 ### Basic Usage
 
 #### Repo Setup
