@@ -46,6 +46,16 @@ defmodule ArangoXEctoTest.Integration.Post do
   end
 end
 
+defmodule ArangoXEctoTest.Integration.Comment do
+  use ArangoXEcto.Schema
+
+  schema "comments" do
+    field(:text, :string)
+
+    timestamps()
+  end
+end
+
 defmodule ArangoXEctoTest.Integration.Deep.Magic do
   use ArangoXEcto.Schema
 

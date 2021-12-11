@@ -4,7 +4,7 @@ defmodule ArangoXEctoTest.Integration.RepoTest do
   import Ecto.Query
 
   alias ArangoXEctoTest.Repo
-  alias ArangoXEctoTest.Integration.{Post, User}
+  alias ArangoXEctoTest.Integration.{Comment, Post, User}
 
   @test_collections [
     users: 2,
@@ -93,6 +93,10 @@ defmodule ArangoXEctoTest.Integration.RepoTest do
 
     test "query from non existent collection" do
       assert [] = Repo.all(from(a in "abc", select: a.id))
+
+      Application.put_env(:arangox_ecto, :static, true)
+      assert [] = Repo.all(from(a in "abc", select: a.id))
+      Application.put_env(:arangox_ecto, :static, false)
     end
   end
 
@@ -111,22 +115,29 @@ defmodule ArangoXEctoTest.Integration.RepoTest do
         Repo.insert!(User.changeset(%User{}, %{}))
       end
     end
-  end
 
-  test "can insert and fetch with timestamps" do
-    datetime = NaiveDateTime.utc_now()
-    assert %User{} = Repo.insert!(%User{inserted_at: datetime})
+    test "creates collection if not exists" do
+      comment = %Comment{text: "abc"}
 
-    assert [%{inserted_at: ^datetime}] = Repo.all(User)
-  end
+      assert {:ok, %Comment{}} = Repo.insert(comment)
+      assert %Comment{} = Repo.insert!(comment)
+    end
 
-  test "can provide primary key" do
-    user = %User{id: "123456", first_name: "John", last_name: "Smith"}
+    test "can insert and fetch with timestamps" do
+      datetime = NaiveDateTime.utc_now()
+      assert %User{} = Repo.insert!(%User{inserted_at: datetime})
 
-    assert {:ok, %User{}} = Repo.insert(user)
+      assert [%{inserted_at: ^datetime}] = Repo.all(User)
+    end
 
-    user = %User{id: "654321", first_name: "John", last_name: "Smith"}
-    assert %User{} = Repo.insert!(user)
+    test "can provide primary key" do
+      user = %User{id: "123456", first_name: "John", last_name: "Smith"}
+
+      assert {:ok, %User{}} = Repo.insert(user)
+
+      user = %User{id: "654321", first_name: "John", last_name: "Smith"}
+      assert %User{} = Repo.insert!(user)
+    end
   end
 
   describe "Repo.update/2 and Repo.update!/2" do
