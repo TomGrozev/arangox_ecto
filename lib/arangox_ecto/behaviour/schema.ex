@@ -227,10 +227,14 @@ defmodule ArangoXEcto.Behaviour.Schema do
   defp maybe_create_collection(repo, schema, conn) when is_atom(repo) do
     type = ArangoXEcto.schema_type!(schema) |> collection_type_to_integer()
     collection_name = schema.__schema__(:source)
-    is_dynamic = not Keyword.get(repo.config(), :static, false)
+    is_static = Keyword.get(repo.config(), :static, false)
 
-    if is_dynamic and not ArangoXEcto.collection_exists?(conn, collection_name, type) do
-      create_collection(conn, collection_name, type)
+    unless ArangoXEcto.collection_exists?(conn, collection_name, type) do
+      if is_static do
+        raise("Collection (#{collection_name}) does not exist. Maybe a migration is missing.")
+      else
+        create_collection(conn, collection_name, type)
+      end
     end
   end
 
