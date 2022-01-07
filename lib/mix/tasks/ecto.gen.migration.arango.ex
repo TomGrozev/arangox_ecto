@@ -1,13 +1,4 @@
 defmodule Mix.Tasks.Ecto.Gen.Migration.Arango do
-  use Mix.Task
-
-  import Mix.Ecto
-  import Mix.ArangoXEcto
-  import Mix.Generator
-  import Macro, only: [camelize: 1, underscore: 1]
-
-  @shortdoc "Generates a new migration for a collection"
-
   @moduledoc """
   Generates a migration.
 
@@ -36,6 +27,14 @@ defmodule Mix.Tasks.Ecto.Gen.Migration.Arango do
 
   """
 
+  use Mix.Task
+
+  import Mix.Ecto
+  import Mix.Generator
+  import Macro, only: [camelize: 1, underscore: 1]
+
+  alias Mix.ArangoXEcto, as: Helpers
+
   @aliases [
     r: :repo
   ]
@@ -52,9 +51,9 @@ defmodule Mix.Tasks.Ecto.Gen.Migration.Arango do
     for repo <- repos do
       case OptionParser.parse!(args, strict: @switches, aliases: @aliases) do
         {_, [name]} ->
-          path = Path.join(path_to_priv_repo(repo), "migrations")
+          path = Path.join(Helpers.path_to_priv_repo(repo), "migrations")
           base_name = "#{underscore(name)}.exs"
-          file = Path.join(path, "#{timestamp()}_#{base_name}")
+          file = Path.join(path, "#{Helpers.timestamp()}_#{base_name}")
 
           unless File.dir?(path), do: create_directory(path)
 
@@ -84,14 +83,19 @@ defmodule Mix.Tasks.Ecto.Gen.Migration.Arango do
 
   embed_template(:migration, """
   defmodule <%= inspect @mod %> do
+    use ArangoXEcto.Migration
     alias <%= @repo %>
 
     def up do
-      :ok
+      # Add actions for `up` action. Refer to `ArangoXEcto.Migration` for usage here.
+      # create(collection(:users))
+      # create(index("users", [:email]))
     end
 
     def down do
-      :ok
+      # Add actions for `down` action. Refer to `ArangoXEcto.Migration` for usage here.
+      # NOTE: If a collection is dropped you do not need to drop the index also as it will be removed automatically.
+      # drop(collection(:users))
     end
   end
   """)

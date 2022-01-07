@@ -34,8 +34,8 @@ defmodule ArangoXEcto.Behaviour.Queryable do
   """
   @impl true
   def execute(
-        %{pid: conn},
-        %{sources: {{collection, source_module, _}}, select: selecting},
+        %{pid: conn, repo: repo},
+        %{sources: sources, select: selecting},
         {:nocache, query},
         params,
         _options
@@ -46,16 +46,12 @@ defmodule ArangoXEcto.Behaviour.Queryable do
       }
     })
 
-    collection_type = ArangoXEcto.schema_type(source_module)
+    is_write_operation = selecting != nil or String.match?(query, ~r/^.*[update|delete].*+$/i)
+    is_static = Keyword.get(repo.config(), :static, false)
 
-    if ArangoXEcto.collection_exists?(conn, collection, collection_type) do
-      options =
-        if selecting == nil,
-          do: [],
-          else: [
-            write: collection
-          ]
+    {run_query, options} = process_sources(conn, sources, is_static, is_write_operation)
 
+    if run_query do
       zipped_args =
         Stream.zip(
           Stream.iterate(1, &(&1 + 1))
@@ -72,9 +68,15 @@ defmodule ArangoXEcto.Behaviour.Queryable do
 
             Enum.reduce(
               stream,
-              [],
-              fn resp, acc ->
-                acc ++ resp.body["result"]
+              {0, []},
+              fn resp, {_len, acc} ->
+                len =
+                  case is_write_operation do
+                    true -> resp.body["extra"]["stats"]["writesExecuted"]
+                    false -> resp.body["extra"]["stats"]["scannedFull"]
+                  end
+
+                {len, acc ++ resp.body["result"]}
               end
             )
           end,
@@ -82,11 +84,47 @@ defmodule ArangoXEcto.Behaviour.Queryable do
         )
 
       case res do
-        {:ok, result} -> {length(result), result}
+        {:ok, {len, result}} -> {len, result}
         {:error, _reason} -> {0, nil}
       end
     else
       {0, []}
     end
   end
+
+  defp process_sources(conn, sources, is_static, is_write_operation) do
+    sources = Tuple.to_list(sources)
+    run_query = ensure_all_collections_exist(conn, sources, is_static)
+
+    {run_query, build_options(sources, is_write_operation)}
+  end
+
+  defp build_options(sources, is_write_operation) do
+    collections = Enum.map(sources, fn {collection, _, _} -> collection end)
+
+    if is_write_operation, do: [write: collections], else: []
+  end
+
+  defp ensure_all_collections_exist(conn, sources, is_static) when is_list(sources) do
+    sources
+    |> Enum.find_value(fn {collection, source_module, _} ->
+      collection_type = ArangoXEcto.schema_type(source_module)
+
+      if ArangoXEcto.collection_exists?(conn, collection, collection_type) do
+        false
+      else
+        maybe_raise_collection_error(is_static, collection)
+      end
+    end)
+    |> case do
+      nil -> true
+      true -> false
+    end
+  end
+
+  defp maybe_raise_collection_error(true, collection),
+    do: raise("Collection (#{collection}) does not exist. Maybe a migration is missing.")
+
+  defp maybe_raise_collection_error(false, _),
+    do: true
 end

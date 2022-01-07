@@ -1,5 +1,82 @@
 # Changelog
 
+## 1.0.0
+
+### Enhancements
+- Added api_query/3 function for direct Arango API queries
+- Added lots of test cases for Ecto base functionality
+- Added missing test cases that should have been previously included
+- Adds ability to do subqueries in AQL queries
+- Improve migration template
+- Rework migration command
+- Removed `create_edge/6` function
+
+#### Graph Relationships
+- Complete rework of Edge relationships to conform to Ecto standards
+E.g.
+```elixir
+defmodule MyProject.User do
+  use ArangoXEcto.Schema
+  schema "users" do
+    field :name, :string
+    # Will use the automatically generated edge
+    outgoing :posts, MyProject.Post
+    # Will use the UserPosts edge
+    outgoing :posts, MyProject.Post, edge: MyProject.UserPosts
+    # Creates foreign key
+    one_outgoing :main_post, MyProject.Post
+  end
+end
+
+defmodule MyProject.Post do
+  use ArangoXEcto.Schema
+  schema "posts" do
+    field :title, :string
+    # Will use the automatically generated edge
+    incoming :users, MyProject.User
+    # Will use the UserPosts edge
+    incoming :users, MyProject.User, edge: MyProject.UserPosts
+    # Stores foreign key id in schema
+    one_incoming :user, MyProject.User
+  end
+end
+```
+- Adds one-to-one relation (not a graph relation, stores as an ID in field)
+- Add graph tests
+- Automatically insert `_id` field into schemas when interacting with edges, saved in `:__id__` attributed
+- Documentation for graph functionality
+
+
+### Geo Functionality
+- Added Geo functionality with GeoJSON support
+- Added `ArangoXEcto.Types.GeoJSON` type
+- Added `:geo` package dependency
+- Added Geo related helper functions to manage Geo data in `ArangoXEcto.GeoData`
+- Documentation for Geo functionality
+
+
+### Static or Dynamic Collection Management
+- Added the ability to dynamically create collections or require migrations
+- Added `:static` boolean config option (default if false)
+- Added tests for static/dynamic functionality
+
+
+
+### Fixes
+- Fixed typespec for aql_query/4 (PR #27, thanks @bodbdigr)
+- Fixed missed ArangoX version api change in `Mix.ArangoXEcto`
+- Fixed incorrect length return on writing queries (i.e. updates and deletes)
+- Fixed Arango storing integer as float
+- Complete rewrite of setup command to fix incorrect setup processes and messages
+- Fixed a race condition in edge creation
+- Added missing specs
+- Some other minor fixes that I cbf adding because nobody had experienced it
+
+
+### Repo Changes
+- Updated ISSUE templates
+
+
 ## 0.7.2
 
 ### Fixes
@@ -85,7 +162,7 @@ Checking a document collection exists
 ```elixir
 iex> ArangoXEcto.collection_exists?(Repo, :users)
 true
-```  
+```
 Checking an edge collection exists
 ```elixir
 iex> ArangoXEcto.collection_exists?(Repo, "my_edge", :edge)

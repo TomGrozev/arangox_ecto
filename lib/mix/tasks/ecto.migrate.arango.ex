@@ -5,9 +5,7 @@ defmodule Mix.Tasks.Ecto.Migrate.Arango do
 
   use Mix.Task
 
-  import Mix.ArangoXEcto
-
-  @shortdoc "Runs Migration/Rollback functions from migration modules"
+  alias Mix.ArangoXEcto, as: Helpers
 
   @aliases [
     d: :dir
@@ -21,60 +19,65 @@ defmodule Mix.Tasks.Ecto.Migrate.Arango do
   def run(args) do
     Mix.Task.run("app.start")
 
-    case migrated_versions() do
+    db_name = Helpers.get_database_name!()
+
+    case Helpers.migrated_versions(db_name) do
       [nil] ->
         Mix.raise("ArangoXEcto is not set up, run `mix ecto.setup.arango` first.")
 
       _ ->
-        migrate(args)
+        migrate(db_name, args)
     end
   end
 
-  defp migrate(args) do
+  defp migrate(db_name, args) do
     case OptionParser.parse!(args, aliases: @aliases, strict: @switches) do
       {[], []} ->
-        up()
+        up(db_name)
 
       {[dir: "up"], _} ->
-        up()
+        up(db_name)
 
       {_, ["up"]} ->
-        up()
+        up(db_name)
 
       {[dir: "down"], _} ->
-        down()
+        down(db_name)
 
       {_, ["down"]} ->
-        down()
+        down(db_name)
 
       {_, ["rollback"]} ->
-        down()
+        down(db_name)
 
       {_, _} ->
         Mix.raise("Unknown arguments provided, #{inspect(Enum.join(args, " "))}")
     end
   end
 
-  defp up do
-    migrated = migrated_versions()
+  defp up(db_name) do
+    migrated = Helpers.migrated_versions(db_name)
 
     pending_migrations()
     |> Enum.filter(fn file_path ->
       t_stamp = timestamp(file_path)
       not Enum.member?(migrated, t_stamp)
     end)
-    |> maybe_up_migrations()
+    |> maybe_up_migrations(db_name)
   end
 
-  defp maybe_up_migrations([]), do: Mix.shell().info("No migrations to action :)")
+  defp maybe_up_migrations([], _db_name), do: Mix.shell().info("No migrations to action :)")
 
-  defp maybe_up_migrations(migrations) do
+  defp maybe_up_migrations(migrations, db_name) do
     Enum.each(migrations, fn file_path ->
       case apply(migration_module(file_path), :up, []) do
+        nil ->
+          Mix.shell().error("Up function has no actions")
+
         :ok ->
           file_path
           |> timestamp()
-          |> update_versions()
+          |> Helpers.update_versions(db_name)
 
           Mix.shell().info("Successfully Migrated #{file_path}")
 
@@ -85,8 +88,9 @@ defmodule Mix.Tasks.Ecto.Migrate.Arango do
     end)
   end
 
-  def down do
-    [last_migrated_version | _] = versions()
+  @spec down(binary()) :: :ok
+  def down(db_name) do
+    [last_migrated_version | _] = versions(db_name)
 
     module =
       last_migrated_version
@@ -94,8 +98,11 @@ defmodule Mix.Tasks.Ecto.Migrate.Arango do
       |> migration_module()
 
     case apply(module, :down, []) do
+      nil ->
+        Mix.shell().error("Down function has no actions")
+
       :ok ->
-        remove_version(last_migrated_version)
+        Helpers.remove_version(last_migrated_version, db_name)
 
         Mix.shell().info("Successfully Rolled Back #{last_migrated_version}")
 
@@ -106,8 +113,8 @@ defmodule Mix.Tasks.Ecto.Migrate.Arango do
 
   defp migration_module(path) do
     {{:module, module, _, _}, _} =
-      get_default_repo!()
-      |> path_to_priv_repo()
+      Helpers.get_default_repo!()
+      |> Helpers.path_to_priv_repo()
       |> Path.join("migrations")
       |> Path.join(path)
       |> Code.eval_file()
@@ -122,20 +129,19 @@ defmodule Mix.Tasks.Ecto.Migrate.Arango do
   end
 
   defp migration_path(version) do
-    get_default_repo!()
-    |> path_to_priv_repo()
+    Helpers.get_default_repo!()
+    |> Helpers.path_to_priv_repo()
     |> Path.join("migrations")
     |> File.ls!()
     |> Enum.find(&String.starts_with?(&1, version))
   end
 
   defp pending_migrations do
-    get_default_repo!()
-    |> path_to_priv_repo()
+    Helpers.get_default_repo!()
+    |> Helpers.path_to_priv_repo()
     |> Path.join("migrations")
     |> File.ls!()
     |> Enum.filter(&(!String.starts_with?(&1, ".")))
-    #    |> Enum.filter(&(timestamp(&1) not in versions()))
     |> Enum.sort(&(timestamp(&1) <= timestamp(&2)))
   end
 
@@ -146,8 +152,8 @@ defmodule Mix.Tasks.Ecto.Migrate.Arango do
     |> String.to_integer()
   end
 
-  defp versions do
-    migrated_versions()
+  defp versions(db_name) do
+    Helpers.migrated_versions(db_name)
     |> Enum.sort(&(&1 >= &2))
   end
 end

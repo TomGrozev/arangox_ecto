@@ -49,9 +49,11 @@ defmodule ArangoXEcto do
       ]}
   """
   @spec aql_query(Ecto.Repo.t(), query(), vars(), [DBConnection.option()]) ::
-          {:ok, map()} | {:error, any()}
+          {:ok, list(map)} | {:error, any()}
   def aql_query(repo, query, vars \\ [], opts \\ []) do
     conn = gen_conn_from_repo(repo)
+
+    {query, vars} = process_vars(query, vars)
 
     Arangox.transaction(
       conn,
@@ -67,6 +69,87 @@ defmodule ArangoXEcto do
   end
 
   @doc """
+  Runs an Arangox function using a repo
+
+  This is simply a helper function that extracts the connection from the repo and runs a regular query.
+
+  ## Parameters
+
+  - `repo` - The Ecto repo module used for connection
+  - `function` - An atom of the Arangox function to run
+  - `args` - The options passed to the function (not including the conn argument)
+
+  The `conn` argument is automatically prepended to your supplied `args`
+
+  ## Supported Functions
+
+  - `:abort`
+  - `:cursor`
+  - `:delete`
+  - `:delete!`
+  - `:get`
+  - `:get!`
+  - `:head`
+  - `:head!`
+  - `:options`
+  - `:options!`
+  - `:patch`
+  - `:patch!`
+  - `:post`
+  - `:post!`
+  - `:put`
+  - `:put!`
+  - `:request`
+  - `:request!`
+  - `:run`
+  - `:status`
+  - `:transaction` (use built in `Ecto.Repo.transaction/2` instead)
+
+  ## Examples
+
+      iex> ArangoXEcto.api_query(Repo, :get, ["/_api/collection"])
+      {:ok, %Arangox.Response{body: ...}}
+
+      iex> ArangoXEcto.api_query(Repo, :non_existent, ["/_api/collection"])
+      ** (ArgumentError) Invalid function passed to `Arangox` module
+
+  """
+  @allowed_arangox_funcs [
+    :abort,
+    :cursor,
+    :delete,
+    :delete!,
+    :get,
+    :get!,
+    :head,
+    :head!,
+    :options,
+    :options!,
+    :patch,
+    :patch!,
+    :post,
+    :post!,
+    :put,
+    :put!,
+    :request,
+    :request!,
+    :run,
+    :status,
+    :transaction
+  ]
+  @spec api_query(mod(), atom(), list()) :: {:ok, Arangox.Response.t()} | {:error, any()}
+  def api_query(repo, function, args \\ []) do
+    conn = gen_conn_from_repo(repo)
+
+    if function in @allowed_arangox_funcs and
+         function in Keyword.keys(Arangox.__info__(:functions)) do
+      apply(Arangox, function, [conn | args])
+    else
+      raise ArgumentError, "Invalid function passed to `Arangox` module"
+    end
+  end
+
+  @doc """
   Creates an edge between two modules
 
   This can create an edge collection dynamically if no additional fields are required,
@@ -74,6 +157,9 @@ defmodule ArangoXEcto do
 
   The collection name can be passed as an option or is obtained from the provided schema,
   otherwise it is generated dynamically.
+
+  Since ArangoDB does not care about the order of the from and two options in anonymous graphs, the order of the
+  from and to attributes used in this function will work either way.
 
   ## Parameters
 
@@ -93,17 +179,20 @@ defmodule ArangoXEcto do
   ## Examples
 
       iex> ArangoXEcto.create_edge(Repo, user1, user2)
-      %ArangoXEcto.Edge{_from: "users/12345", _to: "users/54321"}
+      %UserUser{_from: "users/12345", _to: "users/54321"}
 
   Create an edge with a specific edge collection name
 
       iex> ArangoXEcto.create_edge(Repo, user1, user2, collection_name: "friends")
-      %ArangoXEcto.Edge{_from: "users/12345", _to: "users/54321"}
+      %Friends{_from: "users/12345", _to: "users/54321"}
 
   Create a edge schema and use it to create an edge relation
 
       defmodule UserPosts do
-        use ArangoXEcto.Edge
+        use ArangoXEcto.Edge,
+            from: User,
+            to: Post
+
         import Ecto.Changeset
 
         schema "user_posts" do
@@ -120,41 +209,19 @@ defmodule ArangoXEcto do
       end
 
       iex> ArangoXEcto.create_edge(Repo, user1, user2, edge: UserPosts, fields: %{type: "wrote"})
-      %ArangoXEcto.Edge{_from: "users/12345", _to: "users/54321"}
+      %UserPosts{_from: "users/12345", _to: "users/54321", from: #Ecto.Association.NotLoaded<association :from is not loaded>, to: #Ecto.Association.NotLoaded<association :to is not loaded>, type: "wrote"}
 
   """
   @spec create_edge(Ecto.Repo.t(), mod(), mod(), keyword()) ::
           {:ok, Ecto.Schema.t()} | {:error, Ecto.Changeset.t()}
   def create_edge(repo, from, to, opts \\ [])
 
-  def create_edge(repo, from, to, [edge: edge_module, fields: _fields] = opts) do
-    from_id = struct_id(from)
-    to_id = struct_id(to)
-
-    edge_module
-    |> do_create_edge(repo, from_id, to_id, opts)
-  end
-
   def create_edge(repo, from, to, opts) do
     from_id = struct_id(from)
     to_id = struct_id(to)
 
-    edge_module(from, to, opts)
+    Keyword.get(opts, :edge, edge_module(from, to, opts))
     |> do_create_edge(repo, from_id, to_id, opts)
-  end
-
-  # TODO: Maybe remove
-  @doc """
-  Same as create_edge/4 but specific for custom edge and fields.
-  """
-  @spec create_edge(Ecto.Repo.t(), mod(), mod(), mod(), map(), keyword()) ::
-          {:ok, Ecto.Schema.t()} | {:error, Ecto.Changeset.t()}
-  def create_edge(repo, from, to, edge, %{} = fields, opts \\ []) do
-    opts =
-      opts
-      |> Keyword.merge(edge: edge, fields: fields)
-
-    create_edge(repo, from, to, opts)
   end
 
   @doc """
@@ -317,13 +384,14 @@ defmodule ArangoXEcto do
   @doc """
   Generates a edge schema dynamically
 
-  If no collection name is passed in the options, then one is generated using the passed modules.
+  If a collection name is not provided one will be dynamically generated. The naming convention
+  is the names of the two modules is alphabetical order. E.g. `User` and `Post` will combine for a collection
+  name of `post_user` and an edge module name of `PostUser`. This order is used to prevent duplicates if the
+  from and to orders are switched.
 
   This will create the Ecto Module in the environment dynamically. It will create it under the closest
   common parent module of the passed modules plus the `Edges` alias. For example, if the modules were
-  `MyApp.Apple.User` and `MyApp.Apple.Banana.Post` then the edge would be created at `MyApp.Apple.Edges.UsersPosts`.
-  This assumes that the edge collection name was generated and not passed in, if it was `UsersPosts` would be
-  replaced with the camelcase of that collection name.
+  `MyApp.Apple.User` and `MyApp.Apple.Banana.Post` then the edge would be created at `MyApp.Apple.Edges.PostUser`.
 
   Returns the Edge Module name as an atom.
 
@@ -351,12 +419,12 @@ defmodule ArangoXEcto do
   def edge_module(%from_module{}, %to_module{}, opts),
     do: edge_module(from_module, to_module, opts)
 
-  def edge_module(from_module, to_module, collection_name: name),
-    do: create_edge_module(name, from_module, to_module)
-
-  def edge_module(from_module, to_module, _) do
-    gen_edge_collection_name(from_module, to_module)
-    |> create_edge_module(from_module, to_module)
+  def edge_module(from_module, to_module, opts) do
+    case Keyword.fetch(opts, :collection_name) do
+      {:ok, name} -> name
+      :error -> gen_edge_collection_name(from_module, to_module)
+    end
+    |> create_edge_module(from_module, to_module, opts)
   end
 
   @doc """
@@ -502,7 +570,7 @@ defmodule ArangoXEcto do
     |> validate_ecto_schema()
     |> validate_edge_module()
     |> maybe_create_edges_collection(repo)
-    |> ensure_collections_exists(repo, id1, id2)
+    |> ensure_collections_exists!(repo, id1, id2)
     |> edge_changeset(id1, id2, opts)
     |> repo.insert!()
   end
@@ -532,7 +600,7 @@ defmodule ArangoXEcto do
     repo.all(query)
   end
 
-  defp ensure_collections_exists(module, repo, id1, id2) do
+  defp ensure_collections_exists!(module, repo, id1, id2) do
     collection_from_id(id1)
     |> collection_exists!(repo)
 
@@ -554,14 +622,17 @@ defmodule ArangoXEcto do
 
   defp collection_from_id(id), do: source_name(id)
 
-  defp create_edge_module(collection_name, from_module, to_module) do
+  defp create_edge_module(collection_name, from_module, to_module, opts) do
     project_prefix = Module.concat(common_parent_module(from_module, to_module), "Edges")
     module_name = Module.concat(project_prefix, Macro.camelize(collection_name))
 
-    unless function_exported?(module_name, :__info__, 1) do
+    unless Keyword.get(opts, :create, true) == false or
+             function_exported?(module_name, :__info__, 1) do
       contents =
         quote do
-          use ArangoXEcto.Edge
+          use ArangoXEcto.Edge,
+            from: unquote(from_module),
+            to: unquote(to_module)
 
           schema unquote(collection_name) do
             edge_fields()
@@ -597,11 +668,21 @@ defmodule ArangoXEcto do
   defp common_ordered_list(_, _, acc), do: Enum.reverse(acc)
 
   defp gen_edge_collection_name(mod1, mod2) do
-    name1 = source_name(mod1)
-    name2 = source_name(mod2)
+    name1 = last_mod(mod1)
+    name2 = last_mod(mod2)
 
-    # TODO: Think of naming convention (make sure is unique)
+    sorted_elements = Enum.sort([name1, name2])
+
+    name1 = List.first(sorted_elements) |> String.downcase()
+    name2 = List.last(sorted_elements) |> String.downcase()
+
     "#{name1}_#{name2}"
+  end
+
+  defp last_mod(module) do
+    module
+    |> Module.split()
+    |> List.last()
   end
 
   defp source_name(%{} = struct) do
@@ -685,6 +766,18 @@ defmodule ArangoXEcto do
 
     Arangox.post!(conn, "/_api/collection", %{name: collection_name, type: 3})
   end
+
+  defp process_vars(query, vars) when is_list(vars),
+    do: Enum.reduce(vars, {query, []}, &process_vars(&2, &1))
+
+  defp process_vars({query, vars}, {key, %Ecto.Query{} = res}) do
+    val = ArangoXEcto.Query.all(res)
+
+    {String.replace(query, "@" <> Atom.to_string(key), val), vars}
+  end
+
+  defp process_vars({query, vars}, {_key, _val} = res),
+    do: {query, [res | vars]}
 
   defp patch_map(map) do
     for {k, v} <- map, into: %{}, do: {String.to_atom(k), v}

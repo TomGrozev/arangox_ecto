@@ -13,7 +13,8 @@ jobs:
   test:
     name: "[${{matrix.otp}}/${{matrix.elixir}}] CI Tests on arangox_ecto [OTP/Elixir]"
     runs-on: ubuntu-latest
-
+    env:
+      FORCE_COLOR: 1
     strategy:
       matrix:
         otp: [22.2, 23, 24]
