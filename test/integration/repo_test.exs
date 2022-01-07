@@ -532,6 +532,4 @@ defmodule ArangoXEctoTest.Integration.RepoTest do
     assert %Post{id: id} = Repo.insert!(%Post{title: "abc", text: "cba"})
     assert Repo.get(Post, id).virt == "iamavirtualfield"
   end
-
-  # TODO: Add advanced querying tests
 end

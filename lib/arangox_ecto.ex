@@ -282,7 +282,6 @@ defmodule ArangoXEcto do
     |> do_delete_all_edges(repo, from_id, to_id, opts)
   end
 
-  # TODO: Maybe remove?
   @doc """
   Gets an ID from a schema struct
 
@@ -303,7 +302,6 @@ defmodule ArangoXEcto do
   @spec get_id_from_struct(mod()) :: binary()
   def get_id_from_struct(struct) when is_map(struct) or is_binary(struct), do: struct_id(struct)
 
-  # TODO: Maybe remove?
   @doc """
   Gets an ID from a module and a key
 
@@ -678,7 +676,6 @@ defmodule ArangoXEcto do
     name1 = List.first(sorted_elements) |> String.downcase()
     name2 = List.last(sorted_elements) |> String.downcase()
 
-    # TODO: Think of naming convention (make sure is unique)
     "#{name1}_#{name2}"
   end
 

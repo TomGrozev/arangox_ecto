@@ -73,7 +73,6 @@ defmodule ArangoxEctoTest.Integration.RelationshipTest do
 
       post = %Post{__id__: post_id} = %Post{title: "abc"} |> Repo.insert!()
 
-      # TODO: Maybe make specifying edge not required?
       assert %{_from: ^user_id, _to: ^post_id} =
                ArangoXEcto.create_edge(Repo, user, post, edge: UserPosts)
 

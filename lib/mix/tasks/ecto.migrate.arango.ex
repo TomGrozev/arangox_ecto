@@ -88,6 +88,7 @@ defmodule Mix.Tasks.Ecto.Migrate.Arango do
     end)
   end
 
+  @spec down(binary()) :: :ok
   def down(db_name) do
     [last_migrated_version | _] = versions(db_name)
 

@@ -137,7 +137,6 @@ defmodule ArangoXEcto.Behaviour.Schema do
   end
 
   def delete(_adapter_meta, _schema_meta, _filters, _options) do
-    # TODO: Do this
     raise "Deleting with filters other than _key is not supported yet"
   end
 
@@ -174,7 +173,6 @@ defmodule ArangoXEcto.Behaviour.Schema do
   end
 
   def update(_adapter_meta, _schema_meta, _fields, _filters, _returning, _options) do
-    # TODO: Do this
     raise "Updating with filters other than _key is not supported yet"
   end
 

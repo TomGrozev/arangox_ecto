@@ -136,6 +136,7 @@ defmodule ArangoXEcto.Edge do
         |> validate_required([:type])
       end
   """
+  @spec edges_changeset(%__MODULE__{}, %{}) :: %__MODULE__{}
   def edges_changeset(edge, attrs) do
     edge
     |> cast(attrs, [:_from, :_to])
