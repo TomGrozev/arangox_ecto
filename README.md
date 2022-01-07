@@ -30,6 +30,8 @@ that suited my needs. I needed ArangoDB to work with Ecto seamlessly but there w
 ArangoX Ecto uses the power of ArangoX to communicate with ArangoDB and Ecto for the API in Elixir. Ecto is integrated
 with many other packages and can now be used with ArangoDB thanks to this package.
 
+From version 1.0.0 onward graph relationships work seamlessly in Ecto.
+
 
 ### Built With
 
@@ -118,8 +120,10 @@ end
 
 #### Migration Setup
 
-The adapter will automatically create collections if they don't already exist but there are cases where you might need
-to use migrations. For example, if you needed to create indexes as well, the following would be used.
+If in dynamic mode (default), the adapter will automatically create collections if they don't already exist but there are cases where you might need
+to use a static system and hence migrations are required. For example, if you needed to create indexes as well, the following would be used.
+
+Refer to [ArangoXEcto.Migration](https://hexdocs.pm/arangox_ecto/ArangoXEcto.Migration.html) for more information on usage.
 
 ```elixir
 defmodule MyApp.Repo.Migrations.CreateUsers do
@@ -206,23 +210,36 @@ This is clearly a much better representation of the result and can be used in fu
 ### Graph Relations
 
 The adapter will dynamically create and manage edge collections. Each edge collection will be created as an Ecto
-schema when they are first used. This will allow for more extensibility through ecto onto the edges. The module will
-be created under the closest common parent module of the passed modules plus the `Edges` alias. For example, if the
-modules were `MyApp.Apple.User` and `MyApp.Apple.Banana.Post` then the edge would be created at
-`MyApp.Apple.Edges.UsersPosts`. This assumes that the edge collection name was generated and not explicitly defined,
-if it was `UsersPosts` would be replaced with the camel case of that collection name.
+schema when they are first used. This will allow for more extensibility through Ecto onto the edges. The module will
+be created under the closest common parent module of the passed modules plus the `Edges` alias. The order of the edge name will always be alphabetical to prevent duplicate edges.
+For example, if the modules were `MyApp.Apple.User` and `MyApp.Apple.Banana.Post` then the edge would be created at
+`MyApp.Apple.Edges.PostsUsers`. This assumes that the edge collection name was generated and not explicitly defined,
+if it was `PostsUsers` would be replaced with the camel case of that collection name.
 
-To learn about using the schema functions for representing graph relationships, read the docs at
+From version 1.0.0 onwards, edges are represented as traditional relationships in Ecto. This approach allows for the simplicity of simple management
+of edges but the complex querying through AQL. The relationships are represented by an `outgoing/3` and `incoming/3` in the respective schemas.
+For example if you wanted to create edges between A and B, with the direction A -> B then A would have `outgoing/3` and B would have `incoming/3`.
+This directionality is simply for what is put in the `_from` and `_to` fields in the Arango edge collection, if you don't care about directionality, you
+don't have to worry as much about which schema has `outgoing/3` and `incoming/3`.
+
+Additionally, `one_outgoing/3` and `one_incoming/3` can be used for one-to-one relationships. These do not actually create edges but just store the `_id` of the target in a
+field instead. The order of the outgoing & incoming in schemas does matter as a field will be created in the incoming schema.
+
+Behind the scenes these outgoing & incoming helper macros are simply wrappers around the Ecto function `Ecto.Schema.many_to_many/3`.
+The one-to-one outgoing & incoming macros are just wrappers around `Ecto.Schema.has_one/3` and `Ecto.Schema.belongs_to/3` respectively.
+Hence once setup the regular methods for handling Ecto relationships can be used.
+
+To learn about using the schema functions for representing graph relationships and examples, read the docs at
 [ArangoXEcto.Schema](https://hexdocs.pm/arangox_ecto/ArangoXEcto.Schema.html).
 
 To read more about Edge Schemas and how to extend edge schemas to add additional fields, read the docs on
 [ArangoXEcto.Edge](https://hexdocs.pm/arangox_ecto/ArangoXEcto.Edge.html).
 
-To create and delete edges (as well as other useful methods) check out the
+To learn how to use the helper functions (as well as other useful methods) check out the
 [full documentation](https://hexdocs.pm/arangox_ecto/ArangoXEcto.html).
 
-In order to delete a specific edge, you can do it exactly as you would any other ecto struct
-(since after all it is one).
+In order to delete a specific edge, you can do it exactly as you would any other Ecto struct
+(since after all it is one) or Ecto relation.
 
 Querying of edges can be done either through using an AQL query or by using Ecto methods.
 
@@ -237,7 +254,8 @@ For more examples and full documentation, please refer to the [Documentation](ht
 See the [open issues](https://github.com/TomGrozev/arangox_ecto/issues) for a list of proposed features (and known issues).
 
 ##### Some planned ideas:
-* ☐ Named Graph integrations
+* ☐ ~~Named Graph integrations~~
+* ☑ GeoJSON
 * ☑ Easier Graph level functions
 * ☐ Multi-tenancy
 
@@ -272,7 +290,7 @@ Project Link: [https://github.com/TomGrozev/arangox_ecto](https://github.com/Tom
 ## Acknowledgements
 
 * [mpoeter](https://github.com/mpoeter) - Wrote the original Ecto Query to AQL code
-
+* [bodbdigr](https://github.com/bodbdigr) - Fixed AQL query typespec
 
 
 
