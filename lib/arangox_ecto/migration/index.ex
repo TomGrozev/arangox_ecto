@@ -7,7 +7,7 @@ defmodule ArangoXEcto.Migration.Index do
   attributes and is left to the database to manage.
   """
 
-  @enforce_keys [:collection_name, :type]
+  @enforce_keys [:collection_name]
   defstruct [
     :collection_name,
     :fields,
@@ -35,7 +35,7 @@ defmodule ArangoXEcto.Migration.Index do
   @spec new(String.t(), [atom() | String.t()], [index_option()]) :: t()
   def new(name, fields, opts \\ []) do
     keys =
-      [name: name, fields: fields]
+      [collection_name: name, fields: fields]
       |> Keyword.merge(opts)
 
     struct(__MODULE__, keys)
