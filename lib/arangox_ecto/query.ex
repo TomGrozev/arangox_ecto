@@ -15,7 +15,7 @@ defmodule ArangoXEcto.Query do
   @doc """
   Creates an AQL query to fetch all entries from the data store matching the given query.
   """
-  @spec all(%Query{}) :: binary()
+  @spec all(Query.t()) :: binary()
   def all(%Query{} = query) do
     sources = create_names(query)
 
@@ -32,7 +32,7 @@ defmodule ArangoXEcto.Query do
   @doc """
   Creates an AQL query to delete all entries from the data store matching the given query.
   """
-  @spec delete_all(%Query{}) :: binary()
+  @spec delete_all(Query.t()) :: binary()
   def delete_all(query) do
     sources = create_names(query)
 
@@ -50,7 +50,7 @@ defmodule ArangoXEcto.Query do
   @doc """
   Creates an AQL query to update all entries from the data store matching the given query.
   """
-  @spec update_all(%Query{}) :: binary()
+  @spec update_all(Query.t()) :: binary()
   def update_all(query) do
     sources = create_names(query)
 
