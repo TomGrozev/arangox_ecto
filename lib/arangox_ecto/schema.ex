@@ -220,6 +220,11 @@ defmodule ArangoXEcto.Schema do
     end
   end
 
+  @doc """
+  Creates a foreign key with correct format
+
+  Appends _id to the atom
+  """
   @spec build_foreign_key(atom()) :: atom()
   def build_foreign_key(name) do
     name
