@@ -112,7 +112,7 @@ defmodule ArangoXEcto.Migration do
   Create unique email index
 
       iex> index("users", [:email], unique: true)
-      %ArangoXEcto.Migration.Index{collection_name: "users", fields: [:email], [unique: true]}
+      %ArangoXEcto.Migration.Index{collection_name: "users", fields: [:email], unique: true}
   """
   @spec index(String.t(), [atom() | String.t()], [Index.index_option()]) :: Index.t()
   def index(collection_name, fields, opts \\ []), do: Index.new(collection_name, fields, opts)
@@ -138,7 +138,12 @@ defmodule ArangoXEcto.Migration do
   def create(%Collection{} = collection) do
     {:ok, conn} = get_db_conn()
 
-    case Arangox.post(conn, "/_api/collection", Map.from_struct(collection)) do
+    args =
+      collection
+      |> Map.from_struct()
+      |> Map.reject(fn {_, v} -> is_nil(v) end)
+
+    case Arangox.post(conn, "/_api/collection", args) do
       {:ok, _} -> :ok
       {:error, %{status: status, message: message}} -> {:error, "#{status} - #{message}"}
     end
@@ -149,7 +154,7 @@ defmodule ArangoXEcto.Migration do
 
     case Arangox.post(
            conn,
-           "/_api/index?collection=" <> get_collection_name(collection_name),
+           "/_api/index?collection=#{collection_name}",
            Map.from_struct(index)
          ) do
       {:ok, _} -> :ok
@@ -171,7 +176,7 @@ defmodule ArangoXEcto.Migration do
   def drop(%Collection{name: collection_name}) do
     {:ok, conn} = get_db_conn()
 
-    case Arangox.delete(conn, "/_api/collection/" <> get_collection_name(collection_name)) do
+    case Arangox.delete(conn, "/_api/collection/#{collection_name}") do
       {:ok, _} -> :ok
       {:error, %{status: status, message: message}} -> {:error, "#{status} - #{message}"}
     end
@@ -194,7 +199,4 @@ defmodule ArangoXEcto.Migration do
     get_default_repo!().config()
     |> Keyword.merge(opts)
   end
-
-  defp get_collection_name(name) when is_atom(name), do: Atom.to_string(name)
-  defp get_collection_name(name) when is_binary(name), do: name
 end

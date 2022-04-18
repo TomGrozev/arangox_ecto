@@ -15,6 +15,8 @@ defmodule ArangoXEcto.Migration.Index do
     :unique,
     :deduplication,
     :minLength,
+    :geoJson,
+    :expireAfter,
     type: :hash
   ]
 
