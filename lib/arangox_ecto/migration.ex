@@ -141,7 +141,8 @@ defmodule ArangoXEcto.Migration do
     args =
       collection
       |> Map.from_struct()
-      |> Map.reject(fn {_, v} -> is_nil(v) end)
+
+    args = :maps.filter(fn _, v -> not is_nil(v) end, args)
 
     case Arangox.post(conn, "/_api/collection", args) do
       {:ok, _} -> :ok
