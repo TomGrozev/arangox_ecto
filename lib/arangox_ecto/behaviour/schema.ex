@@ -228,12 +228,13 @@ defmodule ArangoXEcto.Behaviour.Schema do
     type = ArangoXEcto.schema_type!(schema)
     collection_name = schema.__schema__(:source)
     is_static = Keyword.get(repo.config(), :static, false)
+    collection_opts = schema.__collection_options__()
 
     unless ArangoXEcto.collection_exists?(conn, collection_name, type) do
       if is_static do
         raise("Collection (#{collection_name}) does not exist. Maybe a migration is missing.")
       else
-        Migration.collection(collection_name, type)
+        Migration.collection(collection_name, type, collection_opts)
         |> Migration.create()
       end
     end

@@ -36,6 +36,32 @@ defmodule ArangoXEcto.Schema do
 
       @primary_key {:id, :binary_id, autogenerate: true, source: :_key}
       @foreign_key_type :binary_id
+
+      def __collection_options__, do: []
+
+      defoverridable __collection_options__: 0
+    end
+  end
+
+  @doc """
+  Defines collection options for dynamic creation
+
+  When using dynamic mode for collection creation you may want to add options for when the collection is created.
+  To add options that will be applied you pass them to as a keyword list.
+
+  The available options can be found in the `ArangoXEcto.Migration.Collection`. These options also work in edge collections.
+
+  ### Example
+
+  To specify a UUID as the collection key type you just supply it as the key option type.
+
+      options [
+        keyOptions: %{type: :uuid}
+      ]
+  """
+  defmacro options(options) do
+    quote do
+      def __collection_options__, do: unquote(options)
     end
   end
 
