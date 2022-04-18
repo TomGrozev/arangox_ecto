@@ -165,7 +165,7 @@ defmodule ArangoXEcto.Migration do
   @doc """
   Deletes an object
 
-  Will delete an object passed, can only be a collection, indexes cannot be deleted here.
+  Will delete an object passed, can only be a collection, indexes cannot be deleted here. This is because indexes have a randomly generated id and this needs to be known to delete the index, for now this is outside the scope of this project.
 
   ## Example
 
