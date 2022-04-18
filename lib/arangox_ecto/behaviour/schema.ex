@@ -229,6 +229,7 @@ defmodule ArangoXEcto.Behaviour.Schema do
     collection_name = schema.__schema__(:source)
     is_static = Keyword.get(repo.config(), :static, false)
     collection_opts = schema.__collection_options__()
+    indexes = schema.__collection_indexes__()
 
     unless ArangoXEcto.collection_exists?(conn, collection_name, type) do
       if is_static do
@@ -236,9 +237,28 @@ defmodule ArangoXEcto.Behaviour.Schema do
       else
         Migration.collection(collection_name, type, collection_opts)
         |> Migration.create()
+
+        maybe_create_indexes(collection_name, indexes)
       end
     end
   end
+
+  defp maybe_create_indexes(_, []), do: :ok
+
+  defp maybe_create_indexes(collection_name, %{} = indexes),
+    do: maybe_create_indexes(collection_name, Map.to_list(indexes))
+
+  defp maybe_create_indexes(collection_name, indexes) when is_list(indexes) do
+    for index <- indexes do
+      {fields, opts} = Keyword.pop(index, :fields)
+
+      Migration.index(collection_name, fields, opts)
+      |> Migration.create()
+    end
+  end
+
+  defp maybe_create_indexes(_, _),
+    do: raise("Invalid indexes provided. Should be a list of keyword lists.")
 
   defp build_docs(fields) when is_list(fields) do
     Enum.map(

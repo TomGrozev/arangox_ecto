@@ -1,5 +1,5 @@
 %Doctor.Config{
-  ignore_modules: [ArangoXEcto.Edge],
+  ignore_modules: [ArangoXEcto.Edge, ArangoXEcto.Schema],
   ignore_paths: [],
   min_module_doc_coverage: 40,
   min_module_spec_coverage: 0,
