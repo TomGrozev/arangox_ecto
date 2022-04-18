@@ -236,28 +236,28 @@ defmodule ArangoXEcto.Behaviour.Schema do
         raise("Collection (#{collection_name}) does not exist. Maybe a migration is missing.")
       else
         Migration.collection(collection_name, type, collection_opts)
-        |> Migration.create()
+        |> Migration.create(conn)
 
-        maybe_create_indexes(collection_name, indexes)
+        maybe_create_indexes(conn, collection_name, indexes)
       end
     end
   end
 
-  defp maybe_create_indexes(_, []), do: :ok
+  defp maybe_create_indexes(_, _, []), do: :ok
 
-  defp maybe_create_indexes(collection_name, %{} = indexes),
-    do: maybe_create_indexes(collection_name, Map.to_list(indexes))
+  defp maybe_create_indexes(conn, collection_name, %{} = indexes),
+    do: maybe_create_indexes(conn, collection_name, Map.to_list(indexes))
 
-  defp maybe_create_indexes(collection_name, indexes) when is_list(indexes) do
+  defp maybe_create_indexes(conn, collection_name, indexes) when is_list(indexes) do
     for index <- indexes do
       {fields, opts} = Keyword.pop(index, :fields)
 
       Migration.index(collection_name, fields, opts)
-      |> Migration.create()
+      |> Migration.create(conn)
     end
   end
 
-  defp maybe_create_indexes(_, _),
+  defp maybe_create_indexes(_, _, _),
     do: raise("Invalid indexes provided. Should be a list of keyword lists.")
 
   defp build_docs(fields) when is_list(fields) do

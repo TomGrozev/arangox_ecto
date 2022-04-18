@@ -135,8 +135,10 @@ defmodule ArangoXEcto.Migration do
       :ok
   """
   @spec create(Collection.t() | Index.t()) :: :ok | {:error, binary()}
-  def create(%Collection{} = collection) do
-    {:ok, conn} = get_db_conn()
+  def create(collection_or_index, conn \\ nil)
+
+  def create(%Collection{} = collection, conn) do
+    {:ok, conn} = get_db_conn(conn)
 
     args =
       collection
@@ -150,8 +152,8 @@ defmodule ArangoXEcto.Migration do
     end
   end
 
-  def create(%Index{collection_name: collection_name} = index) do
-    {:ok, conn} = get_db_conn()
+  def create(%Index{collection_name: collection_name} = index, conn) do
+    {:ok, conn} = get_db_conn(conn)
 
     case Arangox.post(
            conn,
@@ -174,8 +176,8 @@ defmodule ArangoXEcto.Migration do
       :ok
   """
   @spec drop(Collection.t()) :: :ok | {:error, binary()}
-  def drop(%Collection{name: collection_name}) do
-    {:ok, conn} = get_db_conn()
+  def drop(%Collection{name: collection_name}, conn \\ nil) do
+    {:ok, conn} = get_db_conn(conn)
 
     case Arangox.delete(conn, "/_api/collection/#{collection_name}") do
       {:ok, _} -> :ok
@@ -183,10 +185,12 @@ defmodule ArangoXEcto.Migration do
     end
   end
 
-  defp get_db_conn do
+  defp get_db_conn(nil) do
     config(pool_size: 1)
     |> Arangox.start_link()
   end
+
+  defp get_db_conn(conn), do: {:ok, conn}
 
   defp get_default_repo! do
     case Mix.Ecto.parse_repo([])

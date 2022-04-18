@@ -126,7 +126,7 @@ defmodule ArangoXEctoTest.MigrationTest do
     test "creates a document collection", %{conn: conn} do
       collection = Migration.collection("users")
 
-      assert :ok = Migration.create(collection)
+      assert :ok = Migration.create(collection, conn)
 
       assert {:ok, %Arangox.Response{body: %{"type" => 2}}} = get_collection_info(conn, "users")
     end
@@ -134,23 +134,23 @@ defmodule ArangoXEctoTest.MigrationTest do
     test "creates an edge collection", %{conn: conn} do
       collection = Migration.edge("users")
 
-      assert :ok = Migration.create(collection)
+      assert :ok = Migration.create(collection, conn)
 
       assert {:ok, %Arangox.Response{body: %{"type" => 3}}} = get_collection_info(conn, "users")
     end
 
-    test "errors on create existing collection" do
+    test "errors on create existing collection", %{conn: conn} do
       collection = Migration.collection("users")
 
-      assert :ok = Migration.create(collection)
+      assert :ok = Migration.create(collection, conn)
 
-      assert {:error, "409 - duplicate name"} = Migration.create(collection)
+      assert {:error, "409 - duplicate name"} = Migration.create(collection, conn)
     end
 
     test "creates a document collection with uuid key", %{conn: conn} do
       collection = Migration.collection("users", :document, keyOptions: %{type: :uuid})
 
-      assert :ok = Migration.create(collection)
+      assert :ok = Migration.create(collection, conn)
 
       assert {:ok, %Arangox.Response{body: %{"type" => 2, "keyOptions" => %{"type" => "uuid"}}}} =
                get_collection_info(conn, "users")
@@ -159,7 +159,7 @@ defmodule ArangoXEctoTest.MigrationTest do
     test "creates a edge collection with waitForSync", %{conn: conn} do
       collection = Migration.collection("users", :edge, waitForSync: true)
 
-      assert :ok = Migration.create(collection)
+      assert :ok = Migration.create(collection, conn)
 
       assert {:ok, %Arangox.Response{body: %{"type" => 3, "waitForSync" => true}}} =
                get_collection_info(conn, "users")
@@ -169,8 +169,8 @@ defmodule ArangoXEctoTest.MigrationTest do
       collection = Migration.collection("users")
       index = Migration.index("users", [:email])
 
-      assert :ok = Migration.create(collection)
-      assert :ok = Migration.create(index)
+      assert :ok = Migration.create(collection, conn)
+      assert :ok = Migration.create(index, conn)
 
       assert {:ok, %Arangox.Response{body: %{"indexes" => [_, %{"fields" => ["email"]}]}}} =
                get_index_info(conn, "users")
@@ -180,8 +180,8 @@ defmodule ArangoXEctoTest.MigrationTest do
       collection = Migration.collection("users")
       index = Migration.index("users", [:email], unique: true)
 
-      assert :ok = Migration.create(collection)
-      assert :ok = Migration.create(index)
+      assert :ok = Migration.create(collection, conn)
+      assert :ok = Migration.create(index, conn)
 
       assert {:ok,
               %Arangox.Response{
@@ -193,8 +193,8 @@ defmodule ArangoXEctoTest.MigrationTest do
       collection = Migration.collection("users")
       index = Migration.index("users", [:email], type: :geo, geoJson: true)
 
-      assert :ok = Migration.create(collection)
-      assert :ok = Migration.create(index)
+      assert :ok = Migration.create(collection, conn)
+      assert :ok = Migration.create(index, conn)
 
       assert {:ok,
               %Arangox.Response{
@@ -206,25 +206,25 @@ defmodule ArangoXEctoTest.MigrationTest do
   end
 
   describe "drop/1" do
-    test "error on drop non existant collection" do
+    test "error on drop non existant collection", %{conn: conn} do
       assert {:error, "404 - collection or view not found"} =
-               Migration.drop(Migration.collection("users"))
+               Migration.drop(Migration.collection("users"), conn)
     end
 
-    test "drops a document collection" do
+    test "drops a document collection", %{conn: conn} do
       collection = Migration.collection("users")
 
-      assert :ok = Migration.create(collection)
+      assert :ok = Migration.create(collection, conn)
 
-      assert :ok = Migration.drop(collection)
+      assert :ok = Migration.drop(collection, conn)
     end
 
-    test "drops an edge collection" do
+    test "drops an edge collection", %{conn: conn} do
       collection = Migration.edge("users")
 
-      assert :ok = Migration.create(collection)
+      assert :ok = Migration.create(collection, conn)
 
-      assert :ok = Migration.drop(collection)
+      assert :ok = Migration.drop(collection, conn)
     end
   end
 
