@@ -5,6 +5,8 @@ defmodule ArangoXEcto.Behaviour.Schema do
 
   require Logger
 
+  alias ArangoXEcto.Migration
+
   @doc """
   Called to autogenerate a value for id/embed_id/binary_id.
 
@@ -223,7 +225,7 @@ defmodule ArangoXEcto.Behaviour.Schema do
   defp single_doc_result({:invalid, _} = res, _), do: res
 
   defp maybe_create_collection(repo, schema, conn) when is_atom(repo) do
-    type = ArangoXEcto.schema_type!(schema) |> collection_type_to_integer()
+    type = ArangoXEcto.schema_type!(schema)
     collection_name = schema.__schema__(:source)
     is_static = Keyword.get(repo.config(), :static, false)
 
@@ -231,13 +233,10 @@ defmodule ArangoXEcto.Behaviour.Schema do
       if is_static do
         raise("Collection (#{collection_name}) does not exist. Maybe a migration is missing.")
       else
-        create_collection(conn, collection_name, type)
+        Migration.collection(collection_name, type)
+        |> Migration.create()
       end
     end
-  end
-
-  defp create_collection(conn, collection_name, type) do
-    Arangox.post!(conn, "/_api/collection", %{name: collection_name, type: type})
   end
 
   defp build_docs(fields) when is_list(fields) do
@@ -278,12 +277,6 @@ defmodule ArangoXEcto.Behaviour.Schema do
 
     {length(docs), new_docs}
   end
-
-  defp collection_type_to_integer(:document), do: 2
-
-  defp collection_type_to_integer(:edge), do: 3
-
-  defp collection_type_to_integer(_), do: 2
 
   defp key_to_id(key, module) when is_binary(key) do
     case String.match?(key, ~r/[a-zA-Z0-9]+\/[a-zA-Z0-9]+/) do
