@@ -3,7 +3,7 @@ defmodule ArangoXEctoTest.MigrationTest do
   @moduletag :supported
 
   alias ArangoXEcto.Migration
-  alias ArangoXEctoTest.Repo
+  alias ArangoXEctoTest.{ArangoRepo, Repo}
 
   @test_collections [
     :something
@@ -23,6 +23,13 @@ defmodule ArangoXEctoTest.MigrationTest do
     end
 
     context
+  end
+
+  describe "mix helpers" do
+    test "repo directory name" do
+      assert Regex.match?(~r|/priv/repo$|, Mix.ArangoXEcto.path_to_priv_repo(Repo))
+      assert Regex.match?(~r|/priv/arango_repo$|, Mix.ArangoXEcto.path_to_priv_repo(ArangoRepo))
+    end
   end
 
   describe "collection/3" do
