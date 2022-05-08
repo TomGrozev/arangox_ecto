@@ -71,7 +71,15 @@ defmodule Mix.ArangoXEcto do
   @spec path_to_priv_repo(Ecto.Repo.t()) :: String.t()
   def path_to_priv_repo(repo) do
     app = Keyword.fetch!(repo.config(), :otp_app)
-    Path.join(Mix.Project.deps_paths()[app] || File.cwd!(), "priv/repo")
+
+    repo_dir =
+      repo.get_dynamic_repo()
+      |> to_string()
+      |> String.split(".")
+      |> List.last()
+      |> Macro.underscore()
+
+    Path.join([Mix.Project.deps_paths()[app] || File.cwd!(), "priv", repo_dir])
   end
 
   @doc """
