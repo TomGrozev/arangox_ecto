@@ -6,20 +6,38 @@
 [![hex.pm](https://img.shields.io/hexpm/l/arangox_ecto.svg)](https://hex.pm/packages/arangox_ecto)
 [![github.com](https://img.shields.io/github/last-commit/TomGrozev/arangox_ecto.svg)](https://github.com/TomGrozev/arangox_ecto)
 
+ArangoXEcto is an all-in-one Arango database adapter for the Elixir Ecto package. It has full support for **Graphing**, **Geo Functions**, **AQL Integration**, amongst other features.
+
 <!-- TABLE OF CONTENTS -->
 ## Table of Contents
 
-* [About the Project](#about-the-project)
-  * [Built With](#built-with)
-* [Getting Started](#getting-started)
-  * [Prerequisites](#prerequisites)
-  * [Installation](#installation)
-* [Usage](#usage)
-* [Roadmap](#roadmap)
-* [Contributing](#contributing)
-* [License](#license)
-* [Contact](#contact)
-* [Acknowledgements](#acknowledgements)
+- [ArangoX Ecto](#arangox-ecto)
+  * [Table of Contents](#table-of-contents)
+  * [About The Project](#about-the-project)
+    + [Built With](#built-with)
+  * [Getting Started](#getting-started)
+    + [Prerequisites](#prerequisites)
+    + [Installation](#installation)
+  * [Usage](#usage)
+    + [Static or Dynamic](#static-or-dynamic)
+    + [Basic Usage](#basic-usage)
+      - [Repo Setup](#repo-setup)
+      - [Schema Setup](#schema-setup)
+      - [Migration Setup](#migration-setup)
+    + [Raw AQL queries](#raw-aql-queries)
+    + [Graph Relations](#graph-relations)
+      - [Generation of Edge Modules](#generation-of-edge-modules)
+      - [Graphing in Ecto](#graphing-in-ecto)
+      - [One-to-One relationships](#one-to-one-relationships)
+      - [How it works](#how-it-works)
+      - [Example](#example)
+      - [More information](#more-information)
+    + [Further Usage](#further-usage)
+  * [Roadmap](#roadmap)
+  * [Contributing](#contributing)
+  * [License](#license)
+  * [Contact](#contact)
+  * [Acknowledgements](#acknowledgements)
 
 
 
@@ -45,14 +63,15 @@ To get the adapter integrated with your project, follow these simple steps.
 
 ### Prerequisites
 
-* Elixir 1.10+ / Erlang OTP 23+
+* Elixir 1.12.3+ / Erlang OTP 22.2+
+(Others may versions may work but this is the oldest it is tested on)
 
 ### Installation
 
 Add the following line to your mix dependencies to get started.
 
 ```elixir
-{:arangox_ecto, "~> 0.6"}
+{:arangox_ecto, "~> 1.1"}
 ```
 
 ## Usage
@@ -118,7 +137,42 @@ defmodule MyApp.Accounts.User do
 end
 ```
 
+The `options/1` and `indexes/1` options can be optionally called inside the schema to set options and indexes to be created in dynamic mode. These options will have no effect in static mode.
+
+For example, if you wanted to use a uuid as the key type and create an index on the email the following can be used.
+```elixir
+defmodule MyApp.Accounts.User do
+    use ArangoXEcto.Schema
+    import Ecto.Changeset
+
+    options [
+      keyOptions: %{type: :uuid}
+    ]
+
+    indexes [
+      [fields: [:email]]
+    ]
+
+    schema "users" do
+      field :email, :string
+
+      timestamps()
+    end
+
+    @doc false
+    def changeset(app, attrs) do
+      app
+      |> cast(attrs, [:first_name, :last_name])
+      |> validate_required([:first_name, :last_name])
+    end
+end
+```
+Please refer to [the Schema documentation](https://hexdocs.pm/arangox_ecto/ArangoXEcto.Schema.html) for more information on the available options.
+
+
 #### Migration Setup
+
+**Using migrations is only required in static mode**
 
 If in dynamic mode (default), the adapter will automatically create collections if they don't already exist but there are cases where you might need
 to use a static system and hence migrations are required. For example, if you needed to create indexes as well, the following would be used.
@@ -140,8 +194,6 @@ defmodule MyApp.Repo.Migrations.CreateUsers do
     end
 end
 ```
-
-Using migrations should be avoided unless necessary.
 
 
 ### Raw AQL queries
@@ -210,25 +262,72 @@ This is clearly a much better representation of the result and can be used in fu
 ### Graph Relations
 
 The adapter will dynamically create and manage edge collections. Each edge collection will be created as an Ecto
-schema when they are first used. This will allow for more extensibility through Ecto onto the edges. The module will
-be created under the closest common parent module of the passed modules plus the `Edges` alias. The order of the edge name will always be alphabetical to prevent duplicate edges.
+schema when they are first used. This will allow for more extensibility through Ecto onto the edges.
+
+
+#### Generation of Edge Modules
+The module will be created under the closest common parent module of the passed modules plus the `Edges` alias. The order of the edge name will always be alphabetical to prevent duplicate edges.
 For example, if the modules were `MyApp.Apple.User` and `MyApp.Apple.Banana.Post` then the edge would be created at
 `MyApp.Apple.Edges.PostsUsers`. This assumes that the edge collection name was generated and not explicitly defined,
-if it was `PostsUsers` would be replaced with the camel case of that collection name.
+if it was `PostsUsers` would be replaced with the camel case of that collection name (i.e. `posts_users`).
 
+#### Graphing in Ecto
 From version 1.0.0 onwards, edges are represented as traditional relationships in Ecto. This approach allows for the simplicity of simple management
-of edges but the complex querying through AQL. The relationships are represented by an `outgoing/3` and `incoming/3` in the respective schemas.
+of edges but the complex querying through AQL.
+
+The relationships are represented by an `outgoing/3` and `incoming/3` in the respective schemas.
 For example if you wanted to create edges between A and B, with the direction A -> B then A would have `outgoing/3` and B would have `incoming/3`.
 This directionality is simply for what is put in the `_from` and `_to` fields in the Arango edge collection, if you don't care about directionality, you
 don't have to worry as much about which schema has `outgoing/3` and `incoming/3`.
 
+#### One-to-One relationships
 Additionally, `one_outgoing/3` and `one_incoming/3` can be used for one-to-one relationships. These do not actually create edges but just store the `_id` of the target in a
 field instead. The order of the outgoing & incoming in schemas does matter as a field will be created in the incoming schema.
 
+#### How it works
 Behind the scenes these outgoing & incoming helper macros are simply wrappers around the Ecto function `Ecto.Schema.many_to_many/3`.
 The one-to-one outgoing & incoming macros are just wrappers around `Ecto.Schema.has_one/3` and `Ecto.Schema.belongs_to/3` respectively.
 Hence once setup the regular methods for handling Ecto relationships can be used.
 
+In order to delete a specific edge, you can do it exactly as you would any other Ecto struct
+(since after all it is one) or Ecto relation.
+
+Querying of edges can be done either through using an AQL query or by using Ecto methods.
+
+#### Example
+Let's say you wanted to create an edge between your `Post` and `User` schema. You could implement it as follows:
+
+```elixir
+defmodule MyProject.User do
+  use ArangoXEcto.Schema
+
+  schema "users" do
+    field :name, :string
+
+    # Will use the automatically generated edge
+    outgoing :posts, MyProject.Post
+
+    # Or use the UserPosts edge
+    # outgoing :posts, MyProject.Post, edge: MyProject.UserPosts
+  end
+end
+
+defmodule MyProject.Post do
+  use ArangoXEcto.Schema
+
+  schema "posts" do
+    field :title, :string
+
+    # Will use the automatically generated edge
+    incoming :users, MyProject.User
+
+    # Or use the UserPosts edge
+    # incoming :users, MyProject.User, edge: MyProject.UserPosts
+  end
+end
+```
+
+#### More information
 To learn about using the schema functions for representing graph relationships and examples, read the docs at
 [ArangoXEcto.Schema](https://hexdocs.pm/arangox_ecto/ArangoXEcto.Schema.html).
 
@@ -238,70 +337,39 @@ To read more about Edge Schemas and how to extend edge schemas to add additional
 To learn how to use the helper functions (as well as other useful methods) check out the
 [full documentation](https://hexdocs.pm/arangox_ecto/ArangoXEcto.html).
 
-In order to delete a specific edge, you can do it exactly as you would any other Ecto struct
-(since after all it is one) or Ecto relation.
-
-Querying of edges can be done either through using an AQL query or by using Ecto methods.
 
 ### Further Usage
 
 For more examples and full documentation, please refer to the [Documentation](https://hexdocs.pm/arangox_ecto).
 
 
-
 ## Roadmap
 
-See the [open issues](https://github.com/TomGrozev/arangox_ecto/issues) for a list of proposed features (and known issues).
-
-##### Some planned ideas:
-* ☐ ~~Named Graph integrations~~
-* ☑ GeoJSON
-* ☑ Easier Graph level functions
-* ☐ Multi-tenancy
+See the [the roadmap](https://github.com/users/TomGrozev/projects/1) for a list of proposed features (and known issues) planned.
 
 
 ## Contributing
 
 Contributions are what make the open source community such an amazing place to be learn, inspire, and create. Any contributions you make are **greatly appreciated**.
 
-1. Fork the Project
-2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
-3. Write some awesome code
-4. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
-5. Push to the Branch (`git push origin feature/AmazingFeature`)
-6. Open a Pull Request
-
+Checkout the [Contributing Guide](https://github.com/TomGrozev/arangox_ecto/blob/master/CONTRIBUTING.md).
 
 
 ## License
 
-Distributed under the Apache 2.0 License. See `LICENSE` for more information.
+Distributed under the Apache 2.0 License. See [LICENSE](https://github.com/TomGrozev/arangox_ecto/blob/master/LICENSE) for more information.
 
 
 
 ## Contact
 
-Tom Grozev - [@tomgrozev](https://twitter.com/tomgrozev) - enquire@tomgrozev.com
-
-Project Link: [https://github.com/TomGrozev/arangox_ecto](https://github.com/TomGrozev/arangox_ecto)
+Project Home: [https://github.com/TomGrozev/arangox_ecto](https://github.com/TomGrozev/arangox_ecto)
 
 
 
 ## Acknowledgements
 
 * [mpoeter](https://github.com/mpoeter) - Wrote the original Ecto Query to AQL code
+* [kianmeng](https://github.com/kianmeng) - README changes & CI dep change
 * [bodbdigr](https://github.com/bodbdigr) - Fixed AQL query typespec
-
-
-
-
-[contributors-shield]: https://img.shields.io/github/contributors/TomGrozev/arangox_ecto.svg?style=flat-square
-[contributors-url]: https://github.com/TomGrozev/arangox_ecto/graphs/contributors
-[forks-shield]: https://img.shields.io/github/forks/TomGrozev/arangox_ecto.svg?style=flat-square
-[forks-url]: https://github.com/TomGrozev/arangox_ecto/network/members
-[stars-shield]: https://img.shields.io/github/stars/TomGrozev/arangox_ecto.svg?style=flat-square
-[stars-url]: https://github.com/TomGrozev/arangox_ecto/stargazers
-[issues-shield]: https://img.shields.io/github/issues/TomGrozev/arangox_ecto.svg?style=flat-square
-[issues-url]: https://github.com/TomGrozev/arangox_ecto/issues
-[license-shield]: https://img.shields.io/github/license/TomGrozev/arangox_ecto.svg?style=flat-square
-[license-url]: https://github.com/TomGrozev/arangox_ecto/blob/master/LICENSE
+* [hengestone](https://github.com/hengestone) - Added option to use different migrations directory
