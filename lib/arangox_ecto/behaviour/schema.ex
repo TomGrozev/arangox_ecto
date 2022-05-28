@@ -5,6 +5,8 @@ defmodule ArangoXEcto.Behaviour.Schema do
 
   require Logger
 
+  alias ArangoXEcto.Migration
+
   @doc """
   Called to autogenerate a value for id/embed_id/binary_id.
 
@@ -223,22 +225,40 @@ defmodule ArangoXEcto.Behaviour.Schema do
   defp single_doc_result({:invalid, _} = res, _), do: res
 
   defp maybe_create_collection(repo, schema, conn) when is_atom(repo) do
-    type = ArangoXEcto.schema_type!(schema) |> collection_type_to_integer()
+    type = ArangoXEcto.schema_type!(schema)
     collection_name = schema.__schema__(:source)
     is_static = Keyword.get(repo.config(), :static, false)
+    collection_opts = schema.__collection_options__()
+    indexes = schema.__collection_indexes__()
 
     unless ArangoXEcto.collection_exists?(conn, collection_name, type) do
       if is_static do
         raise("Collection (#{collection_name}) does not exist. Maybe a migration is missing.")
       else
-        create_collection(conn, collection_name, type)
+        Migration.collection(collection_name, type, collection_opts)
+        |> Migration.create(conn)
+
+        maybe_create_indexes(conn, collection_name, indexes)
       end
     end
   end
 
-  defp create_collection(conn, collection_name, type) do
-    Arangox.post!(conn, "/_api/collection", %{name: collection_name, type: type})
+  defp maybe_create_indexes(_, _, []), do: :ok
+
+  defp maybe_create_indexes(conn, collection_name, %{} = indexes),
+    do: maybe_create_indexes(conn, collection_name, Map.to_list(indexes))
+
+  defp maybe_create_indexes(conn, collection_name, indexes) when is_list(indexes) do
+    for index <- indexes do
+      {fields, opts} = Keyword.pop(index, :fields)
+
+      Migration.index(collection_name, fields, opts)
+      |> Migration.create(conn)
+    end
   end
+
+  defp maybe_create_indexes(_, _, _),
+    do: raise("Invalid indexes provided. Should be a list of keyword lists.")
 
   defp build_docs(fields) when is_list(fields) do
     Enum.map(
@@ -278,12 +298,6 @@ defmodule ArangoXEcto.Behaviour.Schema do
 
     {length(docs), new_docs}
   end
-
-  defp collection_type_to_integer(:document), do: 2
-
-  defp collection_type_to_integer(:edge), do: 3
-
-  defp collection_type_to_integer(_), do: 2
 
   defp key_to_id(key, module) when is_binary(key) do
     case String.match?(key, ~r/[a-zA-Z0-9]+\/[a-zA-Z0-9]+/) do

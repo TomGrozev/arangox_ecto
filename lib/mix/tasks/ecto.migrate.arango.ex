@@ -70,7 +70,7 @@ defmodule Mix.Tasks.Ecto.Migrate.Arango do
 
   defp maybe_up_migrations(migrations, db_name) do
     Enum.each(migrations, fn file_path ->
-      case apply(migration_module(file_path), :up, []) do
+      case migration_module(file_path).up() do
         nil ->
           Mix.shell().error("Up function has no actions")
 
@@ -97,7 +97,7 @@ defmodule Mix.Tasks.Ecto.Migrate.Arango do
       |> migration_path()
       |> migration_module()
 
-    case apply(module, :down, []) do
+    case module.down() do
       nil ->
         Mix.shell().error("Down function has no actions")
 

@@ -1,5 +1,35 @@
 # Changelog
 
+## 1.1.0
+
+### Enhancements
+- Update `credo` and `git_hooks` dev & test dependencies
+- Add ability to pass collection creation options for migrations
+- Add tests for migrations
+- Use migration module for all collection creation
+- Use underscored module name for repo dir to allow for different repo director name (thanks @hengestone)
+- Big cleanup of README
+
+#### Dynamic Collection Creation Options
+- Add `options/1` macro for dynamic collection creation options
+- Add `indexes/1` macro for dynamic collection creation indexes
+- Add tests for creation options and indexes
+
+### Fixes
+- Clean up some syntax in line with new credo requirements
+- Add `doctor` config to remove false positive doc requirements with macros
+- Add some missing function docs
+- Various refactoring to clean up code
+- Fix to remove `Map.reject/2` for support of below Elixir 1.13
+- Pass the connection to collection creation to ensure correct repo is used
+- Fix a race condition in testing caused by same named collections for different tests
+- Require `DB_ENDPOINT` env var for tests
+
+### Repo Changes
+- Add Elixir 1.13 to testing matrix
+- Use `erlef/setup-beam` for ci and deploy GH actions (thanks @kianmeng)
+- Add develop branch to ci GH action
+
 ## 1.0.0
 
 ### Enhancements

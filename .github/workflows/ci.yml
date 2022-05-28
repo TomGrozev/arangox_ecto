@@ -8,6 +8,7 @@ on:
   pull_request:
     branches:
       - master
+      - develop
 
 jobs:
   test:
@@ -18,7 +19,7 @@ jobs:
     strategy:
       matrix:
         otp: [22.2, 23, 24]
-        elixir: [1.12.0]
+        elixir: [1.12.3, 1.13.4]
         exclude: []
 
     steps:
@@ -26,7 +27,7 @@ jobs:
       - uses: xinova/arangodb-action@v1
         with:
           arangodb version: 'latest'
-      - uses: erlef/setup-elixir@v1
+      - uses: erlef/setup-beam@v1
         with:
           otp-version: ${{matrix.otp}}
           elixir-version: ${{matrix.elixir}}

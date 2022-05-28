@@ -120,7 +120,26 @@ defmodule ArangoXEctoTest.Integration.RepoTest do
       comment = %Comment{text: "abc"}
 
       assert {:ok, %Comment{}} = Repo.insert(comment)
-      assert %Comment{} = Repo.insert!(comment)
+    end
+
+    test "creates collection if not exists with options", %{conn: conn} do
+      comment = %Comment{text: "cba"}
+
+      assert {:ok, %Comment{}} = Repo.insert(comment)
+
+      assert {:ok, %Arangox.Response{body: %{"type" => 2, "keyOptions" => %{"type" => "uuid"}}}} =
+               Arangox.get(conn, "/_api/collection/comments/properties")
+    end
+
+    test "creates collection if not exists with indexes", %{conn: conn} do
+      comment = %Comment{text: "def"}
+
+      assert {:ok, %Comment{}} = Repo.insert(comment)
+
+      assert {:ok,
+              %Arangox.Response{
+                body: %{"indexes" => [_, %{"fields" => ["text"], "unique" => true}]}
+              }} = Arangox.get(conn, "/_api/index?collection=comments")
     end
 
     test "can insert and fetch with timestamps" do

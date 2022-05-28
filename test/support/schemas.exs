@@ -49,6 +49,12 @@ end
 defmodule ArangoXEctoTest.Integration.Comment do
   use ArangoXEcto.Schema
 
+  options(keyOptions: %{type: :uuid})
+
+  indexes([
+    [fields: [:text], unique: true]
+  ])
+
   schema "comments" do
     field(:text, :string)
 
