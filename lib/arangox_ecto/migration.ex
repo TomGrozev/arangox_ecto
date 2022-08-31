@@ -33,6 +33,8 @@ defmodule ArangoXEcto.Migration do
       end
   """
 
+  require Logger
+
   alias ArangoXEcto.Migration.{Collection, Index}
 
   defmacro __using__(_) do
@@ -147,8 +149,17 @@ defmodule ArangoXEcto.Migration do
     args = :maps.filter(fn _, v -> not is_nil(v) end, args)
 
     case Arangox.post(conn, "/_api/collection", args) do
-      {:ok, _} -> :ok
-      {:error, %{status: status, message: message}} -> {:error, "#{status} - #{message}"}
+      {:ok, _} ->
+        :ok
+
+      {:error, %{status: status, message: message}} ->
+        msg = "#{status} - #{message}"
+
+        Logger.debug("#{inspect(__MODULE__)}.create", %{
+          "#{inspect(__MODULE__)}.create-collection" => %{collection: collection, message: msg}
+        })
+
+        {:error, msg}
     end
   end
 
@@ -160,8 +171,17 @@ defmodule ArangoXEcto.Migration do
            "/_api/index?collection=#{collection_name}",
            Map.from_struct(index)
          ) do
-      {:ok, _} -> :ok
-      {:error, %{status: status, message: message}} -> {:error, "#{status} - #{message}"}
+      {:ok, _} ->
+        :ok
+
+      {:error, %{status: status, message: message}} ->
+        msg = "#{status} - #{message}"
+
+        Logger.debug("#{inspect(__MODULE__)}.create", %{
+          "#{inspect(__MODULE__)}.create-index" => %{index: index, message: msg}
+        })
+
+        {:error, msg}
     end
   end
 
