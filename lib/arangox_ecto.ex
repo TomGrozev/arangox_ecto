@@ -10,6 +10,7 @@ defmodule ArangoXEcto do
   import Ecto.Query, only: [from: 2]
 
   alias ArangoXEcto.Edge
+  alias ArangoXEcto.Migration
 
   @type query :: binary()
   @type vars :: keyword() | map()
@@ -746,26 +747,37 @@ defmodule ArangoXEcto do
     end
   end
 
-  defp maybe_create_edges_collection(struct, repo) do
-    collection_name = source_name(struct)
+  defp maybe_create_edges_collection(schema, repo) do
+    collection_name = source_name(schema)
+    collection_opts = schema.__collection_options__()
+    indexes = schema.__collection_indexes__()
 
-    collection_exists?(repo, collection_name, 3)
-    |> case do
-      true ->
-        struct
+    unless collection_exists?(repo, collection_name, :edge) do
+      Migration.collection(collection_name, :edge, collection_opts)
+      |> Migration.create(repo)
 
-      false ->
-        create_edges_collection(repo, collection_name)
+      maybe_create_indexes(repo, collection_name, indexes)
+    end
 
-        struct
+    schema
+  end
+
+  defp maybe_create_indexes(_, _, []), do: :ok
+
+  defp maybe_create_indexes(repo, collection_name, %{} = indexes),
+    do: maybe_create_indexes(repo, collection_name, Map.to_list(indexes))
+
+  defp maybe_create_indexes(repo, collection_name, indexes) when is_list(indexes) do
+    for index <- indexes do
+      {fields, opts} = Keyword.pop(index, :fields)
+
+      Migration.index(collection_name, fields, opts)
+      |> Migration.create(repo)
     end
   end
 
-  defp create_edges_collection(repo, collection_name) do
-    conn = gen_conn_from_repo(repo)
-
-    Arangox.post!(conn, "/_api/collection", %{name: collection_name, type: 3})
-  end
+  defp maybe_create_indexes(_, _, _),
+    do: raise("Invalid indexes provided. Should be a list of keyword lists.")
 
   defp process_vars(query, vars) when is_list(vars),
     do: Enum.reduce(vars, {query, []}, &process_vars(&2, &1))

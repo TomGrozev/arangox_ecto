@@ -89,3 +89,28 @@ defmodule ArangoXEctoTest.Integration.UserPosts do
     |> cast(attrs, [:type])
   end
 end
+
+defmodule ArangoXEctoTest.Integration.UserPostsOptions do
+  use ArangoXEcto.Edge,
+    from: ArangoXEctoTest.Integration.User,
+    to: ArangoXEctoTest.Integration.Post
+
+  import Ecto.Changeset
+
+  options(keyOptions: %{type: :uuid})
+
+  indexes([
+    [fields: [:type], unique: true]
+  ])
+
+  schema "user_posts_options" do
+    edge_fields()
+
+    field(:type, :string)
+  end
+
+  def changeset(edge, attrs) do
+    edges_changeset(edge, attrs)
+    |> cast(attrs, [:type])
+  end
+end

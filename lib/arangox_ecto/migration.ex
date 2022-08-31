@@ -190,6 +190,8 @@ defmodule ArangoXEcto.Migration do
     |> Arangox.start_link()
   end
 
+  defp get_db_conn(repo) when is_atom(repo), do: get_db_conn(nil)
+
   defp get_db_conn(conn), do: {:ok, conn}
 
   defp get_default_repo! do

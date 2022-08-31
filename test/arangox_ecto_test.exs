@@ -4,7 +4,7 @@ defmodule ArangoXEctoTest do
   use ExUnit.Case
   @moduletag :supported
 
-  alias ArangoXEctoTest.Integration.{Post, User, UserPosts}
+  alias ArangoXEctoTest.Integration.{Post, User, UserPosts, UserPostsOptions}
   alias ArangoXEctoTest.Repo
 
   import Ecto.Query
@@ -167,6 +167,29 @@ defmodule ArangoXEctoTest do
       edge = ArangoXEcto.create_edge(Repo, user, post, edge: UserPosts, fields: %{type: "wrote"})
 
       assert %UserPosts{_from: ^from, _to: ^to, type: "wrote"} = edge
+    end
+
+    test "create edge with options and indexes", %{conn: conn} do
+      user = %User{first_name: "John", last_name: "Smith"} |> Repo.insert!()
+      post = %Post{title: "abc", text: "cba"} |> Repo.insert!()
+
+      from = id_from_user(user)
+      to = "posts/" <> post.id
+
+      edge =
+        ArangoXEcto.create_edge(Repo, user, post, edge: UserPostsOptions, fields: %{type: "wrote"})
+
+      assert %UserPostsOptions{_from: ^from, _to: ^to, type: "wrote"} = edge
+
+      assert {:ok,
+              %Arangox.Response{
+                body: %{"indexes" => [_, _, %{"fields" => ["type"], "unique" => true}]}
+              }} = Arangox.get(conn, "/_api/index?collection=user_posts_options")
+
+      assert {:ok,
+              %Arangox.Response{
+                body: %{"keyOptions" => %{"type" => "uuid"}}
+              }} = Arangox.get(conn, "/_api/collection/user_posts_options/properties")
     end
   end
 
