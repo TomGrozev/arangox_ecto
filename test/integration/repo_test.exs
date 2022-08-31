@@ -170,7 +170,8 @@ defmodule ArangoXEctoTest.Integration.RepoTest do
 
       change = %User{id: "123456", extra: "Something"}
 
-      assert {:ok, ^change} = Repo.insert(change, on_conflict: :replace_all, returning: true)
+      assert {:ok, %User{id: "123456", extra: "Something"}} =
+               Repo.insert(change, on_conflict: :replace_all, returning: true)
     end
   end
 
