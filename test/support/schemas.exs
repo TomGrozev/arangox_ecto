@@ -5,6 +5,8 @@ defmodule ArangoXEctoTest.Integration.User do
   schema "users" do
     field(:first_name, :string)
     field(:last_name, :string)
+    field(:extra, :string)
+    field(:extra2, :string)
     field(:location, ArangoXEcto.Types.GeoJSON)
 
     outgoing(:posts, ArangoXEctoTest.Integration.Post)
@@ -20,7 +22,7 @@ defmodule ArangoXEctoTest.Integration.User do
 
   def changeset(struct, attrs) do
     struct
-    |> cast(attrs, [:first_name, :last_name])
+    |> cast(attrs, [:first_name, :last_name, :extra, :extra2])
     |> validate_required([:first_name, :last_name])
   end
 end
