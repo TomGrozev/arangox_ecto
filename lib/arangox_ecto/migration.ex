@@ -98,6 +98,7 @@ defmodule ArangoXEcto.Migration do
   - `:geoJson` -  If a geo-spatial index on a location is constructed and geoJson is true, then the order
   within the array is longitude followed by latitude (geo only)
   - `:expireAfter` - Time in seconds after a document's creation it should count as `expired` (ttl only)
+  - `:name` - The name of the index (usefull for phoenix constraints)
 
   ## Examples
 
