@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.1.1
+
+### Fixes
+- Fixed `indexes/1` and `options/1` for use in dynamic edge collection creation (closes #46)
+- Added logging messages for errors in `indexes/1` and `options/1`
+- Add `:name` option for index creation. Fixes issue with phoenix unqiue constraints
+- Fixes on_conflict issue (arango does not support for specific fields, only will replace all no matter which replace option is passed)
+- Various tests for changes
+
 ## 1.1.0
 
 ### Enhancements
