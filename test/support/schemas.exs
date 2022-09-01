@@ -34,7 +34,7 @@ defmodule ArangoXEctoTest.Integration.Post do
     field(:title, :string)
     field(:text, :string)
     field(:views, :integer)
-    field(:virt, :string, default: "iamavirtualfield", vitrual: true)
+    field(:virt, :string, default: "iamavirtualfield", virtual: true)
 
     incoming(:users, ArangoXEctoTest.Integration.User)
 
