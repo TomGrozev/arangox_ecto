@@ -17,6 +17,7 @@ defmodule ArangoXEcto.Migration.Index do
     :minLength,
     :geoJson,
     :expireAfter,
+    :name,
     type: :hash
   ]
 
@@ -30,6 +31,7 @@ defmodule ArangoXEcto.Migration.Index do
           | {:minLength, integer}
           | {:geoJson, boolean}
           | {:expireAfter, integer}
+          | {:name, atom}
 
   @doc """
   Creates a new Index struct

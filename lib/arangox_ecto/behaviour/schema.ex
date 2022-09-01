@@ -25,12 +25,17 @@ defmodule ArangoXEcto.Behaviour.Schema do
         %{pid: conn, repo: repo},
         %{source: collection, schema: schema},
         fields,
-        _on_conflict,
+        on_conflict,
         returning,
         options
       ) do
     return_new = should_return_new?(returning, options)
-    options = if return_new, do: "?returnNew=true", else: ""
+
+    options =
+      build_options([
+        {return_new, "returnNew"},
+        {replace_conflict?(on_conflict), "overwrite"}
+      ])
 
     insert_fields =
       fields
@@ -49,8 +54,7 @@ defmodule ArangoXEcto.Behaviour.Schema do
       "/_api/document/#{collection}" <> options,
       doc
     )
-    |> extract_doc(return_new)
-    #    |> ArangoXEcto.Behaviour.Relationship.process_relationships()
+    |> extract_doc(return_new, on_conflict)
     |> single_doc_result(returning)
   end
 
@@ -63,14 +67,19 @@ defmodule ArangoXEcto.Behaviour.Schema do
         %{source: collection, schema: schema},
         _header,
         list,
-        _on_conflict,
+        on_conflict,
         returning,
         _placeholders,
         options
       ) do
     docs = build_docs(list)
     return_new = should_return_new?(returning, options)
-    options = if return_new, do: "?returnNew=true", else: ""
+
+    options =
+      build_options([
+        {return_new, "returnNew"},
+        {replace_conflict?(on_conflict), "overwrite"}
+      ])
 
     Logger.debug("#{inspect(__MODULE__)}.insert_all", %{
       "#{inspect(__MODULE__)}.insert_all-params" => %{documents: inspect(docs)}
@@ -88,6 +97,19 @@ defmodule ArangoXEcto.Behaviour.Schema do
 
       {:error, %{status: status}} ->
         {:invalid, status}
+    end
+  end
+
+  defp replace_conflict?({fields, _, _targets}) when is_list(fields), do: true
+  defp replace_conflict?({_, _, _targets}), do: false
+
+  defp build_options(options_matrix) do
+    Enum.reduce(options_matrix, [], fn {bool, option}, acc ->
+      ["#{option}=#{bool}" | acc]
+    end)
+    |> case do
+      [] -> ""
+      opts -> "?#{Enum.join(opts, "&")}"
     end
   end
 
@@ -200,21 +222,29 @@ defmodule ArangoXEcto.Behaviour.Schema do
       Enum.any?(returning, &(&1 not in [:_id, :_key, :_rev]))
   end
 
-  defp extract_doc({:ok, %Arangox.Response{body: %{"new" => doc}}}, true) do
+  defp extract_doc(response, return_new, on_conflict \\ nil)
+
+  defp extract_doc({:ok, %Arangox.Response{body: %{"new" => doc}}}, true, _on_conflict) do
     {:ok, doc}
   end
 
-  defp extract_doc({:ok, %Arangox.Response{body: doc}}, false) do
+  defp extract_doc({:ok, %Arangox.Response{body: doc}}, false, _on_conflict) do
     {:ok, patch_body_keys(doc)}
   end
 
-  defp extract_doc({:error, %{error_num: 1210, message: msg}}, _) do
+  defp extract_doc({:error, %{error_num: 1210, message: _msg}}, _, {:nothing, _, _}) do
+    {:ok, nil}
+  end
+
+  defp extract_doc({:error, %{error_num: 1210, message: msg}}, _, _on_conflict) do
     {:invalid, [unique: msg]}
   end
 
-  defp extract_doc({:error, %{error_num: error_num, message: msg}}, _) do
+  defp extract_doc({:error, %{error_num: error_num, message: msg}}, _, _on_conflict) do
     raise "#{inspect(__MODULE__)} Error(#{error_num}): #{msg}"
   end
+
+  defp single_doc_result({:ok, nil}, _returning), do: {:ok, []}
 
   defp single_doc_result({:ok, doc}, returning) do
     {:ok, Enum.map(returning, &{&1, Map.get(doc, Atom.to_string(&1))})}
@@ -292,8 +322,12 @@ defmodule ArangoXEcto.Behaviour.Schema do
 
   defp process_docs(docs, returning) do
     new_docs =
-      Enum.map(docs, fn doc ->
-        Enum.map(returning, &Map.get(doc, Atom.to_string(&1)))
+      Enum.map(docs, fn
+        nil ->
+          nil
+
+        doc ->
+          Enum.map(returning, &Map.get(doc, Atom.to_string(&1)))
       end)
 
     {length(docs), new_docs}

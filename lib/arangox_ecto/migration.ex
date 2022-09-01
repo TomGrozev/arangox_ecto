@@ -33,6 +33,8 @@ defmodule ArangoXEcto.Migration do
       end
   """
 
+  require Logger
+
   alias ArangoXEcto.Migration.{Collection, Index}
 
   defmacro __using__(_) do
@@ -96,6 +98,7 @@ defmodule ArangoXEcto.Migration do
   - `:geoJson` -  If a geo-spatial index on a location is constructed and geoJson is true, then the order
   within the array is longitude followed by latitude (geo only)
   - `:expireAfter` - Time in seconds after a document's creation it should count as `expired` (ttl only)
+  - `:name` - The name of the index (usefull for phoenix constraints)
 
   ## Examples
 
@@ -147,8 +150,17 @@ defmodule ArangoXEcto.Migration do
     args = :maps.filter(fn _, v -> not is_nil(v) end, args)
 
     case Arangox.post(conn, "/_api/collection", args) do
-      {:ok, _} -> :ok
-      {:error, %{status: status, message: message}} -> {:error, "#{status} - #{message}"}
+      {:ok, _} ->
+        :ok
+
+      {:error, %{status: status, message: message}} ->
+        msg = "#{status} - #{message}"
+
+        Logger.debug("#{inspect(__MODULE__)}.create", %{
+          "#{inspect(__MODULE__)}.create-collection" => %{collection: collection, message: msg}
+        })
+
+        {:error, msg}
     end
   end
 
@@ -160,8 +172,17 @@ defmodule ArangoXEcto.Migration do
            "/_api/index?collection=#{collection_name}",
            Map.from_struct(index)
          ) do
-      {:ok, _} -> :ok
-      {:error, %{status: status, message: message}} -> {:error, "#{status} - #{message}"}
+      {:ok, _} ->
+        :ok
+
+      {:error, %{status: status, message: message}} ->
+        msg = "#{status} - #{message}"
+
+        Logger.debug("#{inspect(__MODULE__)}.create", %{
+          "#{inspect(__MODULE__)}.create-index" => %{index: index, message: msg}
+        })
+
+        {:error, msg}
     end
   end
 
@@ -187,6 +208,11 @@ defmodule ArangoXEcto.Migration do
 
   defp get_db_conn(nil) do
     config(pool_size: 1)
+    |> Arangox.start_link()
+  end
+
+  defp get_db_conn(repo) when is_atom(repo) do
+    repo.config()
     |> Arangox.start_link()
   end
 

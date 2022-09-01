@@ -5,6 +5,8 @@ defmodule ArangoXEctoTest.Integration.User do
   schema "users" do
     field(:first_name, :string)
     field(:last_name, :string)
+    field(:extra, :string)
+    field(:extra2, :string)
     field(:location, ArangoXEcto.Types.GeoJSON)
 
     outgoing(:posts, ArangoXEctoTest.Integration.Post)
@@ -20,7 +22,7 @@ defmodule ArangoXEctoTest.Integration.User do
 
   def changeset(struct, attrs) do
     struct
-    |> cast(attrs, [:first_name, :last_name])
+    |> cast(attrs, [:first_name, :last_name, :extra, :extra2])
     |> validate_required([:first_name, :last_name])
   end
 end
@@ -32,7 +34,7 @@ defmodule ArangoXEctoTest.Integration.Post do
     field(:title, :string)
     field(:text, :string)
     field(:views, :integer)
-    field(:virt, :string, default: "iamavirtualfield", vitrual: true)
+    field(:virt, :string, default: "iamavirtualfield", virtual: true)
 
     incoming(:users, ArangoXEctoTest.Integration.User)
 
@@ -79,6 +81,31 @@ defmodule ArangoXEctoTest.Integration.UserPosts do
   import Ecto.Changeset
 
   schema "user_posts" do
+    edge_fields()
+
+    field(:type, :string)
+  end
+
+  def changeset(edge, attrs) do
+    edges_changeset(edge, attrs)
+    |> cast(attrs, [:type])
+  end
+end
+
+defmodule ArangoXEctoTest.Integration.UserPostsOptions do
+  use ArangoXEcto.Edge,
+    from: ArangoXEctoTest.Integration.User,
+    to: ArangoXEctoTest.Integration.Post
+
+  import Ecto.Changeset
+
+  options(keyOptions: %{type: :uuid})
+
+  indexes([
+    [fields: [:type], unique: true]
+  ])
+
+  schema "user_posts_options" do
     edge_fields()
 
     field(:type, :string)

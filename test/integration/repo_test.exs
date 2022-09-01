@@ -140,6 +140,11 @@ defmodule ArangoXEctoTest.Integration.RepoTest do
               %Arangox.Response{
                 body: %{"indexes" => [_, %{"fields" => ["text"], "unique" => true}]}
               }} = Arangox.get(conn, "/_api/index?collection=comments")
+
+      assert {:ok,
+              %Arangox.Response{
+                body: %{"keyOptions" => %{"type" => "uuid"}}
+              }} = Arangox.get(conn, "/_api/collection/comments/properties")
     end
 
     test "can insert and fetch with timestamps" do
@@ -157,6 +162,17 @@ defmodule ArangoXEctoTest.Integration.RepoTest do
       user = %User{id: "654321", first_name: "John", last_name: "Smith"}
       assert %User{} = Repo.insert!(user)
     end
+
+    test "upsert on_conflict and returning" do
+      user = %User{id: "123456", first_name: "John", last_name: "Smith"}
+
+      assert {:ok, %User{}} = Repo.insert(user)
+
+      change = %User{id: "123456", extra: "Something"}
+
+      assert {:ok, %User{id: "123456", extra: "Something"}} =
+               Repo.insert(change, on_conflict: :replace_all, returning: true)
+    end
   end
 
   describe "Repo.update/2 and Repo.update!/2" do
@@ -164,10 +180,10 @@ defmodule ArangoXEctoTest.Integration.RepoTest do
       user = %User{first_name: "John", last_name: "Smith"} |> Repo.insert!()
 
       user = User.changeset(user, %{last_name: "Snow"})
-      assert {:ok, %User{}} = Repo.update(user)
+      assert {:ok, %User{last_name: "Snow"}} = Repo.update(user)
 
       user = User.changeset(user, %{last_name: "Smith"})
-      assert %User{} = Repo.update!(user)
+      assert %User{last_name: "Smith"} = Repo.update!(user)
     end
 
     test "no change" do
@@ -191,6 +207,21 @@ defmodule ArangoXEctoTest.Integration.RepoTest do
       assert_raise Ecto.InvalidChangesetError, ~r/could not perform/, fn ->
         Repo.update!(user)
       end
+    end
+
+    test "returns extra fields" do
+      %User{id: id} =
+        %User{first_name: "John", last_name: "Smith", extra: "Test", extra2: "Test2"}
+        |> Repo.insert!()
+
+      user = User.changeset(%User{id: id}, %{first_name: "Bob", last_name: "Snow"})
+
+      assert {:ok, %User{extra: "Test", last_name: "Snow"}} = Repo.update(user, returning: true)
+
+      assert {:ok, %User{last_name: "Snow", extra: "Test", extra2: nil}} =
+               Repo.update(user, returning: [:extra])
+
+      assert {:ok, %User{extra: nil, last_name: "Snow"}} = Repo.update(user, returning: false)
     end
   end
 
@@ -417,6 +448,15 @@ defmodule ArangoXEctoTest.Integration.RepoTest do
 
       assert [%Post{inserted_at: ^datetime, title: nil}, %Post{inserted_at: nil, title: "abc"}] =
                Repo.all(Post |> order_by(:title))
+    end
+
+    test "on_conflict insert_all" do
+      assert {2, nil} =
+               Repo.insert_all(Post, [[id: "123", title: "abc"], [id: "123", title: "abc"]],
+                 on_conflict: :replace_all
+               )
+
+      assert [%Post{id: "123", title: "abc"}] = Repo.all(Post |> order_by(:title))
     end
   end
 
