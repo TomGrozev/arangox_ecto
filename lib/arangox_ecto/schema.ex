@@ -28,19 +28,57 @@ defmodule ArangoXEcto.Schema do
         end
       end
   """
+  require Ecto.Schema
 
   defmacro __using__(_) do
     quote do
-      use Ecto.Schema
       import unquote(__MODULE__)
+      import Ecto.Schema, only: [embedded_schema: 1]
 
       @primary_key {:id, :binary_id, autogenerate: true, source: :_key}
+      @timestamps_opts []
       @foreign_key_type :binary_id
+      @schema_prefix nil
+      @schema_context nil
+      @field_source_mapper fn x -> x end
+
+      Module.register_attribute(__MODULE__, :ecto_primary_keys, accumulate: true)
+      Module.register_attribute(__MODULE__, :ecto_fields, accumulate: true)
+      Module.register_attribute(__MODULE__, :ecto_virtual_fields, accumulate: true)
+      Module.register_attribute(__MODULE__, :ecto_query_fields, accumulate: true)
+      Module.register_attribute(__MODULE__, :ecto_field_sources, accumulate: true)
+      Module.register_attribute(__MODULE__, :ecto_assocs, accumulate: true)
+      Module.register_attribute(__MODULE__, :ecto_embeds, accumulate: true)
+      Module.register_attribute(__MODULE__, :ecto_raw, accumulate: true)
+      Module.register_attribute(__MODULE__, :ecto_autogenerate, accumulate: true)
+      Module.register_attribute(__MODULE__, :ecto_autoupdate, accumulate: true)
+      Module.register_attribute(__MODULE__, :ecto_redact_fields, accumulate: true)
+      Module.put_attribute(__MODULE__, :ecto_derive_inspect_for_redacted_fields, true)
+      Module.put_attribute(__MODULE__, :ecto_autogenerate_id, nil)
 
       def __collection_options__, do: []
       def __collection_indexes__, do: []
 
       defoverridable __collection_options__: 0, __collection_indexes__: 0
+    end
+  end
+
+  @doc """
+  A wrapper around the `Ecto.Schema.schema/2` to add the _id field
+  """
+  defmacro schema(source, do: {:__block__, _, args}) do
+    block =
+      {:__block__, [],
+       [{:field, [], [:__id__, :binary_id, [source: :_id, read_after_writes: true]]} | args]}
+
+    quote do
+      Ecto.Schema.schema(unquote(source), do: unquote(block))
+    end
+  end
+
+  defmacro schema(source, do: block) do
+    quote do
+      Ecto.Schema.schema(unquote(source), do: unquote(block))
     end
   end
 
@@ -128,12 +166,6 @@ defmodule ArangoXEcto.Schema do
     quote do
       opts = unquote(opts)
 
-      try do
-        field(:__id__, :binary_id, source: :_id, read_after_writes: true)
-      rescue
-        ArgumentError -> :ok
-      end
-
       many_to_many(unquote(name), unquote(target),
         join_through:
           Keyword.get(opts, :edge, ArangoXEcto.edge_module(__MODULE__, unquote(target))),
@@ -170,12 +202,6 @@ defmodule ArangoXEcto.Schema do
   defmacro one_outgoing(name, target, opts \\ []) do
     quote do
       opts = unquote(opts)
-
-      try do
-        field(:__id__, :binary_id, source: :_id, read_after_writes: true)
-      rescue
-        ArgumentError -> :ok
-      end
 
       has_one(unquote(name), unquote(target),
         references: :__id__,
@@ -214,12 +240,6 @@ defmodule ArangoXEcto.Schema do
   defmacro incoming(name, source, opts \\ []) do
     quote do
       opts = unquote(opts)
-
-      try do
-        field(:__id__, :binary_id, source: :_id, read_after_writes: true)
-      rescue
-        ArgumentError -> :ok
-      end
 
       many_to_many(unquote(name), unquote(source),
         join_through:
@@ -264,12 +284,6 @@ defmodule ArangoXEcto.Schema do
   defmacro one_incoming(name, source, opts \\ []) do
     quote do
       opts = unquote(opts)
-
-      try do
-        field(:__id__, :binary_id, source: :_id, read_after_writes: true)
-      rescue
-        ArgumentError -> :ok
-      end
 
       belongs_to(unquote(name), unquote(source),
         references: :__id__,
