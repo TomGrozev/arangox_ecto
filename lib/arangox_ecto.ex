@@ -364,6 +364,7 @@ defmodule ArangoXEcto do
         }
       ]
   """
+  @deprecated "Use load/2 instead"
   @spec raw_to_struct(map() | [map()], Ecto.Schema.t()) :: struct()
   def raw_to_struct(map, module) when is_list(map) and is_atom(module) do
     Enum.map(map, &raw_to_struct(&1, module))
@@ -381,6 +382,64 @@ defmodule ArangoXEcto do
   end
 
   def raw_to_struct(_, _), do: raise(ArgumentError, "Invalid input map or module")
+
+  @doc """
+  Loads raw map into ecto structs
+
+  Uses `Ecto.Repo.load/2` to load a deep map result into ecto structs
+
+  If a list of maps are passed then the maps are enumerated over.
+
+  ## Parameters
+
+  - `maps` - List of maps or singular map to convert to a struct
+  - `module` - Module to use for the struct
+
+  ## Example
+
+      iex> {:ok, users} = ArangoXEcto.aql_query(
+            Repo,
+            "FOR user IN users RETURN user"
+          )
+      {:ok,
+        [
+          %{
+            "_id" => "users/12345",
+            "_key" => "12345",
+            "_rev" => "_bHZ8PAK---",
+            "first_name" => "John",
+            "last_name" => "Smith"
+          }
+        ]}
+
+      iex> ArangoXEcto.load(users, User)
+      [
+        %User{
+          id: "12345",
+          first_name: "John",
+          last_name: "Smith"
+        }
+      ]
+  """
+  @spec load(map() | [map()], Ecto.Schema.t()) :: struct()
+  def load(map, module) when is_list(map) and is_atom(module),
+    do: Enum.map(map, &load(&1, module))
+
+  def load(%{"_id" => _id, "_key" => _key} = map, module)
+      when is_map(map) and is_atom(module) do
+    schema_type!(module)
+
+    Ecto.Repo.Schema.load(ArangoXEcto.Adapter, module, map)
+    |> add_associations(module, map)
+
+    # args =
+    #   patch_map(map)
+    #   |> filter_keys_for_struct()
+
+    # struct(module, args)
+  end
+
+  def load(_, _), do: raise(ArgumentError, "Invalid input map or module")
 
   @doc """
   Generates a edge schema dynamically
@@ -563,6 +622,29 @@ defmodule ArangoXEcto do
         %{pid: conn} = Ecto.Adapter.lookup_meta(repo)
 
         conn
+    end
+  end
+
+  defp add_associations(%{} = loaded, module, %{} = map) when is_atom(module) do
+    module.__schema__(:associations)
+    |> Enum.reduce(loaded, fn assoc, acc ->
+      case Map.fetch(map, Atom.to_string(assoc)) do
+        {:ok, map_assoc} ->
+          insert_association(acc, assoc, module, map_assoc)
+
+        _ ->
+          acc
+      end
+    end)
+  end
+
+  defp insert_association(map, field, module, map_assoc) do
+    case module.__schema__(:association, field) do
+      %{queryable: assoc_module} ->
+        Map.put(map, field, load(map_assoc, assoc_module))
+
+      _ ->
+        map
     end
   end
 

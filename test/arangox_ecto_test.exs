@@ -4,7 +4,7 @@ defmodule ArangoXEctoTest do
   use ExUnit.Case
   @moduletag :supported
 
-  alias ArangoXEctoTest.Integration.{Post, User, UserPosts, UserPostsOptions}
+  alias ArangoXEctoTest.Integration.{Class, Post, User, UserPosts, UserPostsOptions}
   alias ArangoXEctoTest.Repo
 
   import Ecto.Query
@@ -319,6 +319,107 @@ defmodule ArangoXEctoTest do
       assert_raise ArgumentError, ~r/Invalid input map or module/, fn ->
         ArangoXEcto.raw_to_struct("test", 123)
       end
+    end
+  end
+
+  describe "load/2" do
+    test "valid map" do
+      out =
+        %{
+          "_id" => "users/12345",
+          "_key" => "12345",
+          "_rev" => "_bHZ8PAK---",
+          "first_name" => "John",
+          "last_name" => "Smith"
+        }
+        |> ArangoXEcto.load(User)
+
+      assert Kernel.match?(%User{id: "12345", first_name: "John", last_name: "Smith"}, out)
+    end
+
+    test "invalid map" do
+      assert_raise ArgumentError, ~r/Invalid input map or module/, fn ->
+        %{
+          "_rev" => "_bHZ8PAK---",
+          "first_name" => "John",
+          "last_name" => "Smith"
+        }
+        |> ArangoXEcto.load(User)
+      end
+    end
+
+    test "invalid module" do
+      assert_raise ArgumentError, ~r/Not an Ecto Schema/, fn ->
+        %{
+          "_id" => "users/12345",
+          "_key" => "12345",
+          "_rev" => "_bHZ8PAK---",
+          "first_name" => "John",
+          "last_name" => "Smith"
+        }
+        |> ArangoXEcto.load(Ecto)
+      end
+    end
+
+    test "invalid argument types" do
+      assert_raise ArgumentError, ~r/Invalid input map or module/, fn ->
+        ArangoXEcto.load("test", 123)
+      end
+    end
+
+    test "loads embeds" do
+      out =
+        %{
+          "_id" => "users/12345",
+          "_key" => "12345",
+          "_rev" => "_bHZ8PAK---",
+          "first_name" => "John",
+          "last_name" => "Smith",
+          "class" => %{
+            "name" => "English"
+          }
+        }
+        |> ArangoXEcto.load(User)
+
+      assert Kernel.match?(
+               %User{
+                 id: "12345",
+                 first_name: "John",
+                 last_name: "Smith",
+                 class: %Class{name: "English"}
+               },
+               out
+             )
+    end
+
+    test "loads associations" do
+      out =
+        %{
+          "_id" => "users/12345",
+          "_key" => "12345",
+          "_rev" => "_bHZ8PAK---",
+          "first_name" => "John",
+          "last_name" => "Smith",
+          "posts" => [
+            %{
+              "_id" => "posts/12345",
+              "_key" => "12345",
+              "_rev" => "_bHZ8PAZ---",
+              "title" => "Test"
+            }
+          ]
+        }
+        |> ArangoXEcto.load(User)
+
+      assert Kernel.match?(
+               %User{
+                 id: "12345",
+                 first_name: "John",
+                 last_name: "Smith",
+                 posts: [%Post{id: "12345", title: "Test"}]
+               },
+               out
+             )
     end
   end
 
