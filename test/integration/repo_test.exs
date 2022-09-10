@@ -98,6 +98,36 @@ defmodule ArangoXEctoTest.Integration.RepoTest do
       assert [] = Repo.all(from(a in "abc", select: a.id))
       Application.put_env(:arangox_ecto, :static, false)
     end
+
+    test "fetch count" do
+      %User{first_name: "John", last_name: "Smith"} |> Repo.insert!()
+      %User{first_name: "Ben", last_name: "John"} |> Repo.insert!()
+
+      assert [2] = Repo.all(from(u in User, select: count(u.id)))
+
+      assert_raise Ecto.QueryError, ~r/can only have one field with count/, fn ->
+        Repo.all(from(u in User, select: {count(u.first_name), count(u.id)}))
+      end
+
+      assert_raise Ecto.QueryError,
+                   ~r/can't have count fields and non count fields together/,
+                   fn ->
+                     Repo.all(from(u in User, select: {u.first_name, count(u.id)}))
+                   end
+    end
+  end
+
+  describe "Repo.aggregate/3" do
+    test "can count" do
+      %User{first_name: "John", last_name: "Smith"} |> Repo.insert!()
+      %User{first_name: "Ben", last_name: "John"} |> Repo.insert!()
+
+      assert 2 = Repo.aggregate(User, :count)
+    end
+
+    test "empty collection" do
+      assert 0 = Repo.aggregate(User, :count)
+    end
   end
 
   describe "Repo.insert/2 and Repo.insert!/2" do

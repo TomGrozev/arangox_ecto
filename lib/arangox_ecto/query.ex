@@ -190,6 +190,25 @@ defmodule ArangoXEcto.Query do
     do: select_fields(fields, distinct, from, sources, query)
 
   defp select_fields(fields, distinct, _from, sources, query) do
+    {collect, values} =
+      fields
+      |> count_fields()
+      |> get_collect_or_fields(fields, sources, query)
+
+    [collect | [" RETURN ", distinct(distinct, sources, query), "[ ", values | " ]"]]
+  end
+
+  defp count_fields(fields) do
+    Enum.reduce(fields, {0, 0}, fn
+      {:count, _, _}, {c, f} -> {c + 1, f}
+      _, {c, f} -> {c, f + 1}
+    end)
+  end
+
+  defp get_collect_or_fields({1, 0}, [{:count, _, value}], sources, _query),
+    do: {count_field(value, sources), [count_name(value, sources)]}
+
+  defp get_collect_or_fields({0, f}, fields, sources, query) when f > 0 do
     values =
       intersperse_map(fields, ", ", fn
         {_key, value} ->
@@ -199,8 +218,32 @@ defmodule ArangoXEcto.Query do
           [expr(value, sources, query)]
       end)
 
-    [" RETURN ", distinct(distinct, sources, query), "[ ", values | " ]"]
+    {[], values}
   end
+
+  defp get_collect_or_fields({c, _}, _fields, _sources, query) when c > 1,
+    do: raise(Ecto.QueryError, message: "can only have one field with count", query: query)
+
+  defp get_collect_or_fields({c, f}, _fields, _sources, query) when f > 0 and c > 0,
+    do:
+      raise(Ecto.QueryError,
+        message: "can't have count fields and non count fields together (use raw AQL for this)",
+        query: query
+      )
+
+  defp count_name([], _sources), do: "collection_count"
+  defp count_name([val], sources), do: count_name(val, sources)
+  defp count_name([val, _], sources), do: count_name(val, sources)
+
+  defp count_name({{:., _, [{:&, _, [idx]}, field]}, _, []}, sources) do
+    {_, name, _} = elem(sources, idx)
+    [name, ?_, Atom.to_string(field)]
+  end
+
+  defp count_field([], _sources), do: [" COLLECT WITH COUNT INTO collection_count"]
+
+  defp count_field(field, sources),
+    do: [" COLLECT ", ["WITH COUNT INTO ", count_name(field, sources)]]
 
   defp update_fields(%Query{from: from, updates: updates} = query, sources) do
     {_from, name} = get_source(query, sources, 0, from)
