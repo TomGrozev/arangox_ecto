@@ -225,7 +225,7 @@ This query will return a result such as:
 ```
 
 This is awesome functionality, but a lot of the time we will want to resemble a specific struct. This is actually quite
-easy with the help of the `ArangoXEcto.raw_to_struct/2` function. The same query above could be extended to also convert
+easy with the help of the `ArangoXEcto.load/2` function. The same query above could be extended to also convert
 the output:
 
 ```elixir
@@ -238,7 +238,7 @@ ArangoXEcto.aql_query(
   |> case do
       {:ok, results} ->
         results
-        |> ArangoXEcto.raw_to_struct(User)
+        |> ArangoXEcto.load(User)
 
       {:error, _reason} -> []
   end
@@ -283,6 +283,9 @@ don't have to worry as much about which schema has `outgoing/3` and `incoming/3`
 #### One-to-One relationships
 Additionally, `one_outgoing/3` and `one_incoming/3` can be used for one-to-one relationships. These do not actually create edges but just store the `_id` of the target in a
 field instead. The order of the outgoing & incoming in schemas does matter as a field will be created in the incoming schema.
+
+#### One-to-Many relationships
+Graph relationships are a good substitute for many-to-many relationships in a traditional relational database. One-to-Many relationships in ArangoDB will function exactly the same as in a relational database. Therefore you can just use the regular `Ecto.Schema.has_many/3` and `Echo.Schema.belongs_to/3` functions as documented in the [Ecto docs](https://hexdocs.pm/ecto/2.2.11/associations.html).
 
 #### How it works
 Behind the scenes these outgoing & incoming helper macros are simply wrappers around the Ecto function `Ecto.Schema.many_to_many/3`.
