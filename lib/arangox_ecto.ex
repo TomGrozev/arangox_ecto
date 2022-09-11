@@ -639,12 +639,16 @@ defmodule ArangoXEcto do
   end
 
   defp insert_association(map, field, module, map_assoc) do
-    case module.__schema__(:association, field) do
-      %{queryable: assoc_module} ->
-        Map.put(map, field, load(map_assoc, assoc_module))
+    if Enum.member?(module.__schema__(:associations), field) do
+      case module.__schema__(:association, field) do
+        %{queryable: assoc_module} ->
+          Map.put(map, field, load(map_assoc, assoc_module))
 
-      _ ->
-        map
+        _ ->
+          map
+      end
+    else
+      map
     end
   end
 
