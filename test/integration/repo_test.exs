@@ -115,6 +115,46 @@ defmodule ArangoXEctoTest.Integration.RepoTest do
                      Repo.all(from(u in User, select: {u.first_name, count(u.id)}))
                    end
     end
+
+    test "using ecto date functions" do
+      %User{first_name: "John", last_name: "Smith"} |> Repo.insert!()
+
+      assert [%User{}] = Repo.all(from(u in User, where: u.inserted_at > ago(1, "hour")))
+
+      assert [] = Repo.all(from(u in User, where: u.inserted_at < ago(1, "hour")))
+
+      assert [%User{}] = Repo.all(from(u in User, where: u.inserted_at < from_now(1, "hour")))
+
+      assert [] = Repo.all(from(u in User, where: u.inserted_at > from_now(1, "hour")))
+
+      assert [%User{}] =
+               Repo.all(
+                 from(u in User,
+                   where: u.inserted_at < datetime_add(^NaiveDateTime.utc_now(), 1, "day")
+                 )
+               )
+
+      assert [] =
+               Repo.all(
+                 from(u in User,
+                   where: u.inserted_at > datetime_add(^NaiveDateTime.utc_now(), 1, "day")
+                 )
+               )
+
+      assert [%User{}] =
+               Repo.all(
+                 from(u in User,
+                   where: u.inserted_at < date_add(^Date.utc_today(), 1, "day")
+                 )
+               )
+
+      assert [] =
+               Repo.all(
+                 from(u in User,
+                   where: u.inserted_at > date_add(^Date.utc_today(), 1, "day")
+                 )
+               )
+    end
   end
 
   describe "Repo.aggregate/3" do

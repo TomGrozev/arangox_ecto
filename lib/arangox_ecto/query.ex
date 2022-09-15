@@ -395,6 +395,16 @@ defmodule ArangoXEcto.Query do
     [expr(left, sources, query), " IN ", expr(right, sources, query)]
   end
 
+  defp expr({:datetime_add, _, [date, amount, unit]}, sources, query) do
+    args = [
+      expr(date, sources, query),
+      expr(amount, sources, query),
+      expr(unit, sources, query)
+    ]
+
+    ["DATE_ADD(", Enum.intersperse(args, ", "), ")"]
+  end
+
   defp expr({fun, _, args}, sources, query) when is_atom(fun) and is_list(args) do
     case handle_call(fun, length(args)) do
       {:binary_op, op} ->
@@ -427,6 +437,10 @@ defmodule ArangoXEcto.Query do
   end
 
   defp expr(%Ecto.Query.Tagged{value: value, type: :binary_id}, sources, query) do
+    [expr(value, sources, query)]
+  end
+
+  defp expr(%Ecto.Query.Tagged{value: value, type: :decimal}, sources, query) do
     [expr(value, sources, query)]
   end
 
