@@ -253,6 +253,18 @@ defmodule ArangoXEctoTest.Integration.RepoTest do
 
       assert {:ok, %User{extra: nil, last_name: "Snow"}} = Repo.update(user, returning: false)
     end
+
+    test "returns stale error when updating deleted" do
+      user = %User{first_name: "John", last_name: "Smith"} |> Repo.insert!()
+
+      Repo.delete(user)
+
+      user_change = User.changeset(user, %{first_name: "Bob", last_name: "Snow"})
+
+      assert_raise Ecto.StaleEntryError, ~r/attempted to update a stale struct/, fn ->
+        Repo.update!(user_change)
+      end
+    end
   end
 
   describe "Repo.delete/2 and Repo.delete!/2" do

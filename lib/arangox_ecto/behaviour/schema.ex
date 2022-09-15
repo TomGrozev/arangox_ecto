@@ -240,6 +240,10 @@ defmodule ArangoXEcto.Behaviour.Schema do
     {:invalid, [unique: msg]}
   end
 
+  defp extract_doc({:error, %{error_num: 1202}}, _, _on_conflict) do
+    {:error, :stale}
+  end
+
   defp extract_doc({:error, %{error_num: error_num, message: msg}}, _, _on_conflict) do
     raise "#{inspect(__MODULE__)} Error(#{error_num}): #{msg}"
   end
