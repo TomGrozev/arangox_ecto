@@ -56,17 +56,52 @@ defmodule ArangoXEcto do
 
     {query, vars} = process_vars(query, vars)
 
-    Arangox.transaction(
-      conn,
-      fn cursor ->
-        stream = Arangox.cursor(cursor, query, vars)
+    try do
+      Arangox.transaction(
+        conn,
+        fn cursor ->
+          stream = Arangox.cursor(cursor, query, vars)
 
-        Enum.reduce(stream, [], fn resp, acc ->
-          acc ++ resp.body["result"]
-        end)
-      end,
-      opts
-    )
+          Enum.reduce(stream, [], fn resp, acc ->
+            acc ++ resp.body["result"]
+          end)
+        end,
+        opts
+      )
+    rescue
+      e -> {:error, e}
+    end
+  end
+
+  @doc """
+  Same as `ArangoXEcto.aql_query/4 but will raise an error.`
+
+  If there is an error in the query such as a syntax error, an `Arangox.Error` will be raised.
+
+  ## Examples
+
+      iex> ArangoXEcto.aql_query!(
+            Repo,
+            "FOR var in users FILTER var.first_name == @fname AND var.last_name == @lname RETURN var",
+            fname: "John",
+            lname: "Smith"
+          )
+      [
+        %{
+          "_id" => "users/12345",
+          "_key" => "12345",
+          "_rev" => "_bHZ8PAK---",
+          "first_name" => "John",
+          "last_name" => "Smith"
+        }
+      ]
+  """
+  @spec aql_query!(Ecto.Repo.t(), query(), vars(), [DBConnection.option()]) :: list(map)
+  def aql_query!(repo, query, vars \\ [], opts \\ []) do
+    case aql_query(repo, query, vars, opts) do
+      {:ok, res} -> res
+      {:error, err} -> raise err
+    end
   end
 
   @doc """

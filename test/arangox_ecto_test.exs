@@ -55,27 +55,24 @@ defmodule ArangoXEctoTest do
     context
   end
 
-  describe "aql_query/4" do
+  describe "aql_query/4 and aql_query!/4" do
     test "invalid AQL query" do
+      query = "FOsdfsdfgdfs abc"
+
+      {:error, %Arangox.Error{error_num: 1501}} = ArangoXEcto.aql_query(Repo, query)
+
       assert_raise Arangox.Error, ~r/\[400\] \[1501\] AQL: syntax error/i, fn ->
-        ArangoXEcto.aql_query(
-          Repo,
-          """
-          FOsdfsdfgdfs abc
-          """
-        )
+        ArangoXEcto.aql_query!(Repo, query)
       end
     end
 
     test "non existent collection AQL query" do
+      query = "FOR var in non_existent RETURN var"
+
+      {:error, %Arangox.Error{error_num: 1203}} = ArangoXEcto.aql_query(Repo, query)
+
       assert_raise Arangox.Error, ~r/\[404\] \[1203\] AQL: collection or view not found/, fn ->
-        ArangoXEcto.aql_query(
-          Repo,
-          """
-          FOR var in non_existent
-          RETURN var
-          """
-        )
+        ArangoXEcto.aql_query!(Repo, query)
       end
     end
 
@@ -86,30 +83,42 @@ defmodule ArangoXEctoTest do
 
       collection_name = User.__schema__(:source)
 
-      result =
-        ArangoXEcto.aql_query(
-          Repo,
-          """
-          FOR var in @@collection_name
-          FILTER var.first_name == @fname AND var.last_name == @lname
-          RETURN var
-          """,
-          [{:"@collection_name", collection_name}, fname: fname, lname: lname]
-        )
+      query = """
+      FOR var in @@collection_name
+      FILTER var.first_name == @fname AND var.last_name == @lname
+      RETURN var
+      """
 
-      assert Kernel.match?(
-               {:ok,
-                [
-                  %{
-                    "_id" => _,
-                    "_key" => _,
-                    "_rev" => _,
-                    "first_name" => ^fname,
-                    "last_name" => ^lname
-                  }
-                ]},
-               result
-             )
+      assert {:ok,
+              [
+                %{
+                  "_id" => _,
+                  "_key" => _,
+                  "_rev" => _,
+                  "first_name" => ^fname,
+                  "last_name" => ^lname
+                }
+              ]} =
+               ArangoXEcto.aql_query(Repo, query, [
+                 {:"@collection_name", collection_name},
+                 fname: fname,
+                 lname: lname
+               ])
+
+      assert [
+               %{
+                 "_id" => _,
+                 "_key" => _,
+                 "_rev" => _,
+                 "first_name" => ^fname,
+                 "last_name" => ^lname
+               }
+             ] =
+               ArangoXEcto.aql_query!(Repo, query, [
+                 {:"@collection_name", collection_name},
+                 fname: fname,
+                 lname: lname
+               ])
     end
   end
 
