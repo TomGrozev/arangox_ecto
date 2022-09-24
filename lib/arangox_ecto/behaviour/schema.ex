@@ -196,6 +196,9 @@ defmodule ArangoXEcto.Behaviour.Schema do
     |> single_doc_result(returning)
   end
 
+  def update(adapter_meta, schema_meta, fields, [{:_key, key} | [_]], returning, options),
+    do: update(adapter_meta, schema_meta, fields, [{:_key, key}], returning, options)
+
   def update(_adapter_meta, _schema_meta, _fields, _filters, _returning, _options) do
     raise "Updating with filters other than _key is not supported yet"
   end

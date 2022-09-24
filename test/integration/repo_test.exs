@@ -305,6 +305,19 @@ defmodule ArangoXEctoTest.Integration.RepoTest do
         Repo.update!(user_change)
       end
     end
+
+    test "can update when there is non _key index" do
+      %Comment{id: "333", text: "alpha", extra: "beta"} |> Repo.insert!()
+
+      assert {:ok, %Comment{id: "333", text: "alpha", extra: "charlie"}} =
+               %Comment{
+                 id: "333",
+                 text: "alpha"
+               }
+               |> Ecto.Changeset.change(extra: "charlie")
+               |> Ecto.Changeset.optimistic_lock(:text, fn c -> c end)
+               |> Repo.update()
+    end
   end
 
   describe "Repo.delete/2 and Repo.delete!/2" do

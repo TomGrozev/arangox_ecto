@@ -86,6 +86,7 @@ defmodule ArangoXEctoTest.Integration.Comment do
 
   schema "comments" do
     field(:text, :string)
+    field(:extra, :string)
 
     timestamps()
   end
