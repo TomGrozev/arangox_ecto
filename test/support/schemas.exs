@@ -50,17 +50,24 @@ end
 
 defmodule ArangoXEctoTest.Integration.Comment do
   use ArangoXEcto.Schema
+  import Ecto.Changeset
 
   options(keyOptions: %{type: :uuid})
 
   indexes([
-    [fields: [:text], unique: true]
+    [fields: [:text], unique: true, name: :comment_idx]
   ])
 
   schema "comments" do
     field(:text, :string)
 
     timestamps()
+  end
+
+  def changeset(changeset, attrs) do
+    changeset
+    |> cast(attrs, [:text])
+    |> unique_constraint(:text, name: :comment_idx)
   end
 end
 
