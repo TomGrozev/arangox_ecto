@@ -240,7 +240,8 @@ defmodule ArangoXEcto.Behaviour.Schema do
   end
 
   defp extract_doc({:error, %{error_num: 1210, message: msg}}, _, _on_conflict) do
-    {:invalid, [unique: msg]}
+    [_, index] = Regex.run(~r/in index ([^\s]+) of type/, msg)
+    {:invalid, [unique: index]}
   end
 
   defp extract_doc({:error, %{error_num: 1202}}, _, _on_conflict) do

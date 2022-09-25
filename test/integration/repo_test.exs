@@ -376,7 +376,7 @@ defmodule ArangoXEctoTest.Integration.RepoTest do
                        |> Repo.insert!()
                      end
 
-      assert exception.message =~ "unique constraint violated"
+      assert exception.message =~ "constraint error when attempting to insert struct"
       assert exception.message =~ "The changeset has not defined any constraint."
     end
 
@@ -396,6 +396,23 @@ defmodule ArangoXEctoTest.Integration.RepoTest do
                      end
 
       assert exception.message =~ "test_constraint (unique_constraint)"
+    end
+
+    test "named unique constraint" do
+      changeset = Comment.changeset(%Comment{}, %{text: "hello"})
+
+      Repo.insert!(changeset)
+
+      assert {:error,
+              %{
+                errors: [
+                  {
+                    :text,
+                    {"has already been taken",
+                     [constraint: :unique, constraint_name: "comment_idx"]}
+                  }
+                ]
+              }} = Repo.insert(changeset)
     end
   end
 
