@@ -1,11 +1,35 @@
 # Changelog
 
+## 1.2.0
+
+### Enhancements
+- Added `ArangoXEcto.load/2` which will load deep schemas (so associations will work)
+- Added ability to use Ecto's count and aggregate functionality
+- Added ability to use Ecto's datetime helper functions (e.g. `:datetime_add`)
+- Separate `aql_query/4` with `aql_query!/4` raising an error on fail
+
+### Fixes
+- Fix for #49 - unique_constraint not recognized (thanks @jamilabreu)
+- Prevent warnings for `__id__` field on creation
+- Fix for when an update is applied to a non-existent document `:stale` is raised
+- Fix for dates not being queryable using Ecto
+- Prevent error thrown when non `_key` filter is supplied to update, resolves #48
+
+### Other Doc Changes
+- Added information about one-to-many relationships in the README
+
+### Deprecations
+- `ArangoXEcto.raw_to_struct/2` is deprecated in favor of `ArangoXEcto.load/2` add will be removed in a future version
+
+### Repo Changes
+- Include a config file for local git hooks
+
 ## 1.1.1
 
 ### Fixes
 - Fixed `indexes/1` and `options/1` for use in dynamic edge collection creation (closes #46)
 - Added logging messages for errors in `indexes/1` and `options/1`
-- Add `:name` option for index creation. Fixes issue with phoenix unqiue constraints
+- Add `:name` option for index creation. Fixes issue with phoenix unique constraints
 - Fixes on_conflict issue (arango does not support for specific fields, only will replace all no matter which replace option is passed)
 - Various tests for changes
 

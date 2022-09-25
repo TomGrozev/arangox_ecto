@@ -71,7 +71,7 @@ To get the adapter integrated with your project, follow these simple steps.
 Add the following line to your mix dependencies to get started.
 
 ```elixir
-{:arangox_ecto, "~> 1.1"}
+{:arangox_ecto, "~> 1.2"}
 ```
 
 ## Usage

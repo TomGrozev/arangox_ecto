@@ -466,12 +466,6 @@ defmodule ArangoXEcto do
 
     Ecto.Repo.Schema.load(ArangoXEcto.Adapter, module, map)
     |> add_associations(module, map)
-
-    # args =
-    #   patch_map(map)
-    #   |> filter_keys_for_struct()
-
-    # struct(module, args)
   end
 
   def load(_, _), do: raise(ArgumentError, "Invalid input map or module")
