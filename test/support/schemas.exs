@@ -9,6 +9,12 @@ defmodule ArangoXEctoTest.Integration.User do
     field(:extra2, :string)
     field(:location, ArangoXEcto.Types.GeoJSON)
 
+    embeds_one(:class, ArangoXEctoTest.Integration.Class, on_replace: :delete)
+
+    embeds_many :items, Item do
+      field(:name, :string)
+    end
+
     outgoing(:posts, ArangoXEctoTest.Integration.Post)
 
     outgoing(:posts_two, ArangoXEctoTest.Integration.Post,
@@ -23,7 +29,28 @@ defmodule ArangoXEctoTest.Integration.User do
   def changeset(struct, attrs) do
     struct
     |> cast(attrs, [:first_name, :last_name, :extra, :extra2])
+    |> cast_embed(:class)
+    |> cast_embed(:items, with: &items_changeset/2)
     |> validate_required([:first_name, :last_name])
+  end
+
+  defp items_changeset(changeset, attrs) do
+    changeset
+    |> cast(attrs, [:name])
+  end
+end
+
+defmodule ArangoXEctoTest.Integration.Class do
+  use ArangoXEcto.Schema
+  import Ecto.Changeset
+
+  embedded_schema do
+    field(:name, :string)
+  end
+
+  def changeset(changeset, attrs) do
+    changeset
+    |> cast(attrs, [:name])
   end
 end
 
@@ -50,17 +77,25 @@ end
 
 defmodule ArangoXEctoTest.Integration.Comment do
   use ArangoXEcto.Schema
+  import Ecto.Changeset
 
   options(keyOptions: %{type: :uuid})
 
   indexes([
-    [fields: [:text], unique: true]
+    [fields: [:text], unique: true, name: :comment_idx]
   ])
 
   schema "comments" do
     field(:text, :string)
+    field(:extra, :string)
 
     timestamps()
+  end
+
+  def changeset(changeset, attrs) do
+    changeset
+    |> cast(attrs, [:text])
+    |> unique_constraint(:text, name: :comment_idx)
   end
 end
 

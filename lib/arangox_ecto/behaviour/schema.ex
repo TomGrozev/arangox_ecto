@@ -196,6 +196,9 @@ defmodule ArangoXEcto.Behaviour.Schema do
     |> single_doc_result(returning)
   end
 
+  def update(adapter_meta, schema_meta, fields, [{:_key, key} | [_]], returning, options),
+    do: update(adapter_meta, schema_meta, fields, [{:_key, key}], returning, options)
+
   def update(_adapter_meta, _schema_meta, _fields, _filters, _returning, _options) do
     raise "Updating with filters other than _key is not supported yet"
   end
@@ -237,7 +240,12 @@ defmodule ArangoXEcto.Behaviour.Schema do
   end
 
   defp extract_doc({:error, %{error_num: 1210, message: msg}}, _, _on_conflict) do
-    {:invalid, [unique: msg]}
+    [_, index] = Regex.run(~r/in index ([^\s]+) of type/, msg)
+    {:invalid, [unique: index]}
+  end
+
+  defp extract_doc({:error, %{error_num: 1202}}, _, _on_conflict) do
+    {:error, :stale}
   end
 
   defp extract_doc({:error, %{error_num: error_num, message: msg}}, _, _on_conflict) do

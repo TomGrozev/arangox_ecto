@@ -51,12 +51,14 @@ defmodule ArangoXEcto.Behaviour.Queryable do
 
     {run_query, options} = process_sources(conn, sources, is_static, is_write_operation)
 
+    dumped_params = Enum.map(params, &dump/1)
+
     if run_query do
       zipped_args =
         Stream.zip(
           Stream.iterate(1, &(&1 + 1))
           |> Stream.map(&Integer.to_string(&1)),
-          params
+          dumped_params
         )
         |> Enum.into(%{})
 
@@ -91,6 +93,13 @@ defmodule ArangoXEcto.Behaviour.Queryable do
       {0, []}
     end
   end
+
+  defp dump(%NaiveDateTime{} = dt), do: NaiveDateTime.to_iso8601(dt)
+  defp dump(%DateTime{} = dt), do: DateTime.to_iso8601(dt)
+  defp dump(%Time{} = dt), do: Time.to_iso8601(dt)
+  defp dump(%Date{} = dt), do: Date.to_iso8601(dt)
+  defp dump(%Decimal{} = d), do: Decimal.to_string(d)
+  defp dump(val), do: val
 
   defp process_sources(conn, sources, is_static, is_write_operation) do
     sources = Tuple.to_list(sources)

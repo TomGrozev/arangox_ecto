@@ -56,17 +56,52 @@ defmodule ArangoXEcto do
 
     {query, vars} = process_vars(query, vars)
 
-    Arangox.transaction(
-      conn,
-      fn cursor ->
-        stream = Arangox.cursor(cursor, query, vars)
+    try do
+      Arangox.transaction(
+        conn,
+        fn cursor ->
+          stream = Arangox.cursor(cursor, query, vars)
 
-        Enum.reduce(stream, [], fn resp, acc ->
-          acc ++ resp.body["result"]
-        end)
-      end,
-      opts
-    )
+          Enum.reduce(stream, [], fn resp, acc ->
+            acc ++ resp.body["result"]
+          end)
+        end,
+        opts
+      )
+    rescue
+      e -> {:error, e}
+    end
+  end
+
+  @doc """
+  Same as `ArangoXEcto.aql_query/4 but will raise an error.`
+
+  If there is an error in the query such as a syntax error, an `Arangox.Error` will be raised.
+
+  ## Examples
+
+      iex> ArangoXEcto.aql_query!(
+            Repo,
+            "FOR var in users FILTER var.first_name == @fname AND var.last_name == @lname RETURN var",
+            fname: "John",
+            lname: "Smith"
+          )
+      [
+        %{
+          "_id" => "users/12345",
+          "_key" => "12345",
+          "_rev" => "_bHZ8PAK---",
+          "first_name" => "John",
+          "last_name" => "Smith"
+        }
+      ]
+  """
+  @spec aql_query!(Ecto.Repo.t(), query(), vars(), [DBConnection.option()]) :: list(map)
+  def aql_query!(repo, query, vars \\ [], opts \\ []) do
+    case aql_query(repo, query, vars, opts) do
+      {:ok, res} -> res
+      {:error, err} -> raise err
+    end
   end
 
   @doc """
@@ -364,6 +399,7 @@ defmodule ArangoXEcto do
         }
       ]
   """
+  @deprecated "Use load/2 instead"
   @spec raw_to_struct(map() | [map()], Ecto.Schema.t()) :: struct()
   def raw_to_struct(map, module) when is_list(map) and is_atom(module) do
     Enum.map(map, &raw_to_struct(&1, module))
@@ -381,6 +417,58 @@ defmodule ArangoXEcto do
   end
 
   def raw_to_struct(_, _), do: raise(ArgumentError, "Invalid input map or module")
+
+  @doc """
+  Loads raw map into ecto structs
+
+  Uses `Ecto.Repo.load/2` to load a deep map result into ecto structs
+
+  If a list of maps are passed then the maps are enumerated over.
+
+  ## Parameters
+
+  - `maps` - List of maps or singular map to convert to a struct
+  - `module` - Module to use for the struct
+
+  ## Example
+
+      iex> {:ok, users} = ArangoXEcto.aql_query(
+            Repo,
+            "FOR user IN users RETURN user"
+          )
+      {:ok,
+        [
+          %{
+            "_id" => "users/12345",
+            "_key" => "12345",
+            "_rev" => "_bHZ8PAK---",
+            "first_name" => "John",
+            "last_name" => "Smith"
+          }
+        ]}
+
+      iex> ArangoXEcto.load(users, User)
+      [
+        %User{
+          id: "12345",
+          first_name: "John",
+          last_name: "Smith"
+        }
+      ]
+  """
+  @spec load(map() | [map()], Ecto.Schema.t()) :: struct()
+  def load(map, module) when is_list(map) and is_atom(module),
+    do: Enum.map(map, &load(&1, module))
+
+  def load(%{"_id" => _id, "_key" => _key} = map, module)
+      when is_map(map) and is_atom(module) do
+    schema_type!(module)
+
+    Ecto.Repo.Schema.load(ArangoXEcto.Adapter, module, map)
+    |> add_associations(module, map)
+  end
+
+  def load(_, _), do: raise(ArgumentError, "Invalid input map or module")
 
   @doc """
   Generates a edge schema dynamically
@@ -563,6 +651,33 @@ defmodule ArangoXEcto do
         %{pid: conn} = Ecto.Adapter.lookup_meta(repo)
 
         conn
+    end
+  end
+
+  defp add_associations(%{} = loaded, module, %{} = map) when is_atom(module) do
+    module.__schema__(:associations)
+    |> Enum.reduce(loaded, fn assoc, acc ->
+      case Map.fetch(map, Atom.to_string(assoc)) do
+        {:ok, map_assoc} ->
+          insert_association(acc, assoc, module, map_assoc)
+
+        _ ->
+          acc
+      end
+    end)
+  end
+
+  defp insert_association(map, field, module, map_assoc) do
+    if Enum.member?(module.__schema__(:associations), field) do
+      case module.__schema__(:association, field) do
+        %{queryable: assoc_module} ->
+          Map.put(map, field, load(map_assoc, assoc_module))
+
+        _ ->
+          map
+      end
+    else
+      map
     end
   end
 
