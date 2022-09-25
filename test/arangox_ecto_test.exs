@@ -4,7 +4,7 @@ defmodule ArangoXEctoTest do
   use ExUnit.Case
   @moduletag :supported
 
-  alias ArangoXEctoTest.Integration.{Post, User, UserPosts, UserPostsOptions}
+  alias ArangoXEctoTest.Integration.{Class, Post, User, UserPosts, UserPostsOptions}
   alias ArangoXEctoTest.Repo
 
   import Ecto.Query
@@ -55,27 +55,24 @@ defmodule ArangoXEctoTest do
     context
   end
 
-  describe "aql_query/4" do
+  describe "aql_query/4 and aql_query!/4" do
     test "invalid AQL query" do
+      query = "FOsdfsdfgdfs abc"
+
+      {:error, %Arangox.Error{error_num: 1501}} = ArangoXEcto.aql_query(Repo, query)
+
       assert_raise Arangox.Error, ~r/\[400\] \[1501\] AQL: syntax error/i, fn ->
-        ArangoXEcto.aql_query(
-          Repo,
-          """
-          FOsdfsdfgdfs abc
-          """
-        )
+        ArangoXEcto.aql_query!(Repo, query)
       end
     end
 
     test "non existent collection AQL query" do
+      query = "FOR var in non_existent RETURN var"
+
+      {:error, %Arangox.Error{error_num: 1203}} = ArangoXEcto.aql_query(Repo, query)
+
       assert_raise Arangox.Error, ~r/\[404\] \[1203\] AQL: collection or view not found/, fn ->
-        ArangoXEcto.aql_query(
-          Repo,
-          """
-          FOR var in non_existent
-          RETURN var
-          """
-        )
+        ArangoXEcto.aql_query!(Repo, query)
       end
     end
 
@@ -86,30 +83,42 @@ defmodule ArangoXEctoTest do
 
       collection_name = User.__schema__(:source)
 
-      result =
-        ArangoXEcto.aql_query(
-          Repo,
-          """
-          FOR var in @@collection_name
-          FILTER var.first_name == @fname AND var.last_name == @lname
-          RETURN var
-          """,
-          [{:"@collection_name", collection_name}, fname: fname, lname: lname]
-        )
+      query = """
+      FOR var in @@collection_name
+      FILTER var.first_name == @fname AND var.last_name == @lname
+      RETURN var
+      """
 
-      assert Kernel.match?(
-               {:ok,
-                [
-                  %{
-                    "_id" => _,
-                    "_key" => _,
-                    "_rev" => _,
-                    "first_name" => ^fname,
-                    "last_name" => ^lname
-                  }
-                ]},
-               result
-             )
+      assert {:ok,
+              [
+                %{
+                  "_id" => _,
+                  "_key" => _,
+                  "_rev" => _,
+                  "first_name" => ^fname,
+                  "last_name" => ^lname
+                }
+              ]} =
+               ArangoXEcto.aql_query(Repo, query, [
+                 {:"@collection_name", collection_name},
+                 fname: fname,
+                 lname: lname
+               ])
+
+      assert [
+               %{
+                 "_id" => _,
+                 "_key" => _,
+                 "_rev" => _,
+                 "first_name" => ^fname,
+                 "last_name" => ^lname
+               }
+             ] =
+               ArangoXEcto.aql_query!(Repo, query, [
+                 {:"@collection_name", collection_name},
+                 fname: fname,
+                 lname: lname
+               ])
     end
   end
 
@@ -319,6 +328,107 @@ defmodule ArangoXEctoTest do
       assert_raise ArgumentError, ~r/Invalid input map or module/, fn ->
         ArangoXEcto.raw_to_struct("test", 123)
       end
+    end
+  end
+
+  describe "load/2" do
+    test "valid map" do
+      out =
+        %{
+          "_id" => "users/12345",
+          "_key" => "12345",
+          "_rev" => "_bHZ8PAK---",
+          "first_name" => "John",
+          "last_name" => "Smith"
+        }
+        |> ArangoXEcto.load(User)
+
+      assert Kernel.match?(%User{id: "12345", first_name: "John", last_name: "Smith"}, out)
+    end
+
+    test "invalid map" do
+      assert_raise ArgumentError, ~r/Invalid input map or module/, fn ->
+        %{
+          "_rev" => "_bHZ8PAK---",
+          "first_name" => "John",
+          "last_name" => "Smith"
+        }
+        |> ArangoXEcto.load(User)
+      end
+    end
+
+    test "invalid module" do
+      assert_raise ArgumentError, ~r/Not an Ecto Schema/, fn ->
+        %{
+          "_id" => "users/12345",
+          "_key" => "12345",
+          "_rev" => "_bHZ8PAK---",
+          "first_name" => "John",
+          "last_name" => "Smith"
+        }
+        |> ArangoXEcto.load(Ecto)
+      end
+    end
+
+    test "invalid argument types" do
+      assert_raise ArgumentError, ~r/Invalid input map or module/, fn ->
+        ArangoXEcto.load("test", 123)
+      end
+    end
+
+    test "loads embeds" do
+      out =
+        %{
+          "_id" => "users/12345",
+          "_key" => "12345",
+          "_rev" => "_bHZ8PAK---",
+          "first_name" => "John",
+          "last_name" => "Smith",
+          "class" => %{
+            "name" => "English"
+          }
+        }
+        |> ArangoXEcto.load(User)
+
+      assert Kernel.match?(
+               %User{
+                 id: "12345",
+                 first_name: "John",
+                 last_name: "Smith",
+                 class: %Class{name: "English"}
+               },
+               out
+             )
+    end
+
+    test "loads associations" do
+      out =
+        %{
+          "_id" => "users/12345",
+          "_key" => "12345",
+          "_rev" => "_bHZ8PAK---",
+          "first_name" => "John",
+          "last_name" => "Smith",
+          "posts" => [
+            %{
+              "_id" => "posts/12345",
+              "_key" => "12345",
+              "_rev" => "_bHZ8PAZ---",
+              "title" => "Test"
+            }
+          ]
+        }
+        |> ArangoXEcto.load(User)
+
+      assert Kernel.match?(
+               %User{
+                 id: "12345",
+                 first_name: "John",
+                 last_name: "Smith",
+                 posts: [%Post{id: "12345", title: "Test"}]
+               },
+               out
+             )
     end
   end
 

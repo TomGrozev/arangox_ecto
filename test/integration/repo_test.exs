@@ -98,6 +98,76 @@ defmodule ArangoXEctoTest.Integration.RepoTest do
       assert [] = Repo.all(from(a in "abc", select: a.id))
       Application.put_env(:arangox_ecto, :static, false)
     end
+
+    test "fetch count" do
+      %User{first_name: "John", last_name: "Smith"} |> Repo.insert!()
+      %User{first_name: "Ben", last_name: "John"} |> Repo.insert!()
+
+      assert [2] = Repo.all(from(u in User, select: count(u.id)))
+
+      assert_raise Ecto.QueryError, ~r/can only have one field with count/, fn ->
+        Repo.all(from(u in User, select: {count(u.first_name), count(u.id)}))
+      end
+
+      assert_raise Ecto.QueryError,
+                   ~r/can't have count fields and non count fields together/,
+                   fn ->
+                     Repo.all(from(u in User, select: {u.first_name, count(u.id)}))
+                   end
+    end
+
+    test "using ecto date functions" do
+      %User{first_name: "John", last_name: "Smith"} |> Repo.insert!()
+
+      assert [%User{}] = Repo.all(from(u in User, where: u.inserted_at > ago(1, "hour")))
+
+      assert [] = Repo.all(from(u in User, where: u.inserted_at < ago(1, "hour")))
+
+      assert [%User{}] = Repo.all(from(u in User, where: u.inserted_at < from_now(1, "hour")))
+
+      assert [] = Repo.all(from(u in User, where: u.inserted_at > from_now(1, "hour")))
+
+      assert [%User{}] =
+               Repo.all(
+                 from(u in User,
+                   where: u.inserted_at < datetime_add(^NaiveDateTime.utc_now(), 1, "day")
+                 )
+               )
+
+      assert [] =
+               Repo.all(
+                 from(u in User,
+                   where: u.inserted_at > datetime_add(^NaiveDateTime.utc_now(), 1, "day")
+                 )
+               )
+
+      assert [%User{}] =
+               Repo.all(
+                 from(u in User,
+                   where: u.inserted_at < date_add(^Date.utc_today(), 1, "day")
+                 )
+               )
+
+      assert [] =
+               Repo.all(
+                 from(u in User,
+                   where: u.inserted_at > date_add(^Date.utc_today(), 1, "day")
+                 )
+               )
+    end
+  end
+
+  describe "Repo.aggregate/3" do
+    test "can count" do
+      %User{first_name: "John", last_name: "Smith"} |> Repo.insert!()
+      %User{first_name: "Ben", last_name: "John"} |> Repo.insert!()
+
+      assert 2 = Repo.aggregate(User, :count)
+    end
+
+    test "empty collection" do
+      assert 0 = Repo.aggregate(User, :count)
+    end
   end
 
   describe "Repo.insert/2 and Repo.insert!/2" do
@@ -222,6 +292,31 @@ defmodule ArangoXEctoTest.Integration.RepoTest do
                Repo.update(user, returning: [:extra])
 
       assert {:ok, %User{extra: nil, last_name: "Snow"}} = Repo.update(user, returning: false)
+    end
+
+    test "returns stale error when updating deleted" do
+      user = %User{first_name: "John", last_name: "Smith"} |> Repo.insert!()
+
+      Repo.delete(user)
+
+      user_change = User.changeset(user, %{first_name: "Bob", last_name: "Snow"})
+
+      assert_raise Ecto.StaleEntryError, ~r/attempted to update a stale struct/, fn ->
+        Repo.update!(user_change)
+      end
+    end
+
+    test "can update when there is non _key index" do
+      %Comment{id: "333", text: "alpha", extra: "beta"} |> Repo.insert!()
+
+      assert {:ok, %Comment{id: "333", text: "alpha", extra: "charlie"}} =
+               %Comment{
+                 id: "333",
+                 text: "alpha"
+               }
+               |> Ecto.Changeset.change(extra: "charlie")
+               |> Ecto.Changeset.optimistic_lock(:text, fn c -> c end)
+               |> Repo.update()
     end
   end
 
