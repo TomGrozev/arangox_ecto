@@ -221,6 +221,10 @@ defmodule ArangoXEcto.Query do
     {[], values}
   end
 
+  defp get_collect_or_fields({0, 0}, _fields, _sources, _query) do
+    {[], ["1"]}
+  end
+
   defp get_collect_or_fields({c, _}, _fields, _sources, query) when c > 1,
     do: raise(Ecto.QueryError, message: "can only have one field with count", query: query)
 

@@ -16,7 +16,8 @@ defmodule ArangoXEcto.Adapter do
     :ok
   end
 
-  use Bitwise, only_operators: true
+  # import Bitwise
+  # use Bitwise, only_operators: true
 
   require Logger
 
