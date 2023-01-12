@@ -7,6 +7,7 @@ defmodule ArangoXEctoTest.Integration.User do
     field(:last_name, :string)
     field(:extra, :string)
     field(:extra2, :string)
+    field(:gender, Ecto.Enum, values: [male: 0, female: 1, other: 2], default: :male)
     field(:location, ArangoXEcto.Types.GeoJSON)
 
     embeds_one(:class, ArangoXEctoTest.Integration.Class, on_replace: :delete)
@@ -28,7 +29,7 @@ defmodule ArangoXEctoTest.Integration.User do
 
   def changeset(struct, attrs) do
     struct
-    |> cast(attrs, [:first_name, :last_name, :extra, :extra2])
+    |> cast(attrs, [:first_name, :last_name, :extra, :extra2, :gender])
     |> cast_embed(:class)
     |> cast_embed(:items, with: &items_changeset/2)
     |> validate_required([:first_name, :last_name])

@@ -106,8 +106,8 @@ defmodule ArangoXEcto.Adapter do
   def loaders(:time, _type), do: [&load_time/1]
   def loaders(:utc_datetime, _type), do: [&load_utc_datetime/1]
   def loaders(:naive_datetime, _type), do: [&NaiveDateTime.from_iso8601/1]
-  def loaders(:float, _type), do: [&load_float/1]
-  def loaders(:integer, _type), do: [&load_integer/1]
+  def loaders(:float, type), do: [&load_float/1, type]
+  def loaders(:integer, type), do: [&load_integer/1, type]
   def loaders(:decimal, _type), do: [&load_decimal/1]
   def loaders(_primitive, type), do: [type]
 
