@@ -703,4 +703,32 @@ defmodule ArangoXEctoTest.Integration.RepoTest do
     assert %Post{id: id} = Repo.insert!(%Post{title: "abc", text: "cba"})
     assert Repo.get(Post, id).virt == "iamavirtualfield"
   end
+
+  test "exists?" do
+    assert %Post{id: id} = Repo.insert!(%Post{title: "abc", text: "cba"})
+    assert Repo.exists?(from(p in Post, where: p.id == ^id))
+    refute Repo.exists?(from(p in Post, where: p.id == ^"unexisting id"))
+  end
+
+  @tag :focus
+  test "unsafe_validate_unique" do
+    import Ecto.Changeset
+
+    Repo.insert!(%Post{title: "abc", text: "cba"})
+
+    assert %Ecto.Changeset{
+             valid?: false,
+             errors: [
+               title: {"has already been taken", [validation: :unsafe_unique, fields: [:title]]}
+             ]
+           } =
+             %Post{}
+             |> cast(%{title: "abc"}, [:title])
+             |> unsafe_validate_unique(:title, Repo)
+
+    assert %Ecto.Changeset{valid?: true} =
+             %Post{}
+             |> cast(%{title: "new title"}, [:title])
+             |> unsafe_validate_unique(:title, Repo)
+  end
 end
