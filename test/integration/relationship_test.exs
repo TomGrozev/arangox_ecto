@@ -110,6 +110,16 @@ defmodule ArangoxEctoTest.Integration.RelationshipTest do
       assert [%{_from: ^user_id, _to: ^post_id}] = Repo.all(UserPosts)
     end
 
+    test "preload from and to" do
+      user = %User{} = %User{first_name: "John", last_name: "Smith"} |> Repo.insert!()
+
+      post = %Post{} = %Post{title: "abc"} |> Repo.insert!()
+
+      ArangoXEcto.create_edge(Repo, user, post, edge: UserPosts)
+
+      assert [%UserPosts{from: %User{}}] = Repo.all(UserPosts) |> Repo.preload(:from)
+    end
+
     test "relationship with reversed from and to" do
       user =
         %User{__id__: user_id} = %User{first_name: "John", last_name: "Smith"} |> Repo.insert!()

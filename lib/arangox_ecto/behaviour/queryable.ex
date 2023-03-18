@@ -94,6 +94,7 @@ defmodule ArangoXEcto.Behaviour.Queryable do
     end
   end
 
+  defp dump(list_type) when is_list(list_type), do: Enum.map(list_type, &dump/1)
   defp dump(%NaiveDateTime{} = dt), do: NaiveDateTime.to_iso8601(dt)
   defp dump(%DateTime{} = dt), do: DateTime.to_iso8601(dt)
   defp dump(%Time{} = dt), do: Time.to_iso8601(dt)

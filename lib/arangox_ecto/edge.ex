@@ -111,8 +111,8 @@ defmodule ArangoXEcto.Edge do
   """
   defmacro edge_fields do
     quote do
-      belongs_to(:from, @from, foreign_key: :_from)
-      belongs_to(:to, @to, foreign_key: :_to)
+      belongs_to(:from, @from, foreign_key: :_from, references: :__id__)
+      belongs_to(:to, @to, foreign_key: :_to, references: :__id__)
     end
   end
 

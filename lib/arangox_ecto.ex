@@ -28,7 +28,16 @@ defmodule ArangoXEcto do
   - `repo` - The Ecto repo module to use for queries
   - `query` - The AQL query string to execute
   - `vars` - A keyword list or a map with the values for variables in the query
-  - `opts` - Options to be passed to `DBConnection.transaction/3`
+  - `opts` - Options to be passed for the transaction
+
+  Accepts any of the options accepted by DBConnection.transaction/3, as well as any of the following:
+
+    :read - An array of collection names or a single collection name as a binary.
+    :write - An array of collection names or a single collection name as a binary.
+    :exclusive - An array of collection names or a single collection name as a binary.
+    :properties - A list or map of additional body attributes to append to the request body when beginning a transaction.
+
+  If doing a write operation, the `:write` operation must be passed. This is not explicitly required for read operations.
 
   ## Examples
 

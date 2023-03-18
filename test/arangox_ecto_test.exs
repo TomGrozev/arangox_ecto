@@ -120,6 +120,26 @@ defmodule ArangoXEctoTest do
                  lname: lname
                ])
     end
+
+    test "insert query" do
+      collection_name = User.__schema__(:source)
+      fname = "bob"
+
+      query = """
+      INSERT {first_name: @fname} into @@collection_name
+      """
+
+      assert {:ok, []} =
+               ArangoXEcto.aql_query(
+                 Repo,
+                 query,
+                 [
+                   {:"@collection_name", collection_name},
+                   fname: fname
+                 ],
+                 write: [collection_name]
+               )
+    end
   end
 
   describe "api_query/3" do

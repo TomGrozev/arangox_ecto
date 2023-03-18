@@ -16,4 +16,10 @@ defmodule ArangoXEctoTest.AdapterTest do
       assert loaded_location == location
     end
   end
+
+  describe "enum type" do
+    test "custom type is loaded and dumped correctly" do
+      assert {:ok, %User{gender: :other}} = Repo.insert(%User{gender: :other})
+    end
+  end
 end
