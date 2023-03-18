@@ -1,6 +1,6 @@
 # ArangoX Ecto
 
-[![github.com](https://img.shields.io/github/workflow/status/TomGrozev/arangox_ecto/CI.svg)](https://github.com/TomGrozev/arangox_ecto/actions)
+[![github.com](https://img.shields.io/github/actions/workflow/status/TomGrozev/arangox_ecto/ci.yml)](https://github.com/TomGrozev/arangox_ecto/actions)
 [![hex.pm](https://img.shields.io/hexpm/v/arangox_ecto.svg)](https://hex.pm/packages/arangox_ecto)
 [![hex.pm](https://img.shields.io/hexpm/dt/arangox_ecto.svg)](https://hex.pm/packages/arangox_ecto)
 [![hex.pm](https://img.shields.io/hexpm/l/arangox_ecto.svg)](https://hex.pm/packages/arangox_ecto)
