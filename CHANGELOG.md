@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.2.1
+
+### Fixes
+- Fix for Repo.exists?/1 function not working correctly (thanks @ilourt)
+- Resolved #55 - ability to use custom types (e.g. Enum) (thanks @mpoeter)
+- Fix for when dumping lists
+- Fix for #58 - preloading edge collection's `_to` and `_from` to reference `_id`
+
+### Doc changes
+- Added clarifying documentation (+ test) for write operations of `ArangoXEcto.aql_query/4` (thanks @mrsisk)
+
+### Repo Changes
+- Update test versions
+
 ## 1.2.0
 
 ### Enhancements
