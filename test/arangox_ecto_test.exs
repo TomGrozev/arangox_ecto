@@ -23,19 +23,33 @@ defmodule ArangoXEctoTest do
     %{pid: conn} = Ecto.Adapter.lookup_meta(Repo)
 
     # Get all collection names
-    res =
+    collection_res =
       case Arangox.get(conn, "/_api/collection") do
         {:ok, %Arangox.Response{body: %{"error" => false, "result" => result}}} -> result
         {:error, _} -> []
       end
 
+    # Get all collection names
+    view_res =
+      case Arangox.get(conn, "/_api/view") do
+        {:ok, %Arangox.Response{body: %{"error" => false, "result" => result}}} -> result
+        {:error, _} -> []
+      end
+
     collection_names =
-      Enum.map(res, fn %{"name" => name} -> name end)
+      Enum.map(collection_res, fn %{"name" => name} -> name end)
       |> Enum.filter(&(!String.starts_with?(&1, "_")))
+
+    view_names = Enum.map(view_res, fn %{"id" => id} -> id end)
 
     # Delete all collections
     for collection <- collection_names do
       Arangox.delete(conn, "/_api/collection/#{collection}")
+    end
+
+    # Delete all views
+    for view <- view_names do
+      Arangox.delete(conn, "/_api/view/#{view}")
     end
 
     # Create test collections
@@ -219,6 +233,16 @@ defmodule ArangoXEctoTest do
               %Arangox.Response{
                 body: %{"keyOptions" => %{"type" => "uuid"}}
               }} = Arangox.get(conn, "/_api/collection/user_posts_options/properties")
+    end
+  end
+
+  describe "create_view/2" do
+    test "creates a new view but fails on recreate" do
+      assert {:ok, %Arangox.Response{status: 201}} =
+               ArangoXEcto.create_view(Repo, ArangoXEctoTest.Integration.UsersView)
+
+      assert {:error, %Arangox.Error{error_num: 1207}} =
+               ArangoXEcto.create_view(Repo, ArangoXEctoTest.Integration.UsersView)
     end
   end
 

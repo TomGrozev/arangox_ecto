@@ -270,6 +270,33 @@ defmodule ArangoXEcto do
   end
 
   @doc """
+  Creates a view defined by some view schema
+
+  ## Parameters
+
+  - `repo` - The Ecto repo module to use for queries
+  - `view` - The View Schema to be created
+
+  ## Examples
+
+      iex> ArangoXEcto.create_view(Repo, MyApp.Views.UserSearch)
+      :ok
+
+  If there is an error in the schema
+
+      iex> ArangoXEcto.create_view(Repo, MyApp.Views.UserSearch)
+      {:error, %Arangox.Error{}}
+
+  """
+  @spec create_view(Ecto.Repo.t(), ArangoXEcto.View.t()) ::
+          :ok | {:error, Arangox.Error.t()}
+  def create_view(repo, view) do
+    view_definition = ArangoXEcto.View.definition(view) |> dbg()
+
+    ArangoXEcto.api_query(repo, :post, ["/_api/view", view_definition])
+  end
+
+  @doc """
   Deletes all edges matching matching the query
 
   If the `:conditions` option is set then those conditions must be true to delete.
