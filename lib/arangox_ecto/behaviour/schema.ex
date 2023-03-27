@@ -5,8 +5,6 @@ defmodule ArangoXEcto.Behaviour.Schema do
 
   require Logger
 
-  alias ArangoXEcto.Migration
-
   @doc """
   Called to autogenerate a value for id/embed_id/binary_id.
 
@@ -47,7 +45,7 @@ defmodule ArangoXEcto.Behaviour.Schema do
       "#{inspect(__MODULE__)}.insert-params" => %{document: inspect(doc)}
     })
 
-    maybe_create_collection(repo, schema, conn)
+    maybe_create_collection(repo, schema)
 
     Arangox.post(
       conn,
@@ -85,7 +83,7 @@ defmodule ArangoXEcto.Behaviour.Schema do
       "#{inspect(__MODULE__)}.insert_all-params" => %{documents: inspect(docs)}
     })
 
-    maybe_create_collection(repo, schema, conn)
+    maybe_create_collection(repo, schema)
 
     case Arangox.post(
            conn,
@@ -185,7 +183,7 @@ defmodule ArangoXEcto.Behaviour.Schema do
       "#{inspect(__MODULE__)}.update-params" => %{document: inspect(document)}
     })
 
-    maybe_create_collection(repo, schema, conn)
+    maybe_create_collection(repo, schema)
 
     Arangox.patch(
       conn,
@@ -262,41 +260,14 @@ defmodule ArangoXEcto.Behaviour.Schema do
 
   defp single_doc_result({:invalid, _} = res, _), do: res
 
-  defp maybe_create_collection(repo, schema, conn) when is_atom(repo) do
+  defp maybe_create_collection(repo, schema) when is_atom(repo) do
     type = ArangoXEcto.schema_type!(schema)
     collection_name = schema.__schema__(:source)
-    is_static = Keyword.get(repo.config(), :static, false)
-    collection_opts = schema.__collection_options__()
-    indexes = schema.__collection_indexes__()
 
-    unless ArangoXEcto.collection_exists?(conn, collection_name, type) do
-      if is_static do
-        raise("Collection (#{collection_name}) does not exist. Maybe a migration is missing.")
-      else
-        Migration.collection(collection_name, type, collection_opts)
-        |> Migration.create(conn)
-
-        maybe_create_indexes(conn, collection_name, indexes)
-      end
+    unless ArangoXEcto.collection_exists?(repo, collection_name, type) do
+      ArangoXEcto.create_collection(repo, schema)
     end
   end
-
-  defp maybe_create_indexes(_, _, []), do: :ok
-
-  defp maybe_create_indexes(conn, collection_name, %{} = indexes),
-    do: maybe_create_indexes(conn, collection_name, Map.to_list(indexes))
-
-  defp maybe_create_indexes(conn, collection_name, indexes) when is_list(indexes) do
-    for index <- indexes do
-      {fields, opts} = Keyword.pop(index, :fields)
-
-      Migration.index(collection_name, fields, opts)
-      |> Migration.create(conn)
-    end
-  end
-
-  defp maybe_create_indexes(_, _, _),
-    do: raise("Invalid indexes provided. Should be a list of keyword lists.")
 
   defp build_docs(fields) when is_list(fields) do
     Enum.map(

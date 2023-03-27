@@ -226,11 +226,11 @@ defmodule ArangoXEcto.View do
     if function_exported?(view, :__view__, 1) do
       %{
         name: view.__view__(:name),
-        type: "arangosearch",
-        links: view.__view__(:links) |> process_links(),
-        primarySort: view.__view__(:primary_sort),
-        storedValues: view.__view__(:stored_values)
+        type: "arangosearch"
       }
+      |> maybe_add_to_map(:links, view.__view__(:links) |> process_links())
+      |> maybe_add_to_map(:primarySort, view.__view__(:primary_sort))
+      |> maybe_add_to_map(:storedValues, view.__view__(:stored_values))
       |> Map.merge(Enum.into(view.__view__(:options), %{}))
     else
       raise ArgumentError, "not a valid view schema"
@@ -242,4 +242,7 @@ defmodule ArangoXEcto.View do
       Map.put(acc, schema.__schema__(:source), Link.to_map(link))
     end)
   end
+
+  defp maybe_add_to_map(map, _key, nil), do: map
+  defp maybe_add_to_map(map, key, value), do: Map.put(map, key, value)
 end

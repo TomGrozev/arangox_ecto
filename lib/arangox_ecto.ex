@@ -280,7 +280,7 @@ defmodule ArangoXEcto do
   ## Examples
 
       iex> ArangoXEcto.create_view(Repo, MyApp.Views.UserSearch)
-      :ok
+      {:ok, %Arangox.Response{}}
 
   If there is an error in the schema
 
@@ -289,11 +289,63 @@ defmodule ArangoXEcto do
 
   """
   @spec create_view(Ecto.Repo.t(), ArangoXEcto.View.t()) ::
-          :ok | {:error, Arangox.Error.t()}
+          {:ok, Arangox.Response.t()} | {:error, Arangox.Error.t()}
   def create_view(repo, view) do
-    view_definition = ArangoXEcto.View.definition(view) |> dbg()
+    view_definition = ArangoXEcto.View.definition(view)
+
+    # Create link collections if they don't exist
+    view.__view__(:links)
+    |> Enum.each(fn {collection, _} ->
+      maybe_create_collection(repo, collection)
+    end)
 
     ArangoXEcto.api_query(repo, :post, ["/_api/view", view_definition])
+  end
+
+  @doc """
+  Creates a collection defined by some schema
+
+  This function is only to be used in dynamic mode and will raise
+  an error if called in static mode. Instead use migrations if
+  in static mode.
+
+  ## Parameters
+
+  - `repo` - The Ecto repo module to use for queries
+  - `schema` - The Collection Schema to be created
+
+  ## Examples
+
+      iex> ArangoXEcto.create_collection(Repo, MyApp.Users)
+      :ok
+
+  If there is an error in the schema
+
+      iex> ArangoXEcto.create_collection(Repo, MyApp.Users)
+      {:error, %Arangox.Error{}}
+
+  """
+  @spec create_collection(Ecto.Repo.t(), ArangoXEcto.Schema.t()) :: :ok | {:error, any()}
+  def create_collection(repo, schema) do
+    if Keyword.get(repo.config(), :static, false) do
+      raise("This function cannot be called in static mode. Please use migrations instead.")
+    else
+      # will throw if not a schema
+      type = ArangoXEcto.schema_type!(schema)
+      collection_name = source_name(schema)
+      collection_opts = schema.__collection_options__()
+      indexes = schema.__collection_indexes__()
+
+      collection = Migration.collection(collection_name, type, collection_opts)
+
+      case Migration.create(collection, repo) do
+        :ok ->
+          maybe_create_indexes(repo, collection_name, indexes)
+
+        error ->
+          error
+      end
+    end
   end
 
   @doc """
@@ -899,18 +951,20 @@ defmodule ArangoXEcto do
   end
 
   defp maybe_create_edges_collection(schema, repo) do
-    collection_name = source_name(schema)
-    collection_opts = schema.__collection_options__()
-    indexes = schema.__collection_indexes__()
-
-    unless collection_exists?(repo, collection_name, :edge) do
-      Migration.collection(collection_name, :edge, collection_opts)
-      |> Migration.create(repo)
-
-      maybe_create_indexes(repo, collection_name, indexes)
+    unless collection_exists?(repo, source_name(schema), :edge) do
+      create_collection(repo, schema)
     end
 
     schema
+  end
+
+  defp maybe_create_collection(repo, schema) when is_atom(repo) do
+    type = ArangoXEcto.schema_type!(schema)
+    collection_name = schema.__schema__(:source)
+
+    unless ArangoXEcto.collection_exists?(repo, collection_name, type) do
+      ArangoXEcto.create_collection(repo, schema)
+    end
   end
 
   defp maybe_create_indexes(_, _, []), do: :ok
@@ -919,12 +973,16 @@ defmodule ArangoXEcto do
     do: maybe_create_indexes(repo, collection_name, Map.to_list(indexes))
 
   defp maybe_create_indexes(repo, collection_name, indexes) when is_list(indexes) do
-    for index <- indexes do
-      {fields, opts} = Keyword.pop(index, :fields)
+    Enum.reduce(indexes, nil, fn
+      _index, {:error, reason} ->
+        {:error, reason}
 
-      Migration.index(collection_name, fields, opts)
-      |> Migration.create(repo)
-    end
+      index, _acc ->
+        {fields, opts} = Keyword.pop(index, :fields)
+
+        Migration.index(collection_name, fields, opts)
+        |> Migration.create(repo)
+    end)
   end
 
   defp maybe_create_indexes(_, _, _),

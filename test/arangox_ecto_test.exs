@@ -244,6 +244,11 @@ defmodule ArangoXEctoTest do
       assert {:error, %Arangox.Error{error_num: 1207}} =
                ArangoXEcto.create_view(Repo, ArangoXEctoTest.Integration.UsersView)
     end
+
+    test "automatically creates collection if it doesn't exist" do
+      assert {:ok, %Arangox.Response{status: 201}} =
+               ArangoXEcto.create_view(Repo, ArangoXEctoTest.Integration.CommentView)
+    end
   end
 
   describe "delete_all_edges/4" do
