@@ -26,6 +26,7 @@ defmodule ArangoXEcto.Behaviour.Queryable do
     })
 
     aql_query = apply(ArangoXEcto.Query, cmd, [query])
+    dbg(aql_query)
     {:nocache, aql_query}
   end
 

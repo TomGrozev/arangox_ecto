@@ -3,6 +3,7 @@ defmodule ArangoXEctoTest.ViewTest do
   @moduletag :supported
 
   import Ecto.Query
+  import ArangoXEcto.Query, only: [search: 2, search: 3]
 
   alias ArangoXEctoTest.Repo
   alias ArangoXEctoTest.Integration.{User, UsersView}
@@ -26,6 +27,7 @@ defmodule ArangoXEctoTest.ViewTest do
 
     # Adds some test values into the test collections
     %User{first_name: "John", last_name: "Smith"} |> Repo.insert!()
+    %User{first_name: "Bob", last_name: "Smith"} |> Repo.insert!()
 
     [conn: conn]
   end
@@ -40,13 +42,35 @@ defmodule ArangoXEctoTest.ViewTest do
   end
 
   describe "searching using a view" do
-    test "can search using ecto query for a view" do
-      assert [%{first_name: "John", last_name: "Smith"}] = Repo.all(UsersView)
+    test "ecto query can load a view results" do
+      assert [%{first_name: "John", last_name: "Smith"}, _] = Repo.all(UsersView)
+
+      assert [%User{first_name: "John", last_name: "Smith"}, _] =
+               Repo.all(UsersView) |> ArangoXEcto.load(User)
     end
 
-    test "search loads view information" do
-      assert [%User{first_name: "John", last_name: "Smith"}] =
-               Repo.all(UsersView) |> ArangoXEcto.load(User)
+    test "can search using ecto query" do
+      query =
+        from(UsersView)
+        |> search(first_name: "John")
+        |> search([uv], uv.last_name == "Smith")
+
+      assert %{first_name: "John", last_name: "Smith"} = Repo.one(query)
+    end
+
+    test "can search using analyzer in ecto query" do
+      query =
+        from(UsersView)
+        |> search([uv], fragment("ANALYZER(? == ?, \"identity\")", uv.first_name, "John"))
+
+      assert %{first_name: "John", last_name: "Smith"} = Repo.one(query)
+
+      # make sure non existent analyzer returns empty
+      query =
+        from(UsersView)
+        |> search([uv], fragment("ANALYZER(? == ?, \"text_en\")", uv.first_name, "John"))
+
+      assert [] = Repo.all(query)
     end
 
     test "can search using aql for a view" do
