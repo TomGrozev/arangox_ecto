@@ -26,7 +26,6 @@ defmodule ArangoXEcto.Behaviour.Queryable do
     })
 
     aql_query = apply(ArangoXEcto.Query, cmd, [query])
-    dbg(aql_query)
     {:nocache, aql_query}
   end
 
@@ -47,7 +46,7 @@ defmodule ArangoXEcto.Behaviour.Queryable do
       }
     })
 
-    is_write_operation = String.match?(query, ~r/[update|delete] .+/i)
+    is_write_operation = String.match?(query, ~r/(update|delete) .+/i)
     is_static = Keyword.get(repo.config(), :static, false)
 
     {run_query, options} = process_sources(conn, sources, is_static, is_write_operation)

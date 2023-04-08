@@ -449,6 +449,11 @@ defmodule ArangoXEcto.Query do
     [name, ?. | quote_name(field)]
   end
 
+  defp expr({:&, _, [idx]}, sources, _query) do
+    {_, name, _} = elem(sources, idx)
+    [name]
+  end
+
   defp expr({:&, _, [idx, fields, _counter]}, sources, query) do
     {source, name, schema} = elem(sources, idx)
 

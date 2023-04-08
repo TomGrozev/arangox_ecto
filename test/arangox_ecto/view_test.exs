@@ -73,6 +73,16 @@ defmodule ArangoXEctoTest.ViewTest do
       assert [] = Repo.all(query)
     end
 
+    test "sorting by relevance" do
+      query =
+        from(UsersView)
+        |> search(last_name: "Smith")
+        |> order_by([uv], fragment("BM25(?)", uv))
+        |> select([uv], {uv.first_name, fragment("BM25(?)", uv)})
+
+      assert [{"John", score}, {"Bob", score}] = Repo.all(query)
+    end
+
     test "can search using aql for a view" do
       ArangoXEcto.aql_query(
         Repo,
