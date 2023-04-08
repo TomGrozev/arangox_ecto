@@ -654,6 +654,37 @@ defmodule ArangoXEcto do
   end
 
   @doc """
+  Checks if a view exists
+
+  This will return true if the view exists in the database, otherwise false.
+
+  ## Parameters
+
+  - `repo` - The Ecto repo module to use for the query
+  - `view_name` - Name of the collection to check
+
+  ## Examples
+
+  Checking a document collection exists
+
+      iex> ArangoXEcto.view_exists?(Repo, :users_search)
+      true
+  """
+  @spec view_exists?(Ecto.Repo.t() | pid(), binary() | atom()) :: boolean()
+  def view_exists?(repo_or_conn, view_name) when is_binary(view_name) or is_atom(view_name) do
+    conn = gen_conn_from_repo(repo_or_conn)
+
+    Arangox.get(conn, "/_api/view/#{view_name}")
+    |> case do
+      {:ok, %Arangox.Response{}} ->
+        true
+
+      _any ->
+        false
+    end
+  end
+
+  @doc """
   Returns if a Schema is an edge or not
 
   Checks for the presence of the `__edge__/0` function on the module.
@@ -675,11 +706,27 @@ defmodule ArangoXEcto do
   def is_document?(_), do: false
 
   @doc """
+  Returns if a Schema is a view schema or not
+
+  Checks for the presence of the `__view__/1` function on the module.
+  """
+  @spec is_view?(atom()) :: boolean()
+  def is_view?(module) when is_atom(module),
+    do: function_exported?(module, :__view__, 1)
+
+  def is_view?(_), do: false
+
+  @doc """
   Returns the type of a module
 
-  This is just a shortcut to using `is_edge/1` and `is_document/1`. If it is neither nil is returned.
+  This is just a shortcut to using `is_edge/1`, `is_document/1` and `is_view/1`. If it is none of them nil is returned.
 
   ## Examples
+
+  A real view
+
+      iex> ArangoXEcto.schema_type(MyApp.SomeView)
+      :view
 
   A real edge schema
 
@@ -694,6 +741,7 @@ defmodule ArangoXEcto do
   @spec schema_type(atom()) :: :document | :edge | nil
   def schema_type(module) do
     cond do
+      is_view?(module) -> :view
       is_edge?(module) -> :edge
       is_document?(module) -> :document
       true -> nil
@@ -703,7 +751,7 @@ defmodule ArangoXEcto do
   @doc """
   Same as schema_type/1 but throws an error on none
 
-  This is just a shortcut to using `is_edge/1` and `is_document/1`. If it is neither an error is raised.
+  This is just a shortcut to using `is_edge/1`, `is_document/1` and `is_view/1`. If it is none of them nil is returned.
 
   ## Examples
 
@@ -958,7 +1006,7 @@ defmodule ArangoXEcto do
     schema
   end
 
-  defp maybe_create_collection(repo, schema) when is_atom(repo) do
+  defp maybe_create_collection(repo, schema) when is_atom(repo) or is_pid(repo) do
     type = ArangoXEcto.schema_type!(schema)
     collection_name = schema.__schema__(:source)
 

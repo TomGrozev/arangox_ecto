@@ -40,7 +40,6 @@ defmodule ArangoXEcto.View do
     end
   """
 
-  # alias ArangoXEcto.View.{Link, Metadata}
   alias ArangoXEcto.View.Link
 
   @type name :: String.t()
@@ -80,33 +79,20 @@ defmodule ArangoXEcto.View do
   Defines a view
   """
   defmacro view(name, do: block) do
-    view(__CALLER__, name, true, block)
+    view(__CALLER__, name, block)
   end
 
-  defp view(caller, name, meta?, block) do
+  # credo:disable-for-next-line Credo.Check.Refactor.CyclomaticComplexity
+  defp view(caller, name, block) do
     prelude =
       quote do
         if line = Module.get_attribute(__MODULE__, :arango_view_defined) do
           raise "view schema already defined for #{inspect(__MODULE__)} on line #{line}"
         end
 
-        @view_name unquote(name)
+        name = unquote(name)
 
         @arango_view_defined unquote(caller.line)
-
-        meta? = unquote(meta?)
-
-        if meta? do
-          unless is_binary(@view_name) do
-            raise ArgumentError, "view name must be a string, got: #{inspect(@view_name)}"
-          end
-
-          meta = %ArangoXEcto.View.Metadata{
-            state: :built,
-            name: @view_name,
-            view: __MODULE__
-          }
-        end
 
         try do
           import ArangoXEcto.View
@@ -116,21 +102,35 @@ defmodule ArangoXEcto.View do
         end
       end
 
-    postlude = set_view_definitions()
+    postlude =
+      quote unquote: false do
+        def __view__(:name), do: unquote(name)
+        def __view__(:primary_sort), do: @view_primary_sort
+        def __view__(:stored_values), do: @view_stored_values
+        def __view__(:links), do: @view_links
+        def __view__(:options), do: @view_options
+
+        def __schema__(:source), do: unquote(name)
+        def __schema__(:prefix), do: nil
+        def __schema__(:loaded), do: %{}
+
+        def __schema__(:query) do
+          %Ecto.Query{
+            from: %Ecto.Query.FromExpr{
+              source: {unquote(name), __MODULE__}
+            }
+          }
+        end
+
+        for clauses <- ArangoXEcto.View.__schema__(@view_links),
+            {args, body} <- clauses do
+          def __schema__(unquote_splicing(args)), do: unquote(body)
+        end
+      end
 
     quote do
       unquote(prelude)
       unquote(postlude)
-    end
-  end
-
-  defp set_view_definitions do
-    quote unquote: false do
-      def __view__(:name), do: @view_name
-      def __view__(:primary_sort), do: @view_primary_sort
-      def __view__(:stored_values), do: @view_stored_values
-      def __view__(:links), do: @view_links
-      def __view__(:options), do: @view_options
     end
   end
 
@@ -235,6 +235,41 @@ defmodule ArangoXEcto.View do
     else
       raise ArgumentError, "not a valid view schema"
     end
+  end
+
+  @doc false
+  def __schema__(links) do
+    {primary_keys, query_fields, fields, field_sources} =
+      Enum.reduce(
+        links,
+        {MapSet.new(), MapSet.new(), %{}, %{}},
+        fn {schema, _}, {primary_keys, query_fields, fields, field_sources} ->
+          {new_fields, new_field_sources} = get_field_info(fields, field_sources, schema)
+
+          {MapSet.union(primary_keys, MapSet.new(schema.__schema__(:primary_key))),
+           MapSet.union(query_fields, MapSet.new(schema.__schema__(:query_fields))), new_fields,
+           new_field_sources}
+        end
+      )
+
+    [
+      [
+        {[:primary_key], MapSet.to_list(primary_keys)},
+        {[:query_fields], MapSet.to_list(query_fields)},
+        {[:hash], :erlang.phash2({primary_keys, query_fields})},
+        {[:fields], Enum.map(fields, &elem(&1, 0))}
+      ]
+      | Ecto.Schema.__schema__(fields, field_sources, [], [], [])
+    ]
+  end
+
+  defp get_field_info(fields, field_sources, schema) do
+    Enum.reduce(schema.__schema__(:fields), {fields, field_sources}, fn field,
+                                                                        {a_fields,
+                                                                         a_field_sources} ->
+      {Map.put_new(a_fields, field, schema.__schema__(:type, field)),
+       Map.put_new(a_field_sources, field, schema.__schema__(:field_source, field))}
+    end)
   end
 
   defp process_links(links) do
