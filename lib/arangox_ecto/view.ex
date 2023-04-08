@@ -72,6 +72,11 @@ defmodule ArangoXEcto.View do
   defmacro __using__(_) do
     quote do
       import ArangoXEcto.View, only: [view: 2]
+
+      @view_primary_sort nil
+      @view_stored_values nil
+      @view_links nil
+      @view_options nil
     end
   end
 
