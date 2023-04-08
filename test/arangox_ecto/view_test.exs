@@ -4,8 +4,7 @@ defmodule ArangoXEctoTest.ViewTest do
 
   import Ecto.Query
 
-  alias ArangoXEcto.View
-  alias ArangoXEctoTest.{ArangoRepo, Repo}
+  alias ArangoXEctoTest.Repo
   alias ArangoXEctoTest.Integration.{User, UsersView}
 
   @test_collections [
@@ -43,6 +42,11 @@ defmodule ArangoXEctoTest.ViewTest do
   describe "searching using a view" do
     test "can search using ecto query for a view" do
       assert [%{first_name: "John", last_name: "Smith"}] = Repo.all(UsersView)
+    end
+
+    test "search loads view information" do
+      assert [%User{first_name: "John", last_name: "Smith"}] =
+               Repo.all(UsersView) |> ArangoXEcto.load(User)
     end
 
     test "can search using aql for a view" do

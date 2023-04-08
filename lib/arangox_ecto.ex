@@ -513,10 +513,18 @@ defmodule ArangoXEcto do
 
   If a list of maps are passed then the maps are enumerated over.
 
+  A list of modules can also be passes for possible types. The `_id`
+  field is used to check against the module schemas. This is especially
+  useful for querying against arango views where there may be multiple
+  schema results returned.
+
+  If a module is passed that isn't a Ecto Schema then an error will be
+  raised.
+
   ## Parameters
 
   - `maps` - List of maps or singular map to convert to a struct
-  - `module` - Module to use for the struct
+  - `module` - Module(s) to use for the struct
 
   ## Example
 
@@ -544,15 +552,38 @@ defmodule ArangoXEcto do
         }
       ]
   """
-  @spec load(map() | [map()], Ecto.Schema.t()) :: struct()
-  def load(map, module) when is_list(map) and is_atom(module),
+  @spec load(map() | [map()], Ecto.Schema.t() | [Ecto.Schema.t()]) :: struct()
+  def load(map, module) when is_atom(module),
+    do: load(map, [module])
+
+  def load(map, module) when is_list(map),
     do: Enum.map(map, &load(&1, module))
 
-  def load(%{"_id" => _id, "_key" => _key} = map, module)
-      when is_map(map) and is_atom(module) do
-    schema_type!(module)
+  def load(%{"_id" => id} = map, modules) do
+    [source, _key] = String.split(id, "/")
+
+    module =
+      Enum.find(modules, fn mod ->
+        schema_type!(mod)
+
+        mod.__schema__(:source) == source
+      end)
 
     Ecto.Repo.Schema.load(ArangoXEcto.Adapter, module, map)
+    |> add_associations(module, map)
+  end
+
+  def load(%{__id__: id} = map, modules) do
+    [source, _key] = String.split(id, "/")
+
+    module =
+      Enum.find(modules, fn mod ->
+        schema_type!(mod)
+
+        mod.__schema__(:source) == source
+      end)
+
+    struct(module, map)
     |> add_associations(module, map)
   end
 
