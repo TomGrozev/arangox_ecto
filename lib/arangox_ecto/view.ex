@@ -6,12 +6,14 @@ defmodule ArangoXEcto.View do
 
   ## Creation
 
-  A view does not exist in migrations (at this time) and will automatically be created
-  on query if using an Ecto query. Like for collections, this check does not exist on the
-  `ArangoXEcto.aql_query/4` function and will error, so make sure the view exists first.
+  Like for collections, the same static vs dynamic system is in place.
+  If in dynamic mode and a collection that a view links to doesn't exist when querying,
+  it will be created automatically. If in static mode an error will be raised if the the
+  appropriate migration has not been made. Check out the `ArangoXEcto.Migration` module for
+  more info.
 
-  If in dynamic mode and a collection that a view links to doesn't exist, it will be created
-  automatically. If in static mode an error will be raised.
+  Like for collections, there is no check if a view exists when use the
+  `ArangoXEcto.aql_query/4` function and will error, so make sure the view exists first.
 
   ### Example
 

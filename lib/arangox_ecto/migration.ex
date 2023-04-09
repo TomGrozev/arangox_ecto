@@ -2,7 +2,10 @@ defmodule ArangoXEcto.Migration do
   @moduledoc """
   Defines Ecto Migrations for ArangoDB
 
-  **NOTE: ArangoXEcto dynamically creates collections for you by default. Depending on your project architecture you may decide to use static migrations instead in which case this module will be useful.**
+  > ## NOTE {: .info}
+  >
+  > ArangoXEcto dynamically creates collections for you by default. Depending on your project
+  > architecture you may decide to use static migrations instead in which case this module will be useful.
 
   Migrations must use this module, otherwise migrations will not work. To do this, replace
   `use Ecto.Migration` with `use ArangoXEcto.Migration`.
@@ -23,6 +26,7 @@ defmodule ArangoXEcto.Migration do
 
         def up do
           create(collection(:users))
+          create(MyProject.UsersView)
 
           create(index("users", [:email]))
         end
@@ -123,7 +127,10 @@ defmodule ArangoXEcto.Migration do
   @doc """
   Creates an object
 
-  Will create the passed object, either a collection or an index.
+  Will create the passed object, one of a collection, an index, or a view.
+
+  Since view schemas are just module definitions we can use them directly here. Therefore
+  the module is just passed directly.
 
   ## Examples
 
@@ -136,9 +143,14 @@ defmodule ArangoXEcto.Migration do
 
       iex> create(index("users", [:email])
       :ok
+
+  Create a view
+
+      iex> create(MyProject.UsersView)
+      :ok
   """
-  @spec create(Collection.t() | Index.t()) :: :ok | {:error, binary()}
-  def create(collection_or_index, conn \\ nil)
+  @spec create(Collection.t() | Index.t() | atom()) :: :ok | {:error, binary()}
+  def create(object_to_create, conn \\ nil)
 
   def create(%Collection{} = collection, conn) do
     {:ok, conn} = get_db_conn(conn)
@@ -180,6 +192,24 @@ defmodule ArangoXEcto.Migration do
 
         Logger.debug("#{inspect(__MODULE__)}.create", %{
           "#{inspect(__MODULE__)}.create-index" => %{index: index, message: msg}
+        })
+
+        {:error, msg}
+    end
+  end
+
+  def create(module, conn) when is_atom(module) do
+    {:ok, conn} = get_db_conn(conn)
+
+    case ArangoXEcto.create_view(conn, module) do
+      {:ok, _} ->
+        :ok
+
+      {:error, %{status: status, message: message}} ->
+        msg = "#{status} - #{message}"
+
+        Logger.debug("#{inspect(__MODULE__)}.create", %{
+          "#{inspect(__MODULE__)}.create-view" => %{view: module, message: msg}
         })
 
         {:error, msg}

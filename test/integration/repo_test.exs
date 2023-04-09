@@ -3,7 +3,7 @@ defmodule ArangoXEctoTest.Integration.RepoTest do
 
   import Ecto.Query
 
-  alias ArangoXEctoTest.Repo
+  alias ArangoXEctoTest.{Repo, StaticRepo}
   alias ArangoXEctoTest.Integration.{Comment, Post, User}
 
   @test_collections [
@@ -94,9 +94,9 @@ defmodule ArangoXEctoTest.Integration.RepoTest do
     test "query from non existent collection" do
       assert [] = Repo.all(from(a in "abc", select: a.id))
 
-      Application.put_env(:arangox_ecto, :static, true)
-      assert [] = Repo.all(from(a in "abc", select: a.id))
-      Application.put_env(:arangox_ecto, :static, false)
+      assert_raise RuntimeError, ~r/does not exist. Maybe a migration is missing/, fn ->
+        StaticRepo.all(from(a in "abc", select: a.id))
+      end
     end
 
     test "fetch count" do

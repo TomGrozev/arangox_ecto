@@ -5,7 +5,7 @@ defmodule ArangoXEctoTest.ViewTest do
   import Ecto.Query
   import ArangoXEcto.Query, only: [search: 2, search: 3]
 
-  alias ArangoXEctoTest.Repo
+  alias ArangoXEctoTest.{Repo, StaticRepo}
   alias ArangoXEctoTest.Integration.{User, UsersView}
 
   @test_collections [
@@ -13,7 +13,8 @@ defmodule ArangoXEctoTest.ViewTest do
   ]
 
   @test_views [
-    :user_search
+    :user_search,
+    :comment_search
   ]
 
   # Gets connection
@@ -42,6 +43,12 @@ defmodule ArangoXEctoTest.ViewTest do
   end
 
   describe "searching using a view" do
+    test "does not allow querying of non-existent view in static mode" do
+      assert_raise RuntimeError, ~r/does not exist. Maybe a migration is missing/, fn ->
+        StaticRepo.all(UsersView)
+      end
+    end
+
     test "ecto query can load a view results" do
       assert [%{first_name: "John", last_name: "Smith"}, _] = Repo.all(UsersView)
 

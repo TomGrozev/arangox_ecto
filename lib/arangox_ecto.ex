@@ -272,6 +272,10 @@ defmodule ArangoXEcto do
   @doc """
   Creates a view defined by some view schema
 
+  This function is only to be used in dynamic mode and will raise
+  an error if called in static mode. Instead use migrations if
+  in static mode.
+
   ## Parameters
 
   - `repo` - The Ecto repo module to use for queries
@@ -289,18 +293,22 @@ defmodule ArangoXEcto do
 
   """
   @doc since: "1.3.0"
-  @spec create_view(Ecto.Repo.t(), ArangoXEcto.View.t()) ::
+  @spec create_view(Ecto.Repo.t() | pid(), ArangoXEcto.View.t()) ::
           {:ok, Arangox.Response.t()} | {:error, Arangox.Error.t()}
   def create_view(repo, view) do
-    view_definition = ArangoXEcto.View.definition(view)
+    if not is_pid(repo) and Keyword.get(repo.config(), :static, false) do
+      raise("This function cannot be called in static mode. Please use migrations instead.")
+    else
+      view_definition = ArangoXEcto.View.definition(view)
 
-    # Create link collections if they don't exist
-    view.__view__(:links)
-    |> Enum.each(fn {collection, _} ->
-      maybe_create_collection(repo, collection)
-    end)
+      # Create link collections if they don't exist
+      view.__view__(:links)
+      |> Enum.each(fn {collection, _} ->
+        maybe_create_collection(repo, collection)
+      end)
 
-    ArangoXEcto.api_query(repo, :post, ["/_api/view", view_definition])
+      ArangoXEcto.api_query(repo, :post, ["/_api/view", view_definition])
+    end
   end
 
   @doc """
