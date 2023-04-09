@@ -15,7 +15,7 @@ defmodule ArangoXEcto.Query do
   alias Ecto.Query.{BooleanExpr, Builder, JoinExpr, QueryExpr}
 
   @doc """
-  Creates an AQL query to fetch all entries from the data store matching the given query.
+  Creates an AQL query to fetch all entries from the data store matching the given Ecto query.
   """
   @spec all(Query.t()) :: binary()
   def all(%Query{} = query) do
@@ -33,7 +33,7 @@ defmodule ArangoXEcto.Query do
   end
 
   @doc """
-  Creates an AQL query to delete all entries from the data store matching the given query.
+  Creates an AQL query to delete all entries from the data store matching the given Ecto query.
   """
   @spec delete_all(Query.t()) :: binary()
   def delete_all(query) do
@@ -53,7 +53,7 @@ defmodule ArangoXEcto.Query do
   end
 
   @doc """
-  Creates an AQL query to update all entries from the data store matching the given query.
+  Creates an AQL query to update all entries from the data store matching the given Ecto query.
   """
   @spec update_all(Query.t()) :: binary()
   def update_all(query) do
@@ -102,6 +102,7 @@ defmodule ArangoXEcto.Query do
       |> Repo.all()
 
   """
+  @doc since: "1.3.0"
   defmacro search(query, binding \\ [], expr) do
     build_search(:and, query, binding, expr, __CALLER__)
   end
@@ -114,6 +115,7 @@ defmodule ArangoXEcto.Query do
   This function is the same as `ArangoXEcto.Query.search/3` except implements as an or clause.
   This also follows the same syntax as the `Ecto.Query.or_where/3` function.
   """
+  @doc since: "1.3.0"
   defmacro or_search(query, binding \\ [], expr) do
     build_search(:or, query, binding, expr, __CALLER__)
   end

@@ -159,25 +159,18 @@ defmodule ArangoXEctoTest.Integration.UsersView do
   alias ArangoXEcto.View.Link
 
   view "user_search" do
-    primary_sort([
-      %{field: :created_at, direction: :asc}
-    ])
+    primary_sort(:created_at, :asc)
 
-    stored_values([
-      %{fields: [:name], compression: :lz4}
-    ])
+    store_value([:first_name], :lz4)
 
-    links([
-      {ArangoXEctoTest.Integration.User,
-       %Link{
-         includeAllFields: true,
-         fields: %{
-           name: %Link{
-             analyzers: [:text_en]
-           }
-         }
-       }}
-    ])
+    link(ArangoXEctoTest.Integration.User, %Link{
+      includeAllFields: true,
+      fields: %{
+        last_name: %Link{
+          analyzers: [:text_en]
+        }
+      }
+    })
 
     options(primarySortCompression: :lz4)
   end
@@ -189,17 +182,17 @@ defmodule ArangoXEctoTest.Integration.CommentView do
   alias ArangoXEcto.View.Link
 
   view "comment_search" do
-    links([
-      {ArangoXEctoTest.Integration.Comment,
-       %Link{
-         includeAllFields: true,
-         fields: %{
-           name: %Link{
-             analyzers: [:text_en]
-           }
-         }
-       }}
-    ])
+    link(
+      ArangoXEctoTest.Integration.Comment,
+      %Link{
+        includeAllFields: true,
+        fields: %{
+          name: %Link{
+            analyzers: [:text_en]
+          }
+        }
+      }
+    )
 
     options(primarySortCompression: :lz4)
   end

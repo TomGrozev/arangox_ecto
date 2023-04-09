@@ -26,8 +26,8 @@ defmodule ArangoXEctoTest.ViewTest do
     end
 
     # Adds some test values into the test collections
-    %User{first_name: "John", last_name: "Smith"} |> Repo.insert!()
-    %User{first_name: "Bob", last_name: "Smith"} |> Repo.insert!()
+    %User{first_name: "John", last_name: "Smith", gender: :male} |> Repo.insert!()
+    %User{first_name: "Bob", last_name: "Smith", gender: :male} |> Repo.insert!()
 
     [conn: conn]
   end
@@ -53,7 +53,13 @@ defmodule ArangoXEctoTest.ViewTest do
       query =
         from(UsersView)
         |> search(first_name: "John")
-        |> search([uv], uv.last_name == "Smith")
+        |> search([uv], uv.gender == :male)
+
+      assert %{first_name: "John", last_name: "Smith"} = Repo.one(query)
+
+      query =
+        UsersView
+        |> search(first_name: "John")
 
       assert %{first_name: "John", last_name: "Smith"} = Repo.one(query)
     end
@@ -94,7 +100,7 @@ defmodule ArangoXEctoTest.ViewTest do
     test "sorting by relevance" do
       query =
         from(UsersView)
-        |> search(last_name: "Smith")
+        |> search(gender: :male)
         |> order_by([uv], fragment("BM25(?)", uv))
         |> select([uv], {uv.first_name, fragment("BM25(?)", uv)})
 

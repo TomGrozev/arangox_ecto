@@ -288,6 +288,7 @@ defmodule ArangoXEcto do
       {:error, %Arangox.Error{}}
 
   """
+  @doc since: "1.3.0"
   @spec create_view(Ecto.Repo.t(), ArangoXEcto.View.t()) ::
           {:ok, Arangox.Response.t()} | {:error, Arangox.Error.t()}
   def create_view(repo, view) do
@@ -742,6 +743,7 @@ defmodule ArangoXEcto do
 
   Checks for the presence of the `__view__/1` function on the module.
   """
+  @doc since: "1.3.0"
   @spec is_view?(atom()) :: boolean()
   def is_view?(module) when is_atom(module),
     do: function_exported?(module, :__view__, 1)

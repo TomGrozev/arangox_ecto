@@ -1,7 +1,23 @@
 defmodule ArangoXEcto.View.Link do
   @moduledoc """
-  Stores a link of a view
+  Defines the structure of a link
+
+  This follows the format of the link properties defined in ArangoDB. For more
+  information [check out the ArangoDB docs](https://www.arangodb.com/docs/stable/arangosearch-views.html#link-properties).
+
+  ## Example
+
+    %ArangoXEcto.View.Link{
+      includeAllFields: true,
+      fields: %{
+        name: %ArangoXEcto.View.Link{
+          analyzers: [:text_en]
+        }
+      }
+    }
+
   """
+  @moduledoc since: "1.3.0"
 
   require Logger
 
@@ -27,6 +43,11 @@ defmodule ArangoXEcto.View.Link do
 
   @doc """
   Validates a link
+
+  This checks the types and strucute of a provided link struct.
+
+  If a link is invalid for any reason this will return false. Using this allows for validation before
+  sending to the DB.
   """
   @spec valid?(t()) :: :ok | {:error, String.t()}
   def valid?(%__MODULE__{} = link) do
@@ -45,6 +66,8 @@ defmodule ArangoXEcto.View.Link do
 
   @doc """
   Converts to a map for api call
+
+  This will convert any structs into maps in a deeply nested link definition.
   """
   @spec to_map(t()) :: map()
   def to_map(link) do
@@ -59,6 +82,10 @@ defmodule ArangoXEcto.View.Link do
     }
     |> remove_nil_values()
   end
+
+  ###########
+  # Helpers #
+  ###########
 
   defp map_of_links(nil), do: nil
 
