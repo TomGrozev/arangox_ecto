@@ -44,29 +44,6 @@ defmodule ArangoXEcto.View do
 
   @type name :: String.t()
   @type compression :: :lz4 | :none
-  # @type t :: %__MODULE__{
-  #         name: String.t(),
-  #         primarySort: [%{field: atom(), direction: :asc | :desc}],
-  #         primarySortCompression: compression(),
-  #         storedValues: [%{fields: list(String.t()), compression: compression()}],
-  #         links: %{Ecto.Schema.t() => ArangoXEcto.View.Link.t()},
-  #         writebufferIdle: integer(),
-  #         writebufferIdle: integer(),
-  #         writebufferSizeMax: integer(),
-  #         commitIntervalMsec: integer(),
-  #         cleanupIntervalStep: integer(),
-  #         consolidationIntervalMsec: integer(),
-  #         consolidationPolicy:
-  #           %{
-  #             type: :tier,
-  #             segmentsMin: integer(),
-  #             segmentsMax: integer(),
-  #             segmentsBytesMax: integer(),
-  #             segmentsBytesFloor: integer(),
-  #             minScore: integer()
-  #           }
-  #           | %{type: :bytes_accum, threshold: float()}
-  #       }
 
   @doc false
   defmacro __using__(_) do
@@ -226,6 +203,9 @@ defmodule ArangoXEcto.View do
 
   @doc """
   Generates the view definition
+
+  This takes the macros that define the view and converts it into
+  a definition for use on creation.
   """
   def definition(view) when is_atom(view) do
     if function_exported?(view, :__view__, 1) do

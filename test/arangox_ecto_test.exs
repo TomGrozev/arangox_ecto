@@ -246,8 +246,16 @@ defmodule ArangoXEctoTest do
     end
 
     test "automatically creates collection if it doesn't exist" do
+      # Comments collection doesn't exist by default
       assert {:ok, %Arangox.Response{status: 201}} =
                ArangoXEcto.create_view(Repo, ArangoXEctoTest.Integration.CommentView)
+    end
+
+    test "error on invalid view schema" do
+      # Not a view schema
+      assert_raise ArgumentError, ~r/not a valid view schema/, fn ->
+        ArangoXEcto.create_view(Repo, ArangoXEcto)
+      end
     end
   end
 

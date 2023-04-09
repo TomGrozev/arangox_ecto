@@ -37,6 +37,8 @@ defmodule ArangoXEcto.Query do
   """
   @spec delete_all(Query.t()) :: binary()
   def delete_all(query) do
+    ensure_not_view(query)
+
     sources = create_names(query)
 
     from = from(query, sources)
@@ -55,6 +57,8 @@ defmodule ArangoXEcto.Query do
   """
   @spec update_all(Query.t()) :: binary()
   def update_all(query) do
+    ensure_not_view(query)
+
     sources = create_names(query)
 
     from = from(query, sources)
@@ -131,6 +135,15 @@ defmodule ArangoXEcto.Query do
   #
   # Helpers
   #
+
+  defp ensure_not_view(%{sources: sources}) do
+    sources
+    |> Tuple.to_list()
+    |> Enum.any?(fn {_, schema, _} -> ArangoXEcto.is_view?(schema) end)
+    |> if do
+      raise ArgumentError, "queries containing views cannot be update or delete operations"
+    end
+  end
 
   defp build_search(op, query, binding, expr, env) do
     {query, binding} = Builder.escape_binding(query, binding, env)

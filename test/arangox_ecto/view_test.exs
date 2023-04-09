@@ -58,6 +58,24 @@ defmodule ArangoXEctoTest.ViewTest do
       assert %{first_name: "John", last_name: "Smith"} = Repo.one(query)
     end
 
+    test "cannot update or delete a view" do
+      query =
+        from(UsersView)
+        |> search(first_name: "John")
+
+      assert_raise ArgumentError,
+                   ~r/queries containing views cannot be update or delete operations/,
+                   fn ->
+                     Repo.update_all(query |> update(set: [last_name: "McClean"]), [])
+                   end
+
+      assert_raise ArgumentError,
+                   ~r/queries containing views cannot be update or delete operations/,
+                   fn ->
+                     Repo.delete_all(query, [])
+                   end
+    end
+
     test "can search using analyzer in ecto query" do
       query =
         from(UsersView)
@@ -84,19 +102,25 @@ defmodule ArangoXEctoTest.ViewTest do
     end
 
     test "can search using aql for a view" do
-      ArangoXEcto.aql_query(
-        Repo,
-        """
-        FOR us IN @@view
-          SEARCH ANALYZER(us.name == @name, "text_en")
-          RETURN us
-        """,
-        "@view": UsersView.__view__(:name),
-        name: "bob"
-      )
-      |> dbg()
+      query = """
+      FOR uv IN @@view
+        SEARCH ANALYZER(uv.first_name == @first_name, "identity")
+        RETURN uv
+      """
 
-      assert true
+      assert {:error, _} =
+               ArangoXEcto.aql_query(Repo, query,
+                 "@view": UsersView.__view__(:name),
+                 first_name: "John"
+               )
+
+      {:ok, _} = ArangoXEcto.create_view(Repo, UsersView)
+
+      assert {:ok, [%{"first_name" => "John"}]} =
+               ArangoXEcto.aql_query(Repo, query,
+                 "@view": UsersView.__view__(:name),
+                 first_name: "John"
+               )
     end
   end
 end
