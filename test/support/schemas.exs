@@ -197,3 +197,102 @@ defmodule ArangoXEctoTest.Integration.CommentView do
     options(primarySortCompression: :lz4)
   end
 end
+
+defmodule ArangoXEctoTest.Integration.Analyzers do
+  use ArangoXEcto.Analyzer
+
+  identity(:a, [:norm])
+
+  delimiter(:b, [:frequency, :position], %{
+    delimiter: ","
+  })
+
+  stem(:c, [:frequency, :norm, :position], %{
+    locale: "en"
+  })
+
+  norm(:d, [:frequency, :position], %{
+    locale: "en",
+    accent: false,
+    case: :lower
+  })
+
+  ngram(:e, [], %{
+    min: 3,
+    max: 5,
+    preserveOriginal: true,
+    startMarker: "a",
+    endMarker: "b",
+    streamType: :binary
+  })
+
+  text(:f, [:frequency, :norm], %{
+    locale: "en",
+    accent: false,
+    case: :lower,
+    stemming: false,
+    edgeNgram: %{
+      min: 3
+    },
+    stopwords: ["abc"]
+  })
+
+  collation(:g, [:frequency], %{
+    locale: "en"
+  })
+
+  aql(:h, [:norm], %{
+    queryString: "RETURN SOUNDEX(@param)",
+    collapsePositions: true,
+    keepNull: false,
+    batchSize: 500,
+    memoryLimit: 2_097_152,
+    returnType: :string
+  })
+
+  pipeline :i, [:frequency] do
+    norm(:x, [], %{
+      locale: "en",
+      accent: false,
+      case: :lower
+    })
+
+    text(:y, [], %{
+      locale: "en",
+      accent: false,
+      stemming: true,
+      case: :lower
+    })
+  end
+
+  stopwords(:j, [], %{
+    stopwords: ["xyz"],
+    hex: false
+  })
+
+  segmentation(:k, [], %{
+    break: :all,
+    case: :none
+  })
+
+  geojson(:l, [:norm], %{
+    type: :shape,
+    options: %{
+      maxCells: 21,
+      minLevel: 5,
+      maxLevel: 24
+    }
+  })
+
+  geopoint(:m, [:norm], %{
+    latitude: ["lat", "latitude"],
+    longitude: ["long", "longitude"],
+    options: %{
+      maxCells: 21,
+      minLevel: 5,
+      maxLevel: 24
+    }
+  })
+
+  build()
+end

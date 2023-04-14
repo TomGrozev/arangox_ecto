@@ -259,6 +259,164 @@ defmodule ArangoXEctoTest do
     end
   end
 
+  describe "create_analyzers/2" do
+    test "creates analyzers" do
+      assert {:ok, responses} =
+               ArangoXEcto.create_analyzers(Repo, ArangoXEctoTest.Integration.Analyzers)
+
+      assert [
+               %Arangox.Response{
+                 status: 201,
+                 body: %{"features" => ["norm"], "properties" => %{}, "type" => "identity"}
+               },
+               %Arangox.Response{
+                 status: 201,
+                 body: %{
+                   "features" => ["frequency", "position"],
+                   "properties" => %{"delimiter" => ","},
+                   "type" => "delimiter"
+                 }
+               },
+               %Arangox.Response{
+                 status: 201,
+                 body: %{
+                   "features" => ["frequency", "position", "norm"],
+                   "properties" => %{"locale" => "en"},
+                   "type" => "stem"
+                 }
+               },
+               %Arangox.Response{
+                 status: 201,
+                 body: %{
+                   "features" => ["frequency", "position"],
+                   "properties" => %{"accent" => false, "case" => "lower", "locale" => "en"},
+                   "type" => "norm"
+                 }
+               },
+               %Arangox.Response{
+                 status: 201,
+                 body: %{
+                   "features" => [],
+                   "properties" => %{
+                     "endMarker" => "b",
+                     "max" => 5,
+                     "min" => 3,
+                     "preserveOriginal" => true,
+                     "startMarker" => "a",
+                     "streamType" => "binary"
+                   },
+                   "type" => "ngram"
+                 }
+               },
+               %Arangox.Response{
+                 status: 201,
+                 body: %{
+                   "features" => ["frequency", "norm"],
+                   "properties" => %{
+                     "accent" => false,
+                     "case" => "lower",
+                     "edgeNgram" => %{"min" => 3},
+                     "locale" => "en",
+                     "stemming" => false,
+                     "stopwords" => ["abc"]
+                   },
+                   "type" => "text"
+                 }
+               },
+               %Arangox.Response{
+                 status: 201,
+                 body: %{
+                   "features" => ["frequency"],
+                   "properties" => %{"locale" => "en"},
+                   "type" => "collation"
+                 }
+               },
+               %Arangox.Response{
+                 status: 201,
+                 body: %{
+                   "features" => ["norm"],
+                   "properties" => %{
+                     "batchSize" => 500,
+                     "collapsePositions" => true,
+                     "keepNull" => false,
+                     "memoryLimit" => 2_097_152,
+                     "queryString" => "RETURN SOUNDEX(@param)",
+                     "returnType" => "string"
+                   },
+                   "type" => "aql"
+                 }
+               },
+               %Arangox.Response{
+                 status: 201,
+                 body: %{
+                   "features" => ["frequency"],
+                   "properties" => %{
+                     "pipeline" => [
+                       %{
+                         "properties" => %{
+                           "accent" => false,
+                           "case" => "lower",
+                           "locale" => "en",
+                           "stemming" => true
+                         },
+                         "type" => "text"
+                       },
+                       %{
+                         "properties" => %{
+                           "accent" => false,
+                           "case" => "lower",
+                           "locale" => "en"
+                         },
+                         "type" => "norm"
+                       }
+                     ]
+                   },
+                   "type" => "pipeline"
+                 }
+               },
+               %Arangox.Response{
+                 status: 201,
+                 body: %{
+                   "features" => [],
+                   "properties" => %{"hex" => false, "stopwords" => ["xyz"]},
+                   "type" => "stopwords"
+                 }
+               },
+               %Arangox.Response{
+                 status: 201,
+                 body: %{
+                   "features" => [],
+                   "properties" => %{"break" => "all", "case" => "none"},
+                   "type" => "segmentation"
+                 }
+               },
+               %Arangox.Response{
+                 status: 201,
+                 body: %{
+                   "features" => ["norm"],
+                   "properties" => %{
+                     "options" => %{"maxCells" => 21, "maxLevel" => 24, "minLevel" => 5},
+                     "type" => "shape"
+                   },
+                   "type" => "geojson"
+                 }
+               },
+               %Arangox.Response{
+                 status: 201,
+                 body: %{
+                   "features" => ["norm"],
+                   "properties" => %{
+                     "latitude" => ["lat", "latitude"],
+                     "longitude" => ["long", "longitude"],
+                     "options" => %{"maxCells" => 21, "maxLevel" => 24, "minLevel" => 5}
+                   },
+                   "type" => "geopoint"
+                 }
+               }
+             ] = responses
+    end
+  end
+
   describe "delete_all_edges/4" do
     test "no edges to delete" do
       user = %User{first_name: "John", last_name: "Smith"} |> Repo.insert!()

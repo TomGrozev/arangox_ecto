@@ -312,6 +312,53 @@ defmodule ArangoXEcto do
   end
 
   @doc """
+  Creates analyzers in a module
+
+  This function is only to be used in dynamic mode and will raise
+  an error if called in static mode. Instead use migrations if
+  in static mode.
+
+  ## Parameters
+
+  - `repo` - The Ecto repo module to use for queries
+  - `analyzer_module` - The Analyzer module
+
+  ## Examples
+
+      iex> ArangoXEcto.create_analyzers(Repo, MyApp.Analyzers)
+      {:ok, [%Arangox.Response{}, ...]}
+
+  If there is an error in and of the schemas
+
+      iex> ArangoXEcto.create_analyzers(Repo, MyApp.Analyzers)
+      {:error, [%Arangox.Response{}, ...], [%Arangox.Error{}, ...]}
+
+  """
+  @doc since: "1.3.0"
+  @spec create_analyzers(Ecto.Repo.t() | pid(), ArangoXEcto.Analyzer.t()) ::
+          {:ok, Arangox.Response.t()} | {:error, Arangox.Error.t()}
+  def create_analyzers(repo, analyzer_module) do
+    if not is_pid(repo) and Keyword.get(repo.config(), :static, false) do
+      raise("This function cannot be called in static mode. Please use migrations instead.")
+    else
+      analyzers = analyzer_module.__analyzers__()
+
+      remove_existing_analyzers(repo, analyzers)
+
+      Enum.reduce(analyzers, {[], []}, fn analyzer, {success, fail} ->
+        case ArangoXEcto.api_query(repo, :post, ["/_api/analyzer", analyzer]) do
+          {:ok, res} -> {[res | success], fail}
+          {:error, res} -> {success, [{analyzer.name, res} | fail]}
+        end
+      end)
+      |> case do
+        {success, []} -> {:ok, success}
+        {success, fail} -> {:error, success, fail}
+      end
+    end
+  end
+
+  @doc """
   Creates a collection defined by some schema
 
   This function is only to be used in dynamic mode and will raise
@@ -829,6 +876,12 @@ defmodule ArangoXEcto do
         %{pid: conn} = Ecto.Adapter.lookup_meta(repo)
 
         conn
+    end
+  end
+
+  defp remove_existing_analyzers(repo, analyzers) do
+    for %{name: name} <- analyzers do
+      ArangoXEcto.api_query(repo, :delete, ["/_api/analyzer/#{name}"])
     end
   end
 
