@@ -8,6 +8,7 @@ defmodule ArangoXEctoTest.Integration.User do
     field(:extra, :string)
     field(:extra2, :string)
     field(:gender, Ecto.Enum, values: [male: 0, female: 1, other: 2], default: :male)
+    field(:age, :integer)
     field(:location, ArangoXEcto.Types.GeoJSON)
 
     embeds_one(:class, ArangoXEctoTest.Integration.Class, on_replace: :delete)
