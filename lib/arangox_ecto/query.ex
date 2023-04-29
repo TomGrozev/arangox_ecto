@@ -150,7 +150,8 @@ defmodule ArangoXEcto.Query do
 
   defp offset_and_limit(%Query{offset: nil, limit: nil}, _sources), do: []
 
-  defp offset_and_limit(%Query{offset: nil, limit: %QueryExpr{expr: expr}} = query, sources) do
+  # limit can either be a QueryExpr or a LimitExpr
+  defp offset_and_limit(%Query{offset: nil, limit: %{expr: expr}} = query, sources) do
     [" LIMIT " | expr(expr, sources, query)]
   end
 
@@ -158,9 +159,9 @@ defmodule ArangoXEcto.Query do
     error!(query, "offset can only be used in conjunction with limit")
   end
 
+  # limit can either be a QueryExpr or a LimitExpr
   defp offset_and_limit(
-         %Query{offset: %QueryExpr{expr: offset_expr}, limit: %QueryExpr{expr: limit_expr}} =
-           query,
+         %Query{offset: %QueryExpr{expr: offset_expr}, limit: %{expr: limit_expr}} = query,
          sources
        ) do
     [" LIMIT ", expr(offset_expr, sources, query), ", ", expr(limit_expr, sources, query)]
