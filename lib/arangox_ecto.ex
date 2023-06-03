@@ -347,7 +347,7 @@ defmodule ArangoXEcto do
 
       Enum.reduce(analyzers, {[], []}, fn analyzer, {success, fail} ->
         case ArangoXEcto.api_query(repo, :post, ["/_api/analyzer", analyzer]) do
-          {:ok, res} -> {[res | success], fail}
+          {:ok, res} -> {[{analyzer.name, res} | success], fail}
           {:error, res} -> {success, [{analyzer.name, res} | fail]}
         end
       end)

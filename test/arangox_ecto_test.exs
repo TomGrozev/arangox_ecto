@@ -261,159 +261,152 @@ defmodule ArangoXEctoTest do
 
   describe "create_analyzers/2" do
     test "creates analyzers" do
-      assert {:ok, responses} =
-               ArangoXEcto.create_analyzers(Repo, ArangoXEctoTest.Integration.Analyzers)
+      {success, fail} =
+        case ArangoXEcto.create_analyzers(Repo, ArangoXEctoTest.Integration.Analyzers) do
+          {:ok, responses} -> {responses, []}
+          {:error, success, fail} -> {success, fail}
+        end
 
-      assert [
-               %Arangox.Response{
-                 status: 201,
-                 body: %{"features" => ["norm"], "properties" => %{}, "type" => "identity"}
-               },
-               %Arangox.Response{
-                 status: 201,
-                 body: %{
-                   "features" => ["frequency", "position"],
-                   "properties" => %{"delimiter" => ","},
-                   "type" => "delimiter"
-                 }
-               },
-               %Arangox.Response{
-                 status: 201,
-                 body: %{
-                   "features" => ["frequency", "position", "norm"],
-                   "properties" => %{"locale" => "en"},
-                   "type" => "stem"
-                 }
-               },
-               %Arangox.Response{
-                 status: 201,
-                 body: %{
-                   "features" => ["frequency", "position"],
-                   "properties" => %{"accent" => false, "case" => "lower", "locale" => "en"},
-                   "type" => "norm"
-                 }
-               },
-               %Arangox.Response{
-                 status: 201,
-                 body: %{
-                   "features" => [],
-                   "properties" => %{
-                     "endMarker" => "b",
-                     "max" => 5,
-                     "min" => 3,
-                     "preserveOriginal" => true,
-                     "startMarker" => "a",
-                     "streamType" => "binary"
-                   },
-                   "type" => "ngram"
-                 }
-               },
-               %Arangox.Response{
-                 status: 201,
-                 body: %{
-                   "features" => ["frequency", "norm"],
-                   "properties" => %{
-                     "accent" => false,
-                     "case" => "lower",
-                     "edgeNgram" => %{"min" => 3},
-                     "locale" => "en",
-                     "stemming" => false,
-                     "stopwords" => ["abc"]
-                   },
-                   "type" => "text"
-                 }
-               },
-               %Arangox.Response{
-                 status: 201,
-                 body: %{
-                   "features" => ["frequency"],
-                   "properties" => %{"locale" => "en"},
-                   "type" => "collation"
-                 }
-               },
-               %Arangox.Response{
-                 status: 201,
-                 body: %{
-                   "features" => ["norm"],
-                   "properties" => %{
-                     "batchSize" => 500,
-                     "collapsePositions" => true,
-                     "keepNull" => false,
-                     "memoryLimit" => 2_097_152,
-                     "queryString" => "RETURN SOUNDEX(@param)",
-                     "returnType" => "string"
-                   },
-                   "type" => "aql"
-                 }
-               },
-               %Arangox.Response{
-                 status: 201,
-                 body: %{
-                   "features" => ["frequency"],
-                   "properties" => %{
-                     "pipeline" => [
-                       %{
-                         "properties" => %{
-                           "accent" => false,
-                           "case" => "lower",
-                           "locale" => "en",
-                           "stemming" => true
-                         },
-                         "type" => "text"
-                       },
-                       %{
-                         "properties" => %{
-                           "accent" => false,
-                           "case" => "lower",
-                           "locale" => "en"
-                         },
-                         "type" => "norm"
-                       }
-                     ]
-                   },
-                   "type" => "pipeline"
-                 }
-               },
-               %Arangox.Response{
-                 status: 201,
-                 body: %{
-                   "features" => [],
-                   "properties" => %{"hex" => false, "stopwords" => ["xyz"]},
-                   "type" => "stopwords"
-                 }
-               },
-               %Arangox.Response{
-                 status: 201,
-                 body: %{
-                   "features" => [],
-                   "properties" => %{"break" => "all", "case" => "none"},
-                   "type" => "segmentation"
-                 }
-               },
-               %Arangox.Response{
-                 status: 201,
-                 body: %{
-                   "features" => ["norm"],
-                   "properties" => %{
-                     "options" => %{"maxCells" => 21, "maxLevel" => 24, "minLevel" => 5},
-                     "type" => "shape"
-                   },
-                   "type" => "geojson"
-                 }
-               },
-               %Arangox.Response{
-                 status: 201,
-                 body: %{
-                   "features" => ["norm"],
-                   "properties" => %{
-                     "latitude" => ["lat", "latitude"],
-                     "longitude" => ["long", "longitude"],
-                     "options" => %{"maxCells" => 21, "maxLevel" => 24, "minLevel" => 5}
-                   },
-                   "type" => "geopoint"
-                 }
-               }
-             ] = responses
+      # only errors allowed are arango not implemented errors
+      for {_name, err} <- fail do
+        assert %Arangox.Error{status: 501, error_num: 9} = err
+      end
+
+      expected_responses = %{
+        a: %{
+          "features" => ["norm"],
+          "properties" => %{},
+          "name" => "arangox_ecto_test::a",
+          "type" => "identity"
+        },
+        b: %{
+          "features" => ["frequency", "position"],
+          "properties" => %{"delimiter" => ","},
+          "name" => "arangox_ecto_test::b",
+          "type" => "delimiter"
+        },
+        c: %{
+          "features" => ["frequency", "position", "norm"],
+          "properties" => %{"locale" => "en"},
+          "name" => "arangox_ecto_test::c",
+          "type" => "stem"
+        },
+        d: %{
+          "features" => ["frequency", "position"],
+          "properties" => %{"accent" => false, "case" => "lower", "locale" => "en"},
+          "name" => "arangox_ecto_test::d",
+          "type" => "norm"
+        },
+        e: %{
+          "features" => [],
+          "properties" => %{
+            "endMarker" => "b",
+            "max" => 5,
+            "min" => 3,
+            "preserveOriginal" => true,
+            "startMarker" => "a",
+            "streamType" => "binary"
+          },
+          "name" => "arangox_ecto_test::e",
+          "type" => "ngram"
+        },
+        f: %{
+          "features" => ["frequency", "norm"],
+          "properties" => %{
+            "accent" => false,
+            "case" => "lower",
+            "edgeNgram" => %{"min" => 3},
+            "locale" => "en",
+            "stemming" => false,
+            "stopwords" => ["abc"]
+          },
+          "name" => "arangox_ecto_test::f",
+          "type" => "text"
+        },
+        g: %{
+          "features" => ["frequency"],
+          "properties" => %{"locale" => "en"},
+          "name" => "arangox_ecto_test::g",
+          "type" => "collation"
+        },
+        h: %{
+          "features" => ["norm"],
+          "properties" => %{
+            "batchSize" => 500,
+            "collapsePositions" => true,
+            "keepNull" => false,
+            "memoryLimit" => 2_097_152,
+            "queryString" => "RETURN SOUNDEX(@param)",
+            "returnType" => "string"
+          },
+          "name" => "arangox_ecto_test::h",
+          "type" => "aql"
+        },
+        i: %{
+          "features" => ["frequency"],
+          "properties" => %{
+            "pipeline" => [
+              %{
+                "properties" => %{
+                  "accent" => false,
+                  "case" => "lower",
+                  "locale" => "en",
+                  "stemming" => true
+                },
+                "type" => "text"
+              },
+              %{
+                "properties" => %{
+                  "accent" => false,
+                  "case" => "lower",
+                  "locale" => "en"
+                },
+                "type" => "norm"
+              }
+            ]
+          },
+          "name" => "arangox_ecto_test::i",
+          "type" => "pipeline"
+        },
+        j: %{
+          "features" => [],
+          "properties" => %{"hex" => false, "stopwords" => ["xyz"]},
+          "name" => "arangox_ecto_test::j",
+          "type" => "stopwords"
+        },
+        k: %{
+          "features" => [],
+          "properties" => %{"break" => "all", "case" => "none"},
+          "name" => "arangox_ecto_test::k",
+          "type" => "segmentation"
+        },
+        l: %{
+          "features" => ["norm"],
+          "properties" => %{
+            "legacy" => false,
+            "options" => %{"maxCells" => 21, "maxLevel" => 24, "minLevel" => 5},
+            "type" => "shape"
+          },
+          "name" => "arangox_ecto_test::l",
+          "type" => "geojson"
+        },
+        m: %{
+          "features" => ["norm"],
+          "properties" => %{
+            "latitude" => ["lat", "latitude"],
+            "longitude" => ["long", "longitude"],
+            "options" => %{"maxCells" => 21, "maxLevel" => 24, "minLevel" => 5}
+          },
+          "name" => "arangox_ecto_test::m",
+          "type" => "geopoint"
+        }
+      }
+
+      for {name, expected} <- expected_responses do
+        if actual = Keyword.get(success, name) do
+          assert %Arangox.Response{status: 201, body: ^expected} = actual
+        end
+      end
     end
   end
 
