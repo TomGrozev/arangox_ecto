@@ -29,7 +29,7 @@ defmodule ArangoXEctoTest do
         {:error, _} -> []
       end
 
-    # Get all collection names
+    # Get all view names
     view_res =
       case Arangox.get(conn, "/_api/view") do
         {:ok, %Arangox.Response{body: %{"error" => false, "result" => result}}} -> result
@@ -64,6 +64,22 @@ defmodule ArangoXEctoTest do
   setup %{conn: conn} = context do
     for {collection, _type} <- @test_collections do
       Arangox.put(conn, "/_api/collection/#{collection}/truncate")
+    end
+
+    # Get all analyzer names
+    analyzer_res =
+      case Arangox.get(conn, "/_api/analyzer") do
+        {:ok, %Arangox.Response{body: %{"error" => false, "result" => result}}} -> result
+        {:error, _} -> []
+      end
+
+    analyzer_names =
+      Enum.map(analyzer_res, fn %{"name" => name} -> name end)
+      |> Enum.filter(&String.starts_with?(&1, "arangox_ecto_test::"))
+
+    # Delete all analyzers
+    for analyzer <- analyzer_names do
+      Arangox.delete(conn, "/_api/analyzer/#{analyzer}?force=true")
     end
 
     context
@@ -256,6 +272,14 @@ defmodule ArangoXEctoTest do
       assert_raise ArgumentError, ~r/not a valid view schema/, fn ->
         ArangoXEcto.create_view(Repo, ArangoXEcto)
       end
+    end
+
+    test "automatically creates analyzers in dynamic mode" do
+      assert {:error, %Arangox.Error{status: 400, error_num: 10}} =
+               ArangoXEcto.create_view(Repo, ArangoXEctoTest.Integration.FailedAnalyzerTestView)
+
+      assert {:ok, %Arangox.Response{status: 201}} =
+               ArangoXEcto.create_view(Repo, ArangoXEctoTest.Integration.AnalyzerTestView)
     end
   end
 

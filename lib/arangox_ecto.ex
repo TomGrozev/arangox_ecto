@@ -272,9 +272,13 @@ defmodule ArangoXEcto do
   @doc """
   Creates a view defined by some view schema
 
-  This function is only to be used in dynamic mode and will raise
-  an error if called in static mode. Instead use migrations if
-  in static mode.
+  When in dynamic mode this will automatically create analyzers 
+  and linked collections. If in static mode these need to be done 
+  seperately in the migrations.
+
+  For the analyzers to be automatically created in dynamic mode 
+  the analyzers module needs to be passed as an option into the view
+  module definition. See `ArangoXEcto.View` for more info.
 
   ## Parameters
 
@@ -296,27 +300,39 @@ defmodule ArangoXEcto do
   @spec create_view(Ecto.Repo.t() | pid(), ArangoXEcto.View.t()) ::
           {:ok, Arangox.Response.t()} | {:error, Arangox.Error.t()}
   def create_view(repo, view) do
-    if not is_pid(repo) and Keyword.get(repo.config(), :static, false) do
-      raise("This function cannot be called in static mode. Please use migrations instead.")
-    else
-      view_definition = ArangoXEcto.View.definition(view)
+    view_definition = ArangoXEcto.View.definition(view)
+    analyzer_module = view.__analyzer_module__()
 
-      # Create link collections if they don't exist
+    # check if is dynamic mode
+    if not is_pid(repo) and
+         not Keyword.get(repo.config(), :static, false) do
+      # create the analyzers if in dynamic mode
+      if not is_nil(analyzer_module) do
+        create_analyzers(repo, analyzer_module)
+      end
+
+      # Create link collections if they don't exist in dynamic mode
       view.__view__(:links)
       |> Enum.each(fn {collection, _} ->
         maybe_create_collection(repo, collection)
       end)
-
-      ArangoXEcto.api_query(repo, :post, ["/_api/view", view_definition])
     end
+
+    ArangoXEcto.api_query(repo, :post, ["/_api/view", view_definition])
   end
 
   @doc """
   Creates analyzers in a module
 
-  This function is only to be used in dynamic mode and will raise
-  an error if called in static mode. Instead use migrations if
-  in static mode.
+  This will first force delete any analyzers with the same name before creating
+  the ones defined.
+
+  In production you should be using migrations in static mode. This function 
+  will be called when an analyzer module is passed to the `ArangoXEcto.Migration.create/2`
+  function.
+
+  When operating in dynamic mode the analyzers ae automatically created on view create,
+  see `ArangoXEcto.create_view/2` for more info.
 
   ## Parameters
 
@@ -336,25 +352,21 @@ defmodule ArangoXEcto do
   """
   @doc since: "1.3.0"
   @spec create_analyzers(Ecto.Repo.t() | pid(), ArangoXEcto.Analyzer.t()) ::
-          {:ok, Arangox.Response.t()} | {:error, Arangox.Error.t()}
+          {:ok, Arangox.Response.t()} | {:error, [Arangox.Response.t()], [Arangox.Error.t()]}
   def create_analyzers(repo, analyzer_module) do
-    if not is_pid(repo) and Keyword.get(repo.config(), :static, false) do
-      raise("This function cannot be called in static mode. Please use migrations instead.")
-    else
-      analyzers = analyzer_module.__analyzers__()
+    analyzers = analyzer_module.__analyzers__()
 
-      remove_existing_analyzers(repo, analyzers)
+    remove_existing_analyzers(repo, analyzers)
 
-      Enum.reduce(analyzers, {[], []}, fn analyzer, {success, fail} ->
-        case ArangoXEcto.api_query(repo, :post, ["/_api/analyzer", analyzer]) do
-          {:ok, res} -> {[{analyzer.name, res} | success], fail}
-          {:error, res} -> {success, [{analyzer.name, res} | fail]}
-        end
-      end)
-      |> case do
-        {success, []} -> {:ok, success}
-        {success, fail} -> {:error, success, fail}
+    Enum.reduce(analyzers, {[], []}, fn analyzer, {success, fail} ->
+      case ArangoXEcto.api_query(repo, :post, ["/_api/analyzer", analyzer]) do
+        {:ok, res} -> {[{analyzer.name, res} | success], fail}
+        {:error, res} -> {success, [{analyzer.name, res} | fail]}
       end
+    end)
+    |> case do
+      {success, []} -> {:ok, success}
+      {success, fail} -> {:error, success, fail}
     end
   end
 
@@ -881,7 +893,7 @@ defmodule ArangoXEcto do
 
   defp remove_existing_analyzers(repo, analyzers) do
     for %{name: name} <- analyzers do
-      ArangoXEcto.api_query(repo, :delete, ["/_api/analyzer/#{name}"])
+      ArangoXEcto.api_query(repo, :delete, ["/_api/analyzer/#{name}?force=true"])
     end
   end
 

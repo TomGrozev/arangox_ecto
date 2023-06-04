@@ -4,7 +4,7 @@ defmodule ArangoXEctoTest.MigrationTest do
 
   alias ArangoXEcto.Migration
   alias ArangoXEctoTest.{ArangoRepo, Repo}
-  alias ArangoXEctoTest.Integration.UsersView
+  alias ArangoXEctoTest.Integration.{Analyzers, UsersView}
 
   @test_collections [
     :something
@@ -146,6 +146,16 @@ defmodule ArangoXEctoTest.MigrationTest do
                get_view_info(conn, UsersView.__view__(:name))
     end
 
+    test "creates analyzers", %{conn: conn} do
+      assert :ok = Migration.create(Analyzers, conn)
+
+      names =
+        Analyzers.__analyzers__()
+        |> Enum.map(&Atom.to_string(&1.name))
+
+      assert MapSet.equal?(MapSet.new(names), MapSet.new(get_analyzers(conn)))
+    end
+
     test "creates a document collection", %{conn: conn} do
       collection = Migration.collection("something")
 
@@ -261,4 +271,17 @@ defmodule ArangoXEctoTest.MigrationTest do
 
   defp get_index_info(conn, collection_name),
     do: Arangox.get(conn, "/_api/index?collection=#{collection_name}")
+
+  defp get_analyzers(conn) do
+    analyzer_res =
+      case Arangox.get(conn, "/_api/analyzer") do
+        {:ok, %Arangox.Response{body: %{"error" => false, "result" => result}}} -> result
+        {:error, _} -> []
+      end
+
+    Enum.filter(analyzer_res, fn %{"name" => name} ->
+      String.starts_with?(name, "arangox_ecto_test::")
+    end)
+    |> Enum.map(fn %{"name" => name} -> String.slice(name, 19..-1) end)
+  end
 end

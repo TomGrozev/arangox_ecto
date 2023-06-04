@@ -198,6 +198,50 @@ defmodule ArangoXEctoTest.Integration.CommentView do
   end
 end
 
+defmodule ArangoXEctoTest.Integration.AnalyzerTestView do
+  use ArangoXEcto.View, analyzer_module: ArangoXEctoTest.Integration.Analyzers
+
+  alias ArangoXEcto.View.Link
+
+  view "analyzer_test_view" do
+    link(
+      ArangoXEctoTest.Integration.Comment,
+      %Link{
+        includeAllFields: true,
+        fields: %{
+          name: %Link{
+            analyzers: [:f]
+          }
+        }
+      }
+    )
+
+    options(primarySortCompression: :lz4)
+  end
+end
+
+defmodule ArangoXEctoTest.Integration.FailedAnalyzerTestView do
+  use ArangoXEcto.View
+
+  alias ArangoXEcto.View.Link
+
+  view "failed_analyzer_test_view" do
+    link(
+      ArangoXEctoTest.Integration.Comment,
+      %Link{
+        includeAllFields: true,
+        fields: %{
+          name: %Link{
+            analyzers: [:f]
+          }
+        }
+      }
+    )
+
+    options(primarySortCompression: :lz4)
+  end
+end
+
 defmodule ArangoXEctoTest.Integration.Analyzers do
   use ArangoXEcto.Analyzer
 

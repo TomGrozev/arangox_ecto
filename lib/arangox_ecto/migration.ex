@@ -13,7 +13,11 @@ defmodule ArangoXEcto.Migration do
   Since ArangoDB is schemaless, no fields need to be provided, only the collection name. First create
   a collection struct using the `collection/3` function. Then pass the collection struct to the
   `create/1` function. To create indexes it is a similar process using the `index/3` function.
-  **Collections must be created BEFORE indexes.**
+
+  **Order matters!!** Make sure you create collections before indexes and views, and analyzers before 
+  views if they are used. In general this is a good order to follow: 
+
+      Analyzers > Collections > Indexes > Views
 
   To drop the collection on a migration down, do the same as creation except use the `drop/1` function
   instead of the `create/1` function. Indexes are automatically removed when the collection is removed
@@ -25,10 +29,13 @@ defmodule ArangoXEcto.Migration do
         use ArangoXEcto.Migration
 
         def up do
+          create(MyProject.Analyzers)
+
           create(collection(:users))
-          create(MyProject.UsersView)
 
           create(index("users", [:email]))
+
+          create(MyProject.UsersView)
         end
 
         def down do
@@ -127,9 +134,9 @@ defmodule ArangoXEcto.Migration do
   @doc """
   Creates an object
 
-  Will create the passed object, one of a collection, an index, or a view.
+  Will create the passed object, one of a collection, an index, analyzers or a view.
 
-  Since view schemas are just module definitions we can use them directly here. Therefore
+  Since view schemas and analyzers are just module definitions we can use them directly here. Therefore
   the module is just passed directly.
 
   ## Examples
@@ -201,6 +208,30 @@ defmodule ArangoXEcto.Migration do
   def create(module, conn) when is_atom(module) do
     {:ok, conn} = get_db_conn(conn)
 
+    cond do
+      function_exported?(module, :__analyzers__, 0) -> create_analyzers(conn, module)
+      function_exported?(module, :__view__, 1) -> create_view(conn, module)
+      true -> {:error, "invalid module, not a view or an anlyzer module"}
+    end
+  end
+
+  defp create_analyzers(conn, module) do
+    case ArangoXEcto.create_analyzers(conn, module) do
+      {:ok, _} ->
+        :ok
+
+      {:error, success, errors} ->
+        msg = "Failed with errrors (Success: #{length(success)}, Error: #{length(errors)})"
+
+        Logger.debug("#{inspect(__MODULE__)}.create", %{
+          "#{inspect(__MODULE__)}.create-analyzer" => %{analyzers: module, message: msg}
+        })
+
+        {:error, msg}
+    end
+  end
+
+  defp create_view(conn, module) do
     case ArangoXEcto.create_view(conn, module) do
       {:ok, _} ->
         :ok

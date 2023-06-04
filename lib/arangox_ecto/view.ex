@@ -44,6 +44,15 @@ defmodule ArangoXEcto.View do
       end
     end
 
+  ### Defining the analyzer module 
+
+  **When in dynamic mode only** the analyzer module needs to be passed to the view so that 
+  the analyzers will be automatically created. This option will be ignored in static mode. 
+  You can pass the analyzer module by passing the module to the `:analyzer_module` option on 
+  the use statement.
+
+      use ArangoXEcto.View, analyzer_module: Something.Analyzers
+
   ## Querying
 
   Views essentially operate as virtual wrappers of Ecto Schemas. You can use them just like
@@ -132,7 +141,7 @@ defmodule ArangoXEcto.View do
   @type compression :: :lz4 | :none
 
   @doc false
-  defmacro __using__(_) do
+  defmacro __using__(opts) do
     quote do
       import ArangoXEcto.View, only: [view: 2]
 
@@ -142,6 +151,10 @@ defmodule ArangoXEcto.View do
       Module.register_attribute(__MODULE__, :view_stored_values, accumulate: true)
       Module.register_attribute(__MODULE__, :view_links, accumulate: true)
       Module.put_attribute(__MODULE__, :view_primary_sort_compression, :lz4)
+
+      def __analyzer_module__ do
+        Keyword.get(unquote(opts), :analyzer_module)
+      end
     end
   end
 
