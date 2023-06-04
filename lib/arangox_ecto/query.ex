@@ -1,3 +1,5 @@
+import Kernel, except: [apply: 3]
+
 defmodule ArangoXEcto.Query do
   @moduledoc """
   Converts `Ecto.Query` structs into AQL syntax.
@@ -10,10 +12,10 @@ defmodule ArangoXEcto.Query do
   """
 
   alias Ecto.Query
-  alias Ecto.Query.{BooleanExpr, JoinExpr, QueryExpr}
+  alias Ecto.Query.{BooleanExpr, Builder, JoinExpr, QueryExpr}
 
   @doc """
-  Creates an AQL query to fetch all entries from the data store matching the given query.
+  Creates an AQL query to fetch all entries from the data store matching the given Ecto query.
   """
   @spec all(Query.t()) :: binary()
   def all(%Query{} = query) do
@@ -21,19 +23,22 @@ defmodule ArangoXEcto.Query do
 
     from = from(query, sources)
     join = join(query, sources)
+    search = search_where(query, sources)
     where = where(query, sources)
     order_by = order_by(query, sources)
     offset_and_limit = offset_and_limit(query, sources)
     select = select(query, sources)
 
-    IO.iodata_to_binary([from, join, where, order_by, offset_and_limit, select])
+    IO.iodata_to_binary([from, join, search, where, order_by, offset_and_limit, select])
   end
 
   @doc """
-  Creates an AQL query to delete all entries from the data store matching the given query.
+  Creates an AQL query to delete all entries from the data store matching the given Ecto query.
   """
   @spec delete_all(Query.t()) :: binary()
   def delete_all(query) do
+    ensure_not_view(query)
+
     sources = create_names(query)
 
     from = from(query, sources)
@@ -48,10 +53,12 @@ defmodule ArangoXEcto.Query do
   end
 
   @doc """
-  Creates an AQL query to update all entries from the data store matching the given query.
+  Creates an AQL query to update all entries from the data store matching the given Ecto query.
   """
   @spec update_all(Query.t()) :: binary()
   def update_all(query) do
+    ensure_not_view(query)
+
     sources = create_names(query)
 
     from = from(query, sources)
@@ -65,9 +72,103 @@ defmodule ArangoXEcto.Query do
     IO.iodata_to_binary([from, join, where, order_by, offset_and_limit, update, return])
   end
 
+  @doc """
+  An AND search query expression.
+
+  Extention to the `Ecto.Query` api for arango searches.
+
+  The expression syntax is exactly the same as the regular `Ecto.Query.where/3` clause.
+  Refer to that for more info on syntax or for advanced AQL queries see the section below.
+
+  You will need to import this function like you do for `Ecto.Query`.
+
+  ## Implementation
+
+  This will store the search in the Ecto query `where` clause
+  with a custom search operation. This is to prevent having to create a seperate query
+  type. When converting the Ecto query to an AQL query, this is caught and changed
+  into an AQL `SEARCH` expression.
+
+  ## Using Analyzers and advanced AQL
+
+  To save having to learn some new kind of query format for so many different possible search
+  scenarios, you can just use AQL directly in. This is powered by the `Ecto.Query.API.fragment/1`
+  function.
+
+  Below is an example of how you can implement using a custom analyzer:
+
+      from(UsersView)
+      |> search([uv], fragment("ANALYZER(? == ?, \"identity\")", uv.first_name, "John"))
+      |> Repo.all()
+
+  """
+  @doc since: "1.3.0"
+  defmacro search(query, binding \\ [], expr) do
+    build_search(:and, query, binding, expr, __CALLER__)
+  end
+
+  @doc """
+  A OR search query expression.
+
+  Extention to the `Ecto.Query` api for arango searches.
+
+  This function is the same as `ArangoXEcto.Query.search/3` except implements as an or clause.
+  This also follows the same syntax as the `Ecto.Query.or_where/3` function.
+  """
+  @doc since: "1.3.0"
+  defmacro or_search(query, binding \\ [], expr) do
+    build_search(:or, query, binding, expr, __CALLER__)
+  end
+
+  @doc false
+  @spec apply(Ecto.Queryable.t(), :where, term) :: Ecto.Query.t()
+  def apply(query, _, %{expr: true}) do
+    query
+  end
+
+  def apply(%Ecto.Query{wheres: wheres} = query, :where, expr) do
+    %{query | wheres: wheres ++ [expr]}
+  end
+
+  def apply(query, kind, expr) do
+    apply(Ecto.Queryable.to_query(query), kind, expr)
+  end
+
   #
   # Helpers
   #
+
+  defp ensure_not_view(%{sources: sources}) do
+    sources
+    |> Tuple.to_list()
+    |> Enum.any?(fn {_, schema, _} -> ArangoXEcto.is_view?(schema) end)
+    |> if do
+      raise ArgumentError, "queries containing views cannot be update or delete operations"
+    end
+  end
+
+  defp build_search(op, query, binding, expr, env) do
+    {query, binding} = Builder.escape_binding(query, binding, env)
+    {expr, {params, acc}} = Builder.Filter.escape(:search, expr, 0, binding, env)
+
+    params = Builder.escape_params(params)
+    subqueries = Enum.reverse(acc.subqueries)
+
+    expr =
+      quote do: %Ecto.Query.BooleanExpr{
+              expr: unquote(expr),
+              op: unquote(search_op(op)),
+              params: unquote(params),
+              subqueries: unquote(subqueries),
+              file: unquote(env.file),
+              line: unquote(env.line)
+            }
+
+    Builder.apply_query(query, __MODULE__, [:where, expr], env)
+  end
+
+  defp search_op(:and), do: :search_and
+  defp search_op(:or), do: :search_or
 
   defp create_names(%{sources: nil, from: %{source: {source, mod}}} = query) do
     query
@@ -124,7 +225,15 @@ defmodule ArangoXEcto.Query do
     ]
   end
 
+  defp search_where(%Query{wheres: wheres} = query, sources) do
+    wheres = Enum.filter(wheres, fn %{op: op} -> op in [:search_and, :search_or] end)
+
+    boolean(" SEARCH ", wheres, sources, query)
+  end
+
   defp where(%Query{wheres: wheres} = query, sources) do
+    wheres = Enum.filter(wheres, fn %{op: op} -> op in [:and, :or] end)
+
     boolean(" FILTER ", wheres, sources, query)
   end
 
@@ -314,7 +423,9 @@ defmodule ArangoXEcto.Query do
   end
 
   defp operator_to_boolean(:and), do: " && "
+  defp operator_to_boolean(:search_and), do: " && "
   defp operator_to_boolean(:or), do: " || "
+  defp operator_to_boolean(:search_or), do: " || "
 
   defp paren_expr(expr, sources, query) do
     [?(, expr(expr, sources, query), ?)]
@@ -352,6 +463,11 @@ defmodule ArangoXEcto.Query do
        when is_atom(field) do
     {_, name, _} = elem(sources, idx)
     [name, ?. | quote_name(field)]
+  end
+
+  defp expr({:&, _, [idx]}, sources, _query) do
+    {_, name, _} = elem(sources, idx)
+    [name]
   end
 
   defp expr({:&, _, [idx, fields, _counter]}, sources, query) do

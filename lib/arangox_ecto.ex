@@ -270,6 +270,153 @@ defmodule ArangoXEcto do
   end
 
   @doc """
+  Creates a view defined by some view schema
+
+  When in dynamic mode this will automatically create analyzers 
+  and linked collections. If in static mode these need to be done 
+  seperately in the migrations.
+
+  For the analyzers to be automatically created in dynamic mode 
+  the analyzers module needs to be passed as an option into the view
+  module definition. See `ArangoXEcto.View` for more info.
+
+  ## Parameters
+
+  - `repo` - The Ecto repo module to use for queries
+  - `view` - The View Schema to be created
+
+  ## Examples
+
+      iex> ArangoXEcto.create_view(Repo, MyApp.Views.UserSearch)
+      {:ok, %Arangox.Response{}}
+
+  If there is an error in the schema
+
+      iex> ArangoXEcto.create_view(Repo, MyApp.Views.UserSearch)
+      {:error, %Arangox.Error{}}
+
+  """
+  @doc since: "1.3.0"
+  @spec create_view(Ecto.Repo.t() | pid(), ArangoXEcto.View.t()) ::
+          {:ok, Arangox.Response.t()} | {:error, Arangox.Error.t()}
+  def create_view(repo, view) do
+    view_definition = ArangoXEcto.View.definition(view)
+    analyzer_module = view.__analyzer_module__()
+
+    # check if is dynamic mode
+    if not is_pid(repo) and
+         not Keyword.get(repo.config(), :static, false) do
+      # create the analyzers if in dynamic mode
+      if not is_nil(analyzer_module) do
+        create_analyzers(repo, analyzer_module)
+      end
+
+      # Create link collections if they don't exist in dynamic mode
+      view.__view__(:links)
+      |> Enum.each(fn {collection, _} ->
+        maybe_create_collection(repo, collection)
+      end)
+    end
+
+    ArangoXEcto.api_query(repo, :post, ["/_api/view", view_definition])
+  end
+
+  @doc """
+  Creates analyzers in a module
+
+  This will first force delete any analyzers with the same name before creating
+  the ones defined.
+
+  In production you should be using migrations in static mode. This function 
+  will be called when an analyzer module is passed to the `ArangoXEcto.Migration.create/2`
+  function.
+
+  When operating in dynamic mode the analyzers ae automatically created on view create,
+  see `ArangoXEcto.create_view/2` for more info.
+
+  ## Parameters
+
+  - `repo` - The Ecto repo module to use for queries
+  - `analyzer_module` - The Analyzer module
+
+  ## Examples
+
+      iex> ArangoXEcto.create_analyzers(Repo, MyApp.Analyzers)
+      {:ok, [%Arangox.Response{}, ...]}
+
+  If there is an error in and of the schemas
+
+      iex> ArangoXEcto.create_analyzers(Repo, MyApp.Analyzers)
+      {:error, [%Arangox.Response{}, ...], [%Arangox.Error{}, ...]}
+
+  """
+  @doc since: "1.3.0"
+  @spec create_analyzers(Ecto.Repo.t() | pid(), ArangoXEcto.Analyzer.t()) ::
+          {:ok, Arangox.Response.t()} | {:error, [Arangox.Response.t()], [Arangox.Error.t()]}
+  def create_analyzers(repo, analyzer_module) do
+    analyzers = analyzer_module.__analyzers__()
+
+    remove_existing_analyzers(repo, analyzers)
+
+    Enum.reduce(analyzers, {[], []}, fn analyzer, {success, fail} ->
+      case ArangoXEcto.api_query(repo, :post, ["/_api/analyzer", analyzer]) do
+        {:ok, res} -> {[{analyzer.name, res} | success], fail}
+        {:error, res} -> {success, [{analyzer.name, res} | fail]}
+      end
+    end)
+    |> case do
+      {success, []} -> {:ok, success}
+      {success, fail} -> {:error, success, fail}
+    end
+  end
+
+  @doc """
+  Creates a collection defined by some schema
+
+  This function is only to be used in dynamic mode and will raise
+  an error if called in static mode. Instead use migrations if
+  in static mode.
+
+  ## Parameters
+
+  - `repo` - The Ecto repo module to use for queries
+  - `schema` - The Collection Schema to be created
+
+  ## Examples
+
+      iex> ArangoXEcto.create_collection(Repo, MyApp.Users)
+      :ok
+
+  If there is an error in the schema
+
+      iex> ArangoXEcto.create_collection(Repo, MyApp.Users)
+      {:error, %Arangox.Error{}}
+
+  """
+  @spec create_collection(Ecto.Repo.t(), ArangoXEcto.Schema.t()) :: :ok | {:error, any()}
+  def create_collection(repo, schema) do
+    if Keyword.get(repo.config(), :static, false) do
+      raise("This function cannot be called in static mode. Please use migrations instead.")
+    else
+      # will throw if not a schema
+      type = ArangoXEcto.schema_type!(schema)
+      collection_name = source_name(schema)
+      collection_opts = schema.__collection_options__()
+      indexes = schema.__collection_indexes__()
+
+      collection = Migration.collection(collection_name, type, collection_opts)
+
+      case Migration.create(collection, repo) do
+        :ok ->
+          maybe_create_indexes(repo, collection_name, indexes)
+
+        error ->
+          error
+      end
+    end
+  end
+
+  @doc """
   Deletes all edges matching matching the query
 
   If the `:conditions` option is set then those conditions must be true to delete.
@@ -434,10 +581,18 @@ defmodule ArangoXEcto do
 
   If a list of maps are passed then the maps are enumerated over.
 
+  A list of modules can also be passes for possible types. The `_id`
+  field is used to check against the module schemas. This is especially
+  useful for querying against arango views where there may be multiple
+  schema results returned.
+
+  If a module is passed that isn't a Ecto Schema then an error will be
+  raised.
+
   ## Parameters
 
   - `maps` - List of maps or singular map to convert to a struct
-  - `module` - Module to use for the struct
+  - `module` - Module(s) to use for the struct
 
   ## Example
 
@@ -465,15 +620,38 @@ defmodule ArangoXEcto do
         }
       ]
   """
-  @spec load(map() | [map()], Ecto.Schema.t()) :: struct()
-  def load(map, module) when is_list(map) and is_atom(module),
+  @spec load(map() | [map()], Ecto.Schema.t() | [Ecto.Schema.t()]) :: struct()
+  def load(map, module) when is_atom(module),
+    do: load(map, [module])
+
+  def load(map, module) when is_list(map),
     do: Enum.map(map, &load(&1, module))
 
-  def load(%{"_id" => _id, "_key" => _key} = map, module)
-      when is_map(map) and is_atom(module) do
-    schema_type!(module)
+  def load(%{"_id" => id} = map, modules) do
+    [source, _key] = String.split(id, "/")
+
+    module =
+      Enum.find(modules, fn mod ->
+        schema_type!(mod)
+
+        mod.__schema__(:source) == source
+      end)
 
     Ecto.Repo.Schema.load(ArangoXEcto.Adapter, module, map)
+    |> add_associations(module, map)
+  end
+
+  def load(%{__id__: id} = map, modules) do
+    [source, _key] = String.split(id, "/")
+
+    module =
+      Enum.find(modules, fn mod ->
+        schema_type!(mod)
+
+        mod.__schema__(:source) == source
+      end)
+
+    struct(module, map)
     |> add_associations(module, map)
   end
 
@@ -575,6 +753,37 @@ defmodule ArangoXEcto do
   end
 
   @doc """
+  Checks if a view exists
+
+  This will return true if the view exists in the database, otherwise false.
+
+  ## Parameters
+
+  - `repo` - The Ecto repo module to use for the query
+  - `view_name` - Name of the collection to check
+
+  ## Examples
+
+  Checking a document collection exists
+
+      iex> ArangoXEcto.view_exists?(Repo, :users_search)
+      true
+  """
+  @spec view_exists?(Ecto.Repo.t() | pid(), binary() | atom()) :: boolean()
+  def view_exists?(repo_or_conn, view_name) when is_binary(view_name) or is_atom(view_name) do
+    conn = gen_conn_from_repo(repo_or_conn)
+
+    Arangox.get(conn, "/_api/view/#{view_name}")
+    |> case do
+      {:ok, %Arangox.Response{}} ->
+        true
+
+      _any ->
+        false
+    end
+  end
+
+  @doc """
   Returns if a Schema is an edge or not
 
   Checks for the presence of the `__edge__/0` function on the module.
@@ -591,16 +800,34 @@ defmodule ArangoXEcto do
   """
   @spec is_document?(atom()) :: boolean()
   def is_document?(module) when is_atom(module),
-    do: function_exported?(module, :__schema__, 1) and not is_edge?(module)
+    do:
+      function_exported?(module, :__schema__, 1) and not is_edge?(module) and not is_view?(module)
 
   def is_document?(_), do: false
 
   @doc """
+  Returns if a Schema is a view schema or not
+
+  Checks for the presence of the `__view__/1` function on the module.
+  """
+  @doc since: "1.3.0"
+  @spec is_view?(atom()) :: boolean()
+  def is_view?(module) when is_atom(module),
+    do: function_exported?(module, :__view__, 1)
+
+  def is_view?(_), do: false
+
+  @doc """
   Returns the type of a module
 
-  This is just a shortcut to using `is_edge/1` and `is_document/1`. If it is neither nil is returned.
+  This is just a shortcut to using `is_edge/1`, `is_document/1` and `is_view/1`. If it is none of them nil is returned.
 
   ## Examples
+
+  A real view
+
+      iex> ArangoXEcto.schema_type(MyApp.SomeView)
+      :view
 
   A real edge schema
 
@@ -615,6 +842,7 @@ defmodule ArangoXEcto do
   @spec schema_type(atom()) :: :document | :edge | nil
   def schema_type(module) do
     cond do
+      is_view?(module) -> :view
       is_edge?(module) -> :edge
       is_document?(module) -> :document
       true -> nil
@@ -624,7 +852,7 @@ defmodule ArangoXEcto do
   @doc """
   Same as schema_type/1 but throws an error on none
 
-  This is just a shortcut to using `is_edge/1` and `is_document/1`. If it is neither an error is raised.
+  This is just a shortcut to using `is_edge/1`, `is_document/1` and `is_view/1`. If it is none of them nil is returned.
 
   ## Examples
 
@@ -660,6 +888,12 @@ defmodule ArangoXEcto do
         %{pid: conn} = Ecto.Adapter.lookup_meta(repo)
 
         conn
+    end
+  end
+
+  defp remove_existing_analyzers(repo, analyzers) do
+    for %{name: name} <- analyzers do
+      ArangoXEcto.api_query(repo, :delete, ["/_api/analyzer/#{name}?force=true"])
     end
   end
 
@@ -872,18 +1106,20 @@ defmodule ArangoXEcto do
   end
 
   defp maybe_create_edges_collection(schema, repo) do
-    collection_name = source_name(schema)
-    collection_opts = schema.__collection_options__()
-    indexes = schema.__collection_indexes__()
-
-    unless collection_exists?(repo, collection_name, :edge) do
-      Migration.collection(collection_name, :edge, collection_opts)
-      |> Migration.create(repo)
-
-      maybe_create_indexes(repo, collection_name, indexes)
+    unless collection_exists?(repo, source_name(schema), :edge) do
+      create_collection(repo, schema)
     end
 
     schema
+  end
+
+  defp maybe_create_collection(repo, schema) when is_atom(repo) or is_pid(repo) do
+    type = ArangoXEcto.schema_type!(schema)
+    collection_name = schema.__schema__(:source)
+
+    unless ArangoXEcto.collection_exists?(repo, collection_name, type) do
+      ArangoXEcto.create_collection(repo, schema)
+    end
   end
 
   defp maybe_create_indexes(_, _, []), do: :ok
@@ -892,12 +1128,16 @@ defmodule ArangoXEcto do
     do: maybe_create_indexes(repo, collection_name, Map.to_list(indexes))
 
   defp maybe_create_indexes(repo, collection_name, indexes) when is_list(indexes) do
-    for index <- indexes do
-      {fields, opts} = Keyword.pop(index, :fields)
+    Enum.reduce(indexes, nil, fn
+      _index, {:error, reason} ->
+        {:error, reason}
 
-      Migration.index(collection_name, fields, opts)
-      |> Migration.create(repo)
-    end
+      index, _acc ->
+        {fields, opts} = Keyword.pop(index, :fields)
+
+        Migration.index(collection_name, fields, opts)
+        |> Migration.create(repo)
+    end)
   end
 
   defp maybe_create_indexes(_, _, _),

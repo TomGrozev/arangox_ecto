@@ -23,19 +23,33 @@ defmodule ArangoXEctoTest do
     %{pid: conn} = Ecto.Adapter.lookup_meta(Repo)
 
     # Get all collection names
-    res =
+    collection_res =
       case Arangox.get(conn, "/_api/collection") do
         {:ok, %Arangox.Response{body: %{"error" => false, "result" => result}}} -> result
         {:error, _} -> []
       end
 
+    # Get all view names
+    view_res =
+      case Arangox.get(conn, "/_api/view") do
+        {:ok, %Arangox.Response{body: %{"error" => false, "result" => result}}} -> result
+        {:error, _} -> []
+      end
+
     collection_names =
-      Enum.map(res, fn %{"name" => name} -> name end)
+      Enum.map(collection_res, fn %{"name" => name} -> name end)
       |> Enum.filter(&(!String.starts_with?(&1, "_")))
+
+    view_names = Enum.map(view_res, fn %{"id" => id} -> id end)
 
     # Delete all collections
     for collection <- collection_names do
       Arangox.delete(conn, "/_api/collection/#{collection}")
+    end
+
+    # Delete all views
+    for view <- view_names do
+      Arangox.delete(conn, "/_api/view/#{view}")
     end
 
     # Create test collections
@@ -50,6 +64,22 @@ defmodule ArangoXEctoTest do
   setup %{conn: conn} = context do
     for {collection, _type} <- @test_collections do
       Arangox.put(conn, "/_api/collection/#{collection}/truncate")
+    end
+
+    # Get all analyzer names
+    analyzer_res =
+      case Arangox.get(conn, "/_api/analyzer") do
+        {:ok, %Arangox.Response{body: %{"error" => false, "result" => result}}} -> result
+        {:error, _} -> []
+      end
+
+    analyzer_names =
+      Enum.map(analyzer_res, fn %{"name" => name} -> name end)
+      |> Enum.filter(&String.starts_with?(&1, "arangox_ecto_test::"))
+
+    # Delete all analyzers
+    for analyzer <- analyzer_names do
+      Arangox.delete(conn, "/_api/analyzer/#{analyzer}?force=true")
     end
 
     context
@@ -219,6 +249,188 @@ defmodule ArangoXEctoTest do
               %Arangox.Response{
                 body: %{"keyOptions" => %{"type" => "uuid"}}
               }} = Arangox.get(conn, "/_api/collection/user_posts_options/properties")
+    end
+  end
+
+  describe "create_view/2" do
+    test "creates a new view but fails on recreate" do
+      assert {:ok, %Arangox.Response{status: 201}} =
+               ArangoXEcto.create_view(Repo, ArangoXEctoTest.Integration.UsersView)
+
+      assert {:error, %Arangox.Error{error_num: 1207}} =
+               ArangoXEcto.create_view(Repo, ArangoXEctoTest.Integration.UsersView)
+    end
+
+    test "automatically creates collection if it doesn't exist" do
+      # Comments collection doesn't exist by default
+      assert {:ok, %Arangox.Response{status: 201}} =
+               ArangoXEcto.create_view(Repo, ArangoXEctoTest.Integration.CommentView)
+    end
+
+    test "error on invalid view schema" do
+      # Not a view schema
+      assert_raise ArgumentError, ~r/not a valid view schema/, fn ->
+        ArangoXEcto.create_view(Repo, ArangoXEcto)
+      end
+    end
+
+    test "automatically creates analyzers in dynamic mode" do
+      assert {:error, %Arangox.Error{status: 400, error_num: 10}} =
+               ArangoXEcto.create_view(Repo, ArangoXEctoTest.Integration.FailedAnalyzerTestView)
+
+      assert {:ok, %Arangox.Response{status: 201}} =
+               ArangoXEcto.create_view(Repo, ArangoXEctoTest.Integration.AnalyzerTestView)
+    end
+  end
+
+  describe "create_analyzers/2" do
+    test "creates analyzers" do
+      {success, fail} =
+        case ArangoXEcto.create_analyzers(Repo, ArangoXEctoTest.Integration.Analyzers) do
+          {:ok, responses} -> {responses, []}
+          {:error, success, fail} -> {success, fail}
+        end
+
+      # only errors allowed are arango not implemented errors
+      for {_name, err} <- fail do
+        assert %Arangox.Error{status: 501, error_num: 9} = err
+      end
+
+      expected_responses = %{
+        a: %{
+          "features" => ["norm"],
+          "properties" => %{},
+          "name" => "arangox_ecto_test::a",
+          "type" => "identity"
+        },
+        b: %{
+          "features" => ["frequency", "position"],
+          "properties" => %{"delimiter" => ","},
+          "name" => "arangox_ecto_test::b",
+          "type" => "delimiter"
+        },
+        c: %{
+          "features" => ["frequency", "position", "norm"],
+          "properties" => %{"locale" => "en"},
+          "name" => "arangox_ecto_test::c",
+          "type" => "stem"
+        },
+        d: %{
+          "features" => ["frequency", "position"],
+          "properties" => %{"accent" => false, "case" => "lower", "locale" => "en"},
+          "name" => "arangox_ecto_test::d",
+          "type" => "norm"
+        },
+        e: %{
+          "features" => [],
+          "properties" => %{
+            "endMarker" => "b",
+            "max" => 5,
+            "min" => 3,
+            "preserveOriginal" => true,
+            "startMarker" => "a",
+            "streamType" => "binary"
+          },
+          "name" => "arangox_ecto_test::e",
+          "type" => "ngram"
+        },
+        f: %{
+          "features" => ["frequency", "norm"],
+          "properties" => %{
+            "accent" => false,
+            "case" => "lower",
+            "edgeNgram" => %{"min" => 3},
+            "locale" => "en",
+            "stemming" => false,
+            "stopwords" => ["abc"]
+          },
+          "name" => "arangox_ecto_test::f",
+          "type" => "text"
+        },
+        g: %{
+          "features" => ["frequency"],
+          "properties" => %{"locale" => "en"},
+          "name" => "arangox_ecto_test::g",
+          "type" => "collation"
+        },
+        h: %{
+          "features" => ["norm"],
+          "properties" => %{
+            "batchSize" => 500,
+            "collapsePositions" => true,
+            "keepNull" => false,
+            "memoryLimit" => 2_097_152,
+            "queryString" => "RETURN SOUNDEX(@param)",
+            "returnType" => "string"
+          },
+          "name" => "arangox_ecto_test::h",
+          "type" => "aql"
+        },
+        i: %{
+          "features" => ["frequency"],
+          "properties" => %{
+            "pipeline" => [
+              %{
+                "properties" => %{
+                  "accent" => false,
+                  "case" => "lower",
+                  "locale" => "en",
+                  "stemming" => true
+                },
+                "type" => "text"
+              },
+              %{
+                "properties" => %{
+                  "accent" => false,
+                  "case" => "lower",
+                  "locale" => "en"
+                },
+                "type" => "norm"
+              }
+            ]
+          },
+          "name" => "arangox_ecto_test::i",
+          "type" => "pipeline"
+        },
+        j: %{
+          "features" => [],
+          "properties" => %{"hex" => false, "stopwords" => ["xyz"]},
+          "name" => "arangox_ecto_test::j",
+          "type" => "stopwords"
+        },
+        k: %{
+          "features" => [],
+          "properties" => %{"break" => "all", "case" => "none"},
+          "name" => "arangox_ecto_test::k",
+          "type" => "segmentation"
+        },
+        l: %{
+          "features" => ["norm"],
+          "properties" => %{
+            "legacy" => false,
+            "options" => %{"maxCells" => 21, "maxLevel" => 24, "minLevel" => 5},
+            "type" => "shape"
+          },
+          "name" => "arangox_ecto_test::l",
+          "type" => "geojson"
+        },
+        m: %{
+          "features" => ["norm"],
+          "properties" => %{
+            "latitude" => ["lat", "latitude"],
+            "longitude" => ["long", "longitude"],
+            "options" => %{"maxCells" => 21, "maxLevel" => 24, "minLevel" => 5}
+          },
+          "name" => "arangox_ecto_test::m",
+          "type" => "geopoint"
+        }
+      }
+
+      for {name, expected} <- expected_responses do
+        if actual = Keyword.get(success, name) do
+          assert %Arangox.Response{status: 201, body: ^expected} = actual
+        end
+      end
     end
   end
 
