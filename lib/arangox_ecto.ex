@@ -284,6 +284,11 @@ defmodule ArangoXEcto do
 
   - `repo` - The Ecto repo module to use for queries
   - `view` - The View Schema to be created
+  - `opts` - Additional options to use for analyzer creation
+
+  ## Options
+
+  - `:prefix` - The prefix for the tenant to create analyzers for
 
   ## Examples
 
@@ -297,9 +302,9 @@ defmodule ArangoXEcto do
 
   """
   @doc since: "1.3.0"
-  @spec create_view(Ecto.Repo.t() | pid(), ArangoXEcto.View.t()) ::
+  @spec create_view(Ecto.Repo.t() | pid(), ArangoXEcto.View.t(), Keyword.t()) ::
           {:ok, Arangox.Response.t()} | {:error, Arangox.Error.t()}
-  def create_view(repo, view) do
+  def create_view(repo, view, opts \\ []) do
     view_definition = ArangoXEcto.View.definition(view)
     analyzer_module = view.__analyzer_module__()
 
@@ -308,7 +313,7 @@ defmodule ArangoXEcto do
          not Keyword.get(repo.config(), :static, false) do
       # create the analyzers if in dynamic mode
       if not is_nil(analyzer_module) do
-        create_analyzers(repo, analyzer_module)
+        create_analyzers(repo, analyzer_module, opts)
       end
 
       # Create link collections if they don't exist in dynamic mode
@@ -318,7 +323,10 @@ defmodule ArangoXEcto do
       end)
     end
 
-    ArangoXEcto.api_query(repo, :post, ["/_api/view", view_definition])
+    ArangoXEcto.api_query(repo, :post, [
+      __build_connection_url__(repo, "view", Keyword.get(opts, :prefix)),
+      view_definition
+    ])
   end
 
   @doc """
@@ -338,6 +346,11 @@ defmodule ArangoXEcto do
 
   - `repo` - The Ecto repo module to use for queries
   - `analyzer_module` - The Analyzer module
+  - `opts` - Additional options to use for analyzer creation
+
+  ## Options
+
+  - `:prefix` - The prefix for the tenant to create analyzers for
 
   ## Examples
 
@@ -351,15 +364,17 @@ defmodule ArangoXEcto do
 
   """
   @doc since: "1.3.0"
-  @spec create_analyzers(Ecto.Repo.t() | pid(), ArangoXEcto.Analyzer.t()) ::
+  @spec create_analyzers(Ecto.Repo.t() | pid(), ArangoXEcto.Analyzer.t(), Keyword.t()) ::
           {:ok, Arangox.Response.t()} | {:error, [Arangox.Response.t()], [Arangox.Error.t()]}
-  def create_analyzers(repo, analyzer_module) do
+  def create_analyzers(repo, analyzer_module, opts \\ []) do
     analyzers = analyzer_module.__analyzers__()
 
-    remove_existing_analyzers(repo, analyzers)
+    remove_existing_analyzers(repo, analyzers, opts)
+
+    url = __build_connection_url__(repo, "analyzer", Keyword.get(opts, :prefix))
 
     Enum.reduce(analyzers, {[], []}, fn analyzer, {success, fail} ->
-      case ArangoXEcto.api_query(repo, :post, ["/_api/analyzer", analyzer]) do
+      case ArangoXEcto.api_query(repo, :post, [url, analyzer]) do
         {:ok, res} -> {[{analyzer.name, res} | success], fail}
         {:error, res} -> {success, [{analyzer.name, res} | fail]}
       end
@@ -381,6 +396,11 @@ defmodule ArangoXEcto do
 
   - `repo` - The Ecto repo module to use for queries
   - `schema` - The Collection Schema to be created
+  - `opts` - Additional options to pass
+
+  ## Options 
+
+  - `:prefix` - The prefix to use for database tenant collection creation
 
   ## Examples
 
@@ -393,8 +413,9 @@ defmodule ArangoXEcto do
       {:error, %Arangox.Error{}}
 
   """
-  @spec create_collection(Ecto.Repo.t(), ArangoXEcto.Schema.t()) :: :ok | {:error, any()}
-  def create_collection(repo, schema) do
+  @spec create_collection(Ecto.Repo.t(), ArangoXEcto.Schema.t(), Keyword.t()) ::
+          :ok | {:error, any()}
+  def create_collection(repo, schema, opts \\ []) do
     if Keyword.get(repo.config(), :static, false) do
       raise("This function cannot be called in static mode. Please use migrations instead.")
     else
@@ -403,12 +424,13 @@ defmodule ArangoXEcto do
       collection_name = source_name(schema)
       collection_opts = schema.__collection_options__()
       indexes = schema.__collection_indexes__()
+      opts = Keyword.put(opts, :repo, repo)
 
       collection = Migration.collection(collection_name, type, collection_opts)
 
-      case Migration.create(collection, repo) do
+      case Migration.create(collection, opts) do
         :ok ->
-          maybe_create_indexes(repo, collection_name, indexes)
+          maybe_create_indexes(collection_name, indexes, opts)
 
         error ->
           error
@@ -704,6 +726,20 @@ defmodule ArangoXEcto do
   end
 
   @doc """
+  Returns the name of a database for prefix
+
+  This simply prepends the tenant name to the database supplied in the repo config.
+
+  ## Parameters
+
+  - `repo` - The Ecto repo module to use for the query
+  - `prefix` - The prefix to get the database name for
+  """
+  @spec get_prefix_database(Ecto.Repo.t(), String.t() | atom()) :: String.t()
+  def get_prefix_database(repo, nil), do: get_repo_db(repo)
+  def get_prefix_database(repo, prefix), do: "#{prefix}_" <> get_repo_db(repo)
+
+  @doc """
   Checks if a collection exists
 
   This will return true if the collection exists in the database, matches the specified type and is not a system
@@ -714,6 +750,11 @@ defmodule ArangoXEcto do
   - `repo` - The Ecto repo module to use for the query
   - `collection_name` - Name of the collection to check
   - `type` - The type of collection to check against, defaults to a regular document
+  - `opts` - Options to be used, available options shown below, defaults to none
+
+  ## Options
+
+  - `:prefix` - The prefix to use for database collection checking
 
   ## Examples
 
@@ -731,14 +772,31 @@ defmodule ArangoXEcto do
 
       iex> ArangoXEcto.collection_exists?(Repo, "_system_test")
       false
+
+  Checking a collection exists with database prefix
+
+      iex> ArangoXEcto.collection_exists?(Repo, "test", "tenant1")
+      true
   """
-  @spec collection_exists?(Ecto.Repo.t() | pid(), binary() | atom(), atom() | integer()) ::
+  @spec collection_exists?(
+          Ecto.Repo.t() | pid(),
+          binary() | atom(),
+          atom() | integer(),
+          Keyword.t()
+        ) ::
           boolean()
-  def collection_exists?(repo_or_conn, collection_name, type \\ :document)
+  def collection_exists?(repo_or_conn, collection_name, type \\ :document, opts \\ [])
       when is_binary(collection_name) or is_atom(collection_name) do
     conn = gen_conn_from_repo(repo_or_conn)
 
-    Arangox.get(conn, "/_api/collection/#{collection_name}")
+    Arangox.get(
+      conn,
+      __build_connection_url__(
+        repo_or_conn,
+        "collection/#{collection_name}",
+        Keyword.get(opts, :prefix)
+      )
+    )
     |> case do
       {:ok, %Arangox.Response{body: %{"isSystem" => false} = body}} ->
         if is_nil(type) do
@@ -875,6 +933,15 @@ defmodule ArangoXEcto do
     end
   end
 
+  @doc false
+  def __build_connection_url__(repo, string, _prefix, options \\ "")
+
+  def __build_connection_url__(repo, string, _prefix, options) when is_pid(repo),
+    do: "/_api/#{string}#{options}"
+
+  def __build_connection_url__(repo, string, prefix, options),
+    do: "/_db/#{get_prefix_database(repo, prefix)}/_api/#{string}#{options}"
+
   ###############
   ##  Helpers  ##
   ###############
@@ -891,9 +958,16 @@ defmodule ArangoXEcto do
     end
   end
 
-  defp remove_existing_analyzers(repo, analyzers) do
+  defp remove_existing_analyzers(repo, analyzers, opts) do
     for %{name: name} <- analyzers do
-      ArangoXEcto.api_query(repo, :delete, ["/_api/analyzer/#{name}?force=true"])
+      ArangoXEcto.api_query(repo, :delete, [
+        __build_connection_url__(
+          repo,
+          "analyzer/#{name}",
+          Keyword.get(opts, :prefix),
+          "?force=true"
+        )
+      ])
     end
   end
 
@@ -1122,21 +1196,21 @@ defmodule ArangoXEcto do
     end
   end
 
-  defp maybe_create_indexes(_, _, []), do: :ok
+  defp maybe_create_indexes(_, [], _), do: :ok
 
-  defp maybe_create_indexes(repo, collection_name, %{} = indexes),
-    do: maybe_create_indexes(repo, collection_name, Map.to_list(indexes))
+  defp maybe_create_indexes(collection_name, %{} = indexes, opts),
+    do: maybe_create_indexes(collection_name, Map.to_list(indexes), opts)
 
-  defp maybe_create_indexes(repo, collection_name, indexes) when is_list(indexes) do
+  defp maybe_create_indexes(collection_name, indexes, opts) when is_list(indexes) do
     Enum.reduce(indexes, nil, fn
       _index, {:error, reason} ->
         {:error, reason}
 
       index, _acc ->
-        {fields, opts} = Keyword.pop(index, :fields)
+        {fields, index_opts} = Keyword.pop(index, :fields)
 
-        Migration.index(collection_name, fields, opts)
-        |> Migration.create(repo)
+        Migration.index(collection_name, fields, index_opts)
+        |> Migration.create(opts)
     end)
   end
 
@@ -1173,4 +1247,7 @@ defmodule ArangoXEcto do
   defp collection_type_to_integer(type) when is_integer(type) and type in [2, 3], do: type
 
   defp collection_type_to_integer(_), do: 2
+
+  # TODO: Check that it is actually a repo that is passed
+  defp get_repo_db(repo), do: repo.config() |> Keyword.get(:database)
 end

@@ -38,7 +38,7 @@ defmodule ArangoXEcto.Behaviour.Queryable do
         %{sources: sources},
         {:nocache, query},
         params,
-        _options
+        opts
       ) do
     Logger.debug("#{inspect(__MODULE__)}.execute", %{
       "#{inspect(__MODULE__)}.execute-params" => %{
@@ -48,6 +48,11 @@ defmodule ArangoXEcto.Behaviour.Queryable do
 
     is_write_operation = String.match?(query, ~r/(update|remove) .+/i)
     is_static = Keyword.get(repo.config(), :static, false)
+
+    database =
+      opts
+      |> Keyword.get(:prefix)
+      |> then(&ArangoXEcto.get_prefix_database(repo, &1))
 
     {run_query, options} = process_sources(repo, sources, is_static, is_write_operation)
 
@@ -66,7 +71,7 @@ defmodule ArangoXEcto.Behaviour.Queryable do
         Arangox.transaction(
           conn,
           fn cursor ->
-            stream = Arangox.cursor(cursor, query, zipped_args)
+            stream = Arangox.cursor(cursor, query, zipped_args, database: database)
 
             Enum.reduce(
               stream,
@@ -82,7 +87,7 @@ defmodule ArangoXEcto.Behaviour.Queryable do
               end
             )
           end,
-          options
+          Keyword.put(options, :database, database)
         )
 
       case res do

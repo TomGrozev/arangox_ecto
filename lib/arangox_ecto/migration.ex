@@ -139,6 +139,13 @@ defmodule ArangoXEcto.Migration do
   Since view schemas and analyzers are just module definitions we can use them directly here. Therefore
   the module is just passed directly.
 
+  There is the ability to pass additional options as the second argument
+
+  ## Options
+
+  - `:repo` - The repo or connection to use for the migration create action 
+  - `:prefix` - The prefix to use for tenant creation
+
   ## Examples
 
   Create a collection
@@ -156,11 +163,13 @@ defmodule ArangoXEcto.Migration do
       iex> create(MyProject.UsersView)
       :ok
   """
-  @spec create(Collection.t() | Index.t() | atom()) :: :ok | {:error, binary()}
-  def create(object_to_create, conn \\ nil)
+  @spec create(Collection.t() | Index.t() | atom(), Keyword.t()) ::
+          :ok | {:error, binary()}
+  def create(object_to_create, opts \\ [])
 
-  def create(%Collection{} = collection, conn) do
-    {:ok, conn} = get_db_conn(conn)
+  def create(%Collection{} = collection, opts) do
+    repo_or_conn = Keyword.get(opts, :repo)
+    {:ok, conn} = get_db_conn(repo_or_conn)
 
     args =
       collection
@@ -168,7 +177,15 @@ defmodule ArangoXEcto.Migration do
 
     args = :maps.filter(fn _, v -> not is_nil(v) end, args)
 
-    case Arangox.post(conn, "/_api/collection", args) do
+    case Arangox.post(
+           conn,
+           ArangoXEcto.__build_connection_url__(
+             repo_or_conn,
+             "collection",
+             Keyword.get(opts, :prefix)
+           ),
+           args
+         ) do
       {:ok, _} ->
         :ok
 
@@ -183,12 +200,18 @@ defmodule ArangoXEcto.Migration do
     end
   end
 
-  def create(%Index{collection_name: collection_name} = index, conn) do
-    {:ok, conn} = get_db_conn(conn)
+  def create(%Index{collection_name: collection_name} = index, opts) do
+    repo_or_conn = Keyword.get(opts, :repo)
+    {:ok, conn} = get_db_conn(repo_or_conn)
 
     case Arangox.post(
            conn,
-           "/_api/index?collection=#{collection_name}",
+           ArangoXEcto.__build_connection_url__(
+             repo_or_conn,
+             "index",
+             Keyword.get(opts, :prefix),
+             "?collection=#{collection_name}"
+           ),
            Map.from_struct(index)
          ) do
       {:ok, _} ->
@@ -205,18 +228,18 @@ defmodule ArangoXEcto.Migration do
     end
   end
 
-  def create(module, conn) when is_atom(module) do
-    {:ok, conn} = get_db_conn(conn)
+  def create(module, opts) when is_atom(module) do
+    {:ok, conn} = Keyword.get(opts, :repo) |> get_db_conn()
 
     cond do
-      function_exported?(module, :__analyzers__, 0) -> create_analyzers(conn, module)
-      function_exported?(module, :__view__, 1) -> create_view(conn, module)
+      function_exported?(module, :__analyzers__, 0) -> create_analyzers(conn, module, opts)
+      function_exported?(module, :__view__, 1) -> create_view(conn, module, opts)
       true -> {:error, "invalid module, not a view or an anlyzer module"}
     end
   end
 
-  defp create_analyzers(conn, module) do
-    case ArangoXEcto.create_analyzers(conn, module) do
+  defp create_analyzers(conn, module, opts) do
+    case ArangoXEcto.create_analyzers(conn, module, opts) do
       {:ok, _} ->
         :ok
 
@@ -231,8 +254,8 @@ defmodule ArangoXEcto.Migration do
     end
   end
 
-  defp create_view(conn, module) do
-    case ArangoXEcto.create_view(conn, module) do
+  defp create_view(conn, module, opts) do
+    case ArangoXEcto.create_view(conn, module, opts) do
       {:ok, _} ->
         :ok
 
