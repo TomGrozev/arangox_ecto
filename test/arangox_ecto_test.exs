@@ -407,7 +407,6 @@ defmodule ArangoXEctoTest do
         l: %{
           "features" => ["norm"],
           "properties" => %{
-            "legacy" => false,
             "options" => %{"maxCells" => 21, "maxLevel" => 24, "minLevel" => 5},
             "type" => "shape"
           },
