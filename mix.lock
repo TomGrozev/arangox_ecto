@@ -1,5 +1,5 @@
 %{
-  "arangox": {:git, "https://github.com/TomGrozev/arangox", "c4b96949ae0ae79c6c2b7c5204b84066c23903a0", []},
+  "arangox": {:hex, :arangox, "0.5.5", "39e25d16771a3d5e406e1187b1a0f8e1b3e2d4f3bccfb88cfb1fcfd333e9bf48", [:mix], [{:db_connection, "~> 2.2", [hex: :db_connection, repo: "hexpm", optional: false]}, {:gun, "~> 1.3.3", [hex: :gun, repo: "hexpm", optional: true]}, {:jason, "> 0.0.0", [hex: :jason, repo: "hexpm", optional: true]}, {:mint, ">= 0.4.0 and < 2.0.0", [hex: :mint, repo: "hexpm", optional: true]}, {:velocy, "~> 0.1", [hex: :velocy, repo: "hexpm", optional: true]}], "hexpm", "677834b11b353b267b5402bd456181112ab9d2baaf32c14f8c6bf4e87ce87d22"},
   "blankable": {:hex, :blankable, "1.0.0", "89ab564a63c55af117e115144e3b3b57eb53ad43ba0f15553357eb283e0ed425", [:mix], [], "hexpm", "7cf11aac0e44f4eedbee0c15c1d37d94c090cb72a8d9fddf9f7aec30f9278899"},
   "bunt": {:hex, :bunt, "0.2.1", "e2d4792f7bc0ced7583ab54922808919518d0e57ee162901a16a1b6664ef3b14", [:mix], [], "hexpm", "a330bfb4245239787b15005e66ae6845c9cd524a288f0d141c148b02603777a5"},
   "connection": {:hex, :connection, "1.1.0", "ff2a49c4b75b6fb3e674bfc5536451607270aac754ffd1bdfe175abe4a6d7a68", [:mix], [], "hexpm", "722c1eb0a418fbe91ba7bd59a47e28008a189d47e37e0e7bb85585a016b2869c"},
