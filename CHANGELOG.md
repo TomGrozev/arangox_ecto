@@ -1,5 +1,36 @@
 # Changelog
 
+## 1.3.0
+
+*This release now requires Ecto 3.9 and Arangox 0.5.5 as a minimum.*
+
+### Enhancements
+
+- Add Arango Search capability (#60)
+  - Added `ArangoXEcto.View` definition
+  - Ecto querying of views
+  - Add search extensions for Ecto Querying in `ArangoXEcto.Query` (*BREAKING CHANGE* requires Ecto 3.9)
+  - Adds analyzer definition for management in code
+  - Add view and analyzer migration capability to `ArangoXEcto.Migration`
+- Allow `ArangoXEcto.load/2` to load from multiple different schmeas
+- Add ability to sort using fragments
+- Add multi-tenancy functionality (#25) using Ecto `:prefix` option
+  - Adds the ability to pass the :prefix option for CRUD operations
+  - Adds ArangoXEcto.get_prefix_database/2 to get the database name
+  - Adds querying prefix option (*BREAKING CHANGE* requires Arangox >= 0.5.5)
+
+### Fixes
+
+- Fix write operation on AQL query not working for delete
+- Fix static mode tests using a static mode repo
+- Add missing query tests #61 (thanks @mpoeter)
+- Adapt AQL query builder for Ecto 3.10 which introduced LimitExpr #61 (thanks @mpoeter)
+
+### Doc changes
+
+- Add Arango Search related documentation
+
+
 ## 1.2.1
 
 ### Fixes

@@ -35,10 +35,10 @@ defmodule ArangoXEcto.Behaviour.Queryable do
   @impl true
   def execute(
         %{pid: conn, repo: repo},
-        %{sources: sources, select: selecting},
+        %{sources: sources},
         {:nocache, query},
         params,
-        _options
+        opts
       ) do
     Logger.debug("#{inspect(__MODULE__)}.execute", %{
       "#{inspect(__MODULE__)}.execute-params" => %{
@@ -46,10 +46,15 @@ defmodule ArangoXEcto.Behaviour.Queryable do
       }
     })
 
-    is_write_operation = selecting != nil or String.match?(query, ~r/^.*[update|delete].*+$/i)
+    is_write_operation = String.match?(query, ~r/(update|remove) .+/i)
     is_static = Keyword.get(repo.config(), :static, false)
 
-    {run_query, options} = process_sources(conn, sources, is_static, is_write_operation)
+    database =
+      opts
+      |> Keyword.get(:prefix)
+      |> then(&ArangoXEcto.get_prefix_database(repo, &1))
+
+    {run_query, options} = process_sources(repo, sources, is_static, is_write_operation)
 
     dumped_params = Enum.map(params, &dump/1)
 
@@ -66,7 +71,7 @@ defmodule ArangoXEcto.Behaviour.Queryable do
         Arangox.transaction(
           conn,
           fn cursor ->
-            stream = Arangox.cursor(cursor, query, zipped_args)
+            stream = Arangox.cursor(cursor, query, zipped_args, database: database)
 
             Enum.reduce(
               stream,
@@ -82,7 +87,7 @@ defmodule ArangoXEcto.Behaviour.Queryable do
               end
             )
           end,
-          options
+          Keyword.put(options, :database, database)
         )
 
       case res do
@@ -102,9 +107,9 @@ defmodule ArangoXEcto.Behaviour.Queryable do
   defp dump(%Decimal{} = d), do: Decimal.to_string(d)
   defp dump(val), do: val
 
-  defp process_sources(conn, sources, is_static, is_write_operation) do
+  defp process_sources(repo, sources, is_static, is_write_operation) do
     sources = Tuple.to_list(sources)
-    run_query = ensure_all_collections_exist(conn, sources, is_static)
+    run_query = ensure_all_collections_exist(repo, sources, is_static)
 
     {run_query, build_options(sources, is_write_operation)}
   end
@@ -115,26 +120,44 @@ defmodule ArangoXEcto.Behaviour.Queryable do
     if is_write_operation, do: [write: collections], else: []
   end
 
-  defp ensure_all_collections_exist(conn, sources, is_static) when is_list(sources) do
+  defp ensure_all_collections_exist(repo, sources, is_static) when is_list(sources) do
     sources
-    |> Enum.find_value(fn {collection, source_module, _} ->
-      collection_type = ArangoXEcto.schema_type(source_module)
+    |> Enum.all?(fn {collection, source_module, _} ->
+      case ArangoXEcto.schema_type(source_module) do
+        :view ->
+          maybe_create_view(repo, {collection, source_module}, is_static)
 
-      if ArangoXEcto.collection_exists?(conn, collection, collection_type) do
-        false
-      else
-        maybe_raise_collection_error(is_static, collection)
+          true
+
+        collection_type ->
+          maybe_raise_collection_error(repo, collection, collection_type, is_static)
       end
     end)
-    |> case do
-      nil -> true
-      true -> false
+  end
+
+  defp maybe_raise_collection_error(repo, collection, collection_type, is_static) do
+    cond do
+      ArangoXEcto.collection_exists?(repo, collection, collection_type) ->
+        true
+
+      is_static ->
+        raise("Collection (#{collection}) does not exist. Maybe a migration is missing.")
+
+      true ->
+        false
     end
   end
 
-  defp maybe_raise_collection_error(true, collection),
-    do: raise("Collection (#{collection}) does not exist. Maybe a migration is missing.")
+  defp maybe_create_view(repo, {source, schema}, is_static) do
+    cond do
+      ArangoXEcto.view_exists?(repo, source) ->
+        true
 
-  defp maybe_raise_collection_error(false, _),
-    do: true
+      is_static ->
+        raise("View (#{schema}) does not exist. Maybe a migration is missing.")
+
+      true ->
+        ArangoXEcto.create_view(repo, schema)
+    end
+  end
 end

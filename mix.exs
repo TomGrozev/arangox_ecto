@@ -1,7 +1,7 @@
 defmodule ArangoXEcto.MixProject do
   use Mix.Project
 
-  @version "1.2.1"
+  @version "1.3.0"
   @source_url "https://github.com/TomGrozev/arangox_ecto"
 
   def project do
@@ -37,7 +37,7 @@ defmodule ArangoXEcto.MixProject do
   defp deps do
     [
       ecto_dep(),
-      {:arangox, "~> 0.5"},
+      {:arangox, ">= 0.5.5"},
       {:velocy, "~> 0.1"},
       {:jason, "~> 1.2"},
       {:geo, "~> 3.0"},
@@ -52,7 +52,7 @@ defmodule ArangoXEcto.MixProject do
     if path = System.get_env("ECTO_PATH") do
       {:ecto, path: path}
     else
-      {:ecto, "~> 3.6"}
+      {:ecto, "~> 3.9"}
     end
   end
 

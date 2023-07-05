@@ -5,8 +5,6 @@ defmodule ArangoXEcto.Behaviour.Schema do
 
   require Logger
 
-  alias ArangoXEcto.Migration
-
   @doc """
   Called to autogenerate a value for id/embed_id/binary_id.
 
@@ -23,7 +21,7 @@ defmodule ArangoXEcto.Behaviour.Schema do
   @impl true
   def insert(
         %{pid: conn, repo: repo},
-        %{source: collection, schema: schema},
+        %{source: collection, schema: schema, prefix: prefix},
         fields,
         on_conflict,
         returning,
@@ -47,11 +45,11 @@ defmodule ArangoXEcto.Behaviour.Schema do
       "#{inspect(__MODULE__)}.insert-params" => %{document: inspect(doc)}
     })
 
-    maybe_create_collection(repo, schema, conn)
+    maybe_create_collection(repo, schema, prefix)
 
     Arangox.post(
       conn,
-      "/_api/document/#{collection}" <> options,
+      ArangoXEcto.__build_connection_url__(repo, "document/#{collection}", prefix, options),
       doc
     )
     |> extract_doc(return_new, on_conflict)
@@ -64,7 +62,7 @@ defmodule ArangoXEcto.Behaviour.Schema do
   @impl true
   def insert_all(
         %{pid: conn, repo: repo},
-        %{source: collection, schema: schema},
+        %{source: collection, schema: schema, prefix: prefix},
         _header,
         list,
         on_conflict,
@@ -85,11 +83,11 @@ defmodule ArangoXEcto.Behaviour.Schema do
       "#{inspect(__MODULE__)}.insert_all-params" => %{documents: inspect(docs)}
     })
 
-    maybe_create_collection(repo, schema, conn)
+    maybe_create_collection(repo, schema, prefix)
 
     case Arangox.post(
            conn,
-           "/_api/document/#{collection}" <> options,
+           ArangoXEcto.__build_connection_url__(repo, "document/#{collection}", prefix, options),
            docs
          ) do
       {:ok, %{body: body}} ->
@@ -148,12 +146,19 @@ defmodule ArangoXEcto.Behaviour.Schema do
   Deletes a single struct with the given filters.
   """
   @impl true
-  def delete(%{pid: conn}, %{source: collection}, [{:_key, key}], _options) do
+  def delete(
+        %{pid: conn, repo: repo},
+        %{source: collection, prefix: prefix},
+        [{:_key, key}],
+        _options
+      ) do
     Logger.debug("#{inspect(__MODULE__)}.delete", %{
       "#{inspect(__MODULE__)}.delete-params" => %{collection: collection, key: key}
     })
 
-    case Arangox.delete(conn, "/_api/document/#{collection}/#{key}") do
+    url = ArangoXEcto.__build_connection_url__(repo, "document/#{collection}/#{key}", prefix)
+
+    case Arangox.delete(conn, url) do
       {:ok, _} -> {:ok, []}
       {:error, %{status: 404}} -> {:error, :stale}
       {:error, %{status: status}} -> {:error, status}
@@ -170,7 +175,7 @@ defmodule ArangoXEcto.Behaviour.Schema do
   @impl true
   def update(
         %{pid: conn, repo: repo},
-        %{source: collection, schema: schema},
+        %{source: collection, schema: schema, prefix: prefix},
         fields,
         [{:_key, key}],
         returning,
@@ -185,11 +190,16 @@ defmodule ArangoXEcto.Behaviour.Schema do
       "#{inspect(__MODULE__)}.update-params" => %{document: inspect(document)}
     })
 
-    maybe_create_collection(repo, schema, conn)
+    maybe_create_collection(repo, schema, prefix)
 
     Arangox.patch(
       conn,
-      "/_api/document/#{collection}/#{key}" <> options,
+      ArangoXEcto.__build_connection_url__(
+        repo,
+        "document/#{collection}/#{key}",
+        prefix,
+        options
+      ),
       document
     )
     |> extract_doc(return_new)
@@ -262,41 +272,15 @@ defmodule ArangoXEcto.Behaviour.Schema do
 
   defp single_doc_result({:invalid, _} = res, _), do: res
 
-  defp maybe_create_collection(repo, schema, conn) when is_atom(repo) do
+  defp maybe_create_collection(repo, schema, prefix) when is_atom(repo) do
     type = ArangoXEcto.schema_type!(schema)
     collection_name = schema.__schema__(:source)
-    is_static = Keyword.get(repo.config(), :static, false)
-    collection_opts = schema.__collection_options__()
-    indexes = schema.__collection_indexes__()
+    opts = [prefix: prefix]
 
-    unless ArangoXEcto.collection_exists?(conn, collection_name, type) do
-      if is_static do
-        raise("Collection (#{collection_name}) does not exist. Maybe a migration is missing.")
-      else
-        Migration.collection(collection_name, type, collection_opts)
-        |> Migration.create(conn)
-
-        maybe_create_indexes(conn, collection_name, indexes)
-      end
+    unless ArangoXEcto.collection_exists?(repo, collection_name, type, opts) do
+      ArangoXEcto.create_collection(repo, schema, opts)
     end
   end
-
-  defp maybe_create_indexes(_, _, []), do: :ok
-
-  defp maybe_create_indexes(conn, collection_name, %{} = indexes),
-    do: maybe_create_indexes(conn, collection_name, Map.to_list(indexes))
-
-  defp maybe_create_indexes(conn, collection_name, indexes) when is_list(indexes) do
-    for index <- indexes do
-      {fields, opts} = Keyword.pop(index, :fields)
-
-      Migration.index(collection_name, fields, opts)
-      |> Migration.create(conn)
-    end
-  end
-
-  defp maybe_create_indexes(_, _, _),
-    do: raise("Invalid indexes provided. Should be a list of keyword lists.")
 
   defp build_docs(fields) when is_list(fields) do
     Enum.map(
