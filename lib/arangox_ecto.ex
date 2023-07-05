@@ -1248,6 +1248,9 @@ defmodule ArangoXEcto do
 
   defp collection_type_to_integer(_), do: 2
 
-  # TODO: Check that it is actually a repo that is passed
-  defp get_repo_db(repo), do: repo.config() |> Keyword.get(:database)
+  defp get_repo_db(repo) when not is_nil(repo) do
+    if function_exported?(repo, :__adapter__, 0) do
+      repo.config() |> Keyword.get(:database)
+    end
+  end
 end

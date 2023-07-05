@@ -374,6 +374,7 @@ defmodule ArangoXEcto.View do
   This takes the macros that define the view and converts it into
   a definition for use on creation.
   """
+  @spec definition(Module.t()) :: map()
   def definition(view) when is_atom(view) do
     if function_exported?(view, :__view__, 1) do
       opts = Enum.into(view.__view__(:options), %{})

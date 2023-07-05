@@ -955,13 +955,16 @@ defmodule ArangoXEcto.Analyzer do
   end
 
   @doc false
+  @spec validate_name(atom()) :: atom()
   def validate_name(name) when is_atom(name), do: name
 
   def validate_name(name),
     do: raise(ArgumentError, "the name for analyzer must be an atom, got: #{inspect(name)}")
 
-  @doc false
   @valid_keys [:frequency, :norm, :position]
+
+  @doc false
+  @spec validate_features([atom()]) :: [atom()]
   def validate_features(features) do
     unless is_list(features) and Enum.all?(features, &Enum.member?(@valid_keys, &1)) do
       raise ArgumentError,
@@ -972,6 +975,7 @@ defmodule ArangoXEcto.Analyzer do
   end
 
   @doc false
+  @spec validate_properties([atom()], atom(), [atom()]) :: [atom()]
   def validate_properties(properties, name, valid_keys) do
     Enum.all?(properties, fn {k, v} ->
       Enum.member?(valid_keys, k) and valid_key?(k, v)
