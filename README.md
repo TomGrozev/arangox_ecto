@@ -1,12 +1,13 @@
 # ArangoX Ecto
 
-[![github.com](https://img.shields.io/github/workflow/status/TomGrozev/arangox_ecto/CI.svg)](https://github.com/TomGrozev/arangox_ecto/actions)
+[![github.com](https://img.shields.io/github/actions/workflow/status/TomGrozev/arangox_ecto/ci.yml)](https://github.com/TomGrozev/arangox_ecto/actions)
 [![hex.pm](https://img.shields.io/hexpm/v/arangox_ecto.svg)](https://hex.pm/packages/arangox_ecto)
 [![hex.pm](https://img.shields.io/hexpm/dt/arangox_ecto.svg)](https://hex.pm/packages/arangox_ecto)
 [![hex.pm](https://img.shields.io/hexpm/l/arangox_ecto.svg)](https://hex.pm/packages/arangox_ecto)
 [![github.com](https://img.shields.io/github/last-commit/TomGrozev/arangox_ecto.svg)](https://github.com/TomGrozev/arangox_ecto)
 
-ArangoXEcto is an all-in-one Arango database adapter for the Elixir Ecto package. It has full support for **Graphing**, **Geo Functions**, **AQL Integration**, amongst other features.
+ArangoXEcto is an all-in-one Arango database adapter for the Elixir Ecto package. It has full support for **Graphing**, **Arango Search**, 
+**Geo Functions**, **AQL Integration**, amongst other features.
 
 <!-- TABLE OF CONTENTS -->
 ## Table of Contents
@@ -32,6 +33,7 @@ ArangoXEcto is an all-in-one Arango database adapter for the Elixir Ecto package
       - [How it works](#how-it-works)
       - [Example](#example)
       - [More information](#more-information)
+    + [Arango Search](#arango-search)
     + [Further Usage](#further-usage)
   * [Roadmap](#roadmap)
   * [Contributing](#contributing)
@@ -71,7 +73,7 @@ To get the adapter integrated with your project, follow these simple steps.
 Add the following line to your mix dependencies to get started.
 
 ```elixir
-{:arangox_ecto, "~> 1.2"}
+{:arangox_ecto, "~> 1.3"}
 ```
 
 ## Usage
@@ -95,6 +97,8 @@ $ mix ecto.setup.arango
 In addition to default config variables, the `static` boolean config option can be passed to force the use of migrations. By default the value is `false` and collections that don't exist will be created on insert and on query no error will be raised. If set to `true`, any collections that do not exist on insert or query will result in an error to be raised.
 
 Whether dynamic (default) or static is chosen defends on the database design of the project. For a production setup where lots of control is required, it is recommended to have `static` set to `true`.
+
+If using static in production is better why is dynamic the default? Dynamic mode is the default because it is easier for development and testing then after that point static mode can be turned on for production.
 
 
 ### Basic Usage
@@ -339,6 +343,56 @@ To read more about Edge Schemas and how to extend edge schemas to add additional
 
 To learn how to use the helper functions (as well as other useful methods) check out the
 [full documentation](https://hexdocs.pm/arangox_ecto/ArangoXEcto.html).
+
+### Arango Search
+
+As of version 1.3.0 Arango Search functionality is built in. This builds off of the Ecto schema module for views so they can be searched and interacted with like 
+regular collections. The view schemas are not exactly the same as collection or edge schemas because the views don't actually store or hold any data and aren't 
+structs themselves. Views act as alias interfaces that over the collections and edge schemas.
+
+#### Querying 
+
+Querying views works exactly the same as querying a regular collection or edge schema. For example, the following will work as you would expect.
+
+```elixir
+# Module definition
+defmodule UsersView do
+  use ArangoXEcto.View
+
+  alias ArangoXEcto.View.Link
+
+  view "user_search" do
+    primary_sort(:created_at, :asc)
+
+    store_value([:first_name], :lz4)
+
+    link(User, %Link{
+      includeAllFields: true,
+      fields: %{
+        last_name: %Link{
+          analyzers: [:text_en]
+        }
+      }
+    })
+
+    options(primarySortCompression: :lz4)
+  end
+end
+
+# Querying
+iex> Repo.all(UsersView)
+[%User{first_name: "John", last_name: "Smith"}, _]
+```
+
+In addition to regular querying ArangoDB has the AQL `SEARCH` function for performing searches on views. This is implemented in ArangoXEcto using an additional 
+Ecto query macro. The `search/3` and `or_search/3` macros are provided to utalise this functionality. Details of how to use these functions can be found in 
+[ArangoXEcto.Query](https://hexdocs.pm/arangox_ecto/ArangoXEcto.Query.html) and the [ArangoXEcto.View](https://hexdocs.pm/arangox_ecto/ArangoXEcto.View.html) modules.
+
+Behind the scenes the `search/3` and `or_search/3` are just wrappers around the Ecto where clause that gets unwrapped at the point when the AQL query is generated.
+
+#### Analyzers
+
+Analyzers can also be defined from within an analyzer module. Refer to the [ArangoXEcto.Analyzer](https://hexdocs.pm/arangox_ecto/ArangoXEcto.Analyzer.html) module for documentation.
 
 
 ### Further Usage

@@ -4,9 +4,14 @@ defmodule ArangoXEctoTest.MigrationTest do
 
   alias ArangoXEcto.Migration
   alias ArangoXEctoTest.{ArangoRepo, Repo}
+  alias ArangoXEctoTest.Integration.{Analyzers, UsersView}
 
   @test_collections [
     :something
+  ]
+
+  @test_views [
+    :user_search
   ]
 
   # Gets connection
@@ -20,6 +25,10 @@ defmodule ArangoXEctoTest.MigrationTest do
   setup %{conn: conn} = context do
     for collection <- @test_collections do
       Arangox.delete(conn, "/_api/collection/#{collection}")
+    end
+
+    for view <- @test_views do
+      Arangox.delete(conn, "/_api/view/#{view}")
     end
 
     context
@@ -129,10 +138,28 @@ defmodule ArangoXEctoTest.MigrationTest do
   end
 
   describe "create/1" do
+    test "creates a view", %{conn: conn} do
+      assert :ok = Migration.create(UsersView, repo: conn)
+      assert {:error, "409 - duplicate name"} = Migration.create(UsersView, repo: conn)
+
+      assert {:ok, %Arangox.Response{body: %{"type" => "arangosearch"}}} =
+               get_view_info(conn, UsersView.__view__(:name))
+    end
+
+    test "creates analyzers", %{conn: conn} do
+      assert :ok = Migration.create(Analyzers, repo: conn)
+
+      names =
+        Analyzers.__analyzers__()
+        |> Enum.map(&Atom.to_string(&1.name))
+
+      assert MapSet.equal?(MapSet.new(names), MapSet.new(get_analyzers(conn)))
+    end
+
     test "creates a document collection", %{conn: conn} do
       collection = Migration.collection("something")
 
-      assert :ok = Migration.create(collection, conn)
+      assert :ok = Migration.create(collection, repo: conn)
 
       assert {:ok, %Arangox.Response{body: %{"type" => 2}}} =
                get_collection_info(conn, "something")
@@ -141,7 +168,7 @@ defmodule ArangoXEctoTest.MigrationTest do
     test "creates an edge collection", %{conn: conn} do
       collection = Migration.edge("something")
 
-      assert :ok = Migration.create(collection, conn)
+      assert :ok = Migration.create(collection, repo: conn)
 
       assert {:ok, %Arangox.Response{body: %{"type" => 3}}} =
                get_collection_info(conn, "something")
@@ -150,15 +177,15 @@ defmodule ArangoXEctoTest.MigrationTest do
     test "errors on create existing collection", %{conn: conn} do
       collection = Migration.collection("something")
 
-      assert :ok = Migration.create(collection, conn)
+      assert :ok = Migration.create(collection, repo: conn)
 
-      assert {:error, "409 - duplicate name"} = Migration.create(collection, conn)
+      assert {:error, "409 - duplicate name"} = Migration.create(collection, repo: conn)
     end
 
     test "creates a document collection with uuid key", %{conn: conn} do
       collection = Migration.collection("something", :document, keyOptions: %{type: :uuid})
 
-      assert :ok = Migration.create(collection, conn)
+      assert :ok = Migration.create(collection, repo: conn)
 
       assert {:ok, %Arangox.Response{body: %{"type" => 2, "keyOptions" => %{"type" => "uuid"}}}} =
                get_collection_info(conn, "something")
@@ -167,7 +194,7 @@ defmodule ArangoXEctoTest.MigrationTest do
     test "creates a edge collection with waitForSync", %{conn: conn} do
       collection = Migration.collection("something", :edge, waitForSync: true)
 
-      assert :ok = Migration.create(collection, conn)
+      assert :ok = Migration.create(collection, repo: conn)
 
       assert {:ok, %Arangox.Response{body: %{"type" => 3, "waitForSync" => true}}} =
                get_collection_info(conn, "something")
@@ -177,8 +204,8 @@ defmodule ArangoXEctoTest.MigrationTest do
       collection = Migration.collection("something")
       index = Migration.index("something", [:email])
 
-      assert :ok = Migration.create(collection, conn)
-      assert :ok = Migration.create(index, conn)
+      assert :ok = Migration.create(collection, repo: conn)
+      assert :ok = Migration.create(index, repo: conn)
 
       assert {:ok, %Arangox.Response{body: %{"indexes" => [_, %{"fields" => ["email"]}]}}} =
                get_index_info(conn, "something")
@@ -188,8 +215,8 @@ defmodule ArangoXEctoTest.MigrationTest do
       collection = Migration.collection("something")
       index = Migration.index("something", [:email], unique: true)
 
-      assert :ok = Migration.create(collection, conn)
-      assert :ok = Migration.create(index, conn)
+      assert :ok = Migration.create(collection, repo: conn)
+      assert :ok = Migration.create(index, repo: conn)
 
       assert {:ok,
               %Arangox.Response{
@@ -201,8 +228,8 @@ defmodule ArangoXEctoTest.MigrationTest do
       collection = Migration.collection("something")
       index = Migration.index("something", [:email], type: :geo, geoJson: true)
 
-      assert :ok = Migration.create(collection, conn)
-      assert :ok = Migration.create(index, conn)
+      assert :ok = Migration.create(collection, repo: conn)
+      assert :ok = Migration.create(index, repo: conn)
 
       assert {:ok,
               %Arangox.Response{
@@ -222,7 +249,7 @@ defmodule ArangoXEctoTest.MigrationTest do
     test "drops a document collection", %{conn: conn} do
       collection = Migration.collection("something")
 
-      assert :ok = Migration.create(collection, conn)
+      assert :ok = Migration.create(collection, repo: conn)
 
       assert :ok = Migration.drop(collection, conn)
     end
@@ -230,15 +257,31 @@ defmodule ArangoXEctoTest.MigrationTest do
     test "drops an edge collection", %{conn: conn} do
       collection = Migration.edge("something")
 
-      assert :ok = Migration.create(collection, conn)
+      assert :ok = Migration.create(collection, repo: conn)
 
       assert :ok = Migration.drop(collection, conn)
     end
   end
+
+  defp get_view_info(conn, name),
+    do: Arangox.get(conn, "/_api/view/#{name}/properties")
 
   defp get_collection_info(conn, name),
     do: Arangox.get(conn, "/_api/collection/#{name}/properties")
 
   defp get_index_info(conn, collection_name),
     do: Arangox.get(conn, "/_api/index?collection=#{collection_name}")
+
+  defp get_analyzers(conn) do
+    analyzer_res =
+      case Arangox.get(conn, "/_api/analyzer") do
+        {:ok, %Arangox.Response{body: %{"error" => false, "result" => result}}} -> result
+        {:error, _} -> []
+      end
+
+    Enum.filter(analyzer_res, fn %{"name" => name} ->
+      String.starts_with?(name, "arangox_ecto_test::")
+    end)
+    |> Enum.map(fn %{"name" => name} -> String.slice(name, 19..-1) end)
+  end
 end

@@ -5,7 +5,9 @@ config :arangox_ecto,
 
 config :arangox_ecto, ArangoXEctoTest.Repo,
   database: "arangox_ecto_test",
-  endpoints: System.get_env("DB_ENDPOINT")
+  endpoints: System.get_env("DB_ENDPOINT"),
+  username: System.get_env("DB_USER"),
+  password: System.get_env("DB_PASSWORD")
 
 if Mix.env() != :prod do
   config :git_hooks,
