@@ -14,8 +14,8 @@ defmodule ArangoXEcto.Migration do
   a collection struct using the `collection/3` function. Then pass the collection struct to the
   `create/1` function. To create indexes it is a similar process using the `index/3` function.
 
-  **Order matters!!** Make sure you create collections before indexes and views, and analyzers before 
-  views if they are used. In general this is a good order to follow: 
+  **Order matters!!** Make sure you create collections before indexes and views, and analyzers before
+  views if they are used. In general this is a good order to follow:
 
       Analyzers > Collections > Indexes > Views
 
@@ -143,7 +143,7 @@ defmodule ArangoXEcto.Migration do
 
   ## Options
 
-  - `:repo` - The repo or connection to use for the migration create action 
+  - `:repo` - The repo or connection to use for the migration create action
   - `:prefix` - The prefix to use for tenant creation
 
   ## Examples
@@ -180,7 +180,7 @@ defmodule ArangoXEcto.Migration do
     case Arangox.post(
            conn,
            ArangoXEcto.__build_connection_url__(
-             repo_or_conn,
+             conn,
              "collection",
              Keyword.get(opts, :prefix)
            ),
@@ -207,7 +207,7 @@ defmodule ArangoXEcto.Migration do
     case Arangox.post(
            conn,
            ArangoXEcto.__build_connection_url__(
-             repo_or_conn,
+             conn,
              "index",
              Keyword.get(opts, :prefix),
              "?collection=#{collection_name}"

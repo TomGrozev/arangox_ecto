@@ -236,7 +236,10 @@ defmodule ArangoXEctoTest do
       to = "posts/" <> post.id
 
       edge =
-        ArangoXEcto.create_edge(Repo, user, post, edge: UserPostsOptions, fields: %{type: "wrote"})
+        ArangoXEcto.create_edge(Repo, user, post,
+          edge: UserPostsOptions,
+          fields: %{type: "wrote"}
+        )
 
       assert %UserPostsOptions{_from: ^from, _to: ^to, type: "wrote"} = edge
 
