@@ -14,7 +14,6 @@ defmodule ArangoXEcto do
 
   @type query :: binary()
   @type vars :: keyword() | map()
-  @type mod :: Ecto.Schema.t()
 
   @doc """
   Runs a raw AQL query on the database.
@@ -182,7 +181,7 @@ defmodule ArangoXEcto do
     :status,
     :transaction
   ]
-  @spec api_query(mod(), atom(), list()) :: {:ok, Arangox.Response.t()} | {:error, any()}
+  @spec api_query(Ecto.Repo.t(), atom(), list()) :: {:ok, Arangox.Response.t()} | {:error, any()}
   def api_query(repo, function, args \\ []) do
     conn = gen_conn_from_repo(repo)
 
@@ -257,7 +256,7 @@ defmodule ArangoXEcto do
       %UserPosts{_from: "users/12345", _to: "users/54321", from: #Ecto.Association.NotLoaded<association :from is not loaded>, to: #Ecto.Association.NotLoaded<association :to is not loaded>, type: "wrote"}
 
   """
-  @spec create_edge(Ecto.Repo.t(), mod(), mod(), keyword()) ::
+  @spec create_edge(Ecto.Repo.t(), module(), module(), keyword()) ::
           {:ok, Ecto.Schema.t()} | {:error, Ecto.Changeset.t()}
   def create_edge(repo, from, to, opts \\ [])
 
@@ -477,7 +476,7 @@ defmodule ArangoXEcto do
       iex> ArangoXEcto.delete_all_edges(Repo, user1, user2, conditions: [type: "best_friend"])
       :ok
   """
-  @spec delete_all_edges(Ecto.Repo.t(), mod(), mod(), keyword()) :: :ok
+  @spec delete_all_edges(Ecto.Repo.t(), module(), module(), keyword()) :: :ok
   def delete_all_edges(repo, from, to, opts \\ [])
 
   def delete_all_edges(repo, from, to, [edge: edge_module] = opts) do
@@ -513,7 +512,7 @@ defmodule ArangoXEcto do
       iex> ArangoXEcto.get_id_from_struct(user)
       "users/123456"
   """
-  @spec get_id_from_struct(mod()) :: binary()
+  @spec get_id_from_struct(module()) :: binary()
   def get_id_from_struct(struct) when is_map(struct) or is_binary(struct), do: struct_id(struct)
 
   @doc """
@@ -711,7 +710,7 @@ defmodule ArangoXEcto do
       iex> ArangoXEcto.edge_module(MyProject.User, MyProject.Company)
       MyProject.UsersCompanies
   """
-  @spec edge_module(mod(), mod(), keyword()) :: atom()
+  @spec edge_module(module(), module(), keyword()) :: atom()
   def edge_module(from_module, to_module, opts \\ [])
 
   def edge_module(%from_module{}, %to_module{}, opts),
