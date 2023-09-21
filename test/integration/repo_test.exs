@@ -531,6 +531,10 @@ defmodule ArangoXEctoTest.Integration.RepoTest do
       assert {0, nil} = Repo.insert_all({"posts", Post}, [])
     end
 
+    test "insert_all with invalid ids" do
+      assert {0, nil} = Repo.insert_all(Post, [[id: nil, title: "abc"]])
+    end
+
     @tag :returning
     test "insert_all with returning schema" do
       assert {0, []} = Repo.insert_all(Post, [], returning: true)

@@ -91,7 +91,9 @@ defmodule ArangoXEcto.Behaviour.Schema do
            docs
          ) do
       {:ok, %{body: body}} ->
-        get_insert_fields(body, returning, return_new)
+        body
+        |> filter_errors()
+        |> get_insert_fields(returning, return_new)
 
       {:error, %{status: status}} ->
         {:invalid, status}
@@ -294,6 +296,18 @@ defmodule ArangoXEcto.Behaviour.Schema do
 
   defp patch_body_keys(%{} = body) do
     for {k, v} <- body, into: %{}, do: {replacement_key(k), v}
+  end
+
+  defp filter_errors(docs) do
+    Enum.filter(docs, fn
+      %{"error" => true, "errorMessage" => msg, "errorNum" => num} ->
+        Logger.error("Failed to insert document, error (#{inspect(num)}): #{inspect(msg)}")
+
+        false
+
+      _ ->
+        true
+    end)
   end
 
   defp get_insert_fields(docs, returning, false), do: process_docs(docs, returning)
