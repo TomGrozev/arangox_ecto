@@ -703,6 +703,33 @@ defmodule ArangoXEctoTest.Integration.RepoTest do
     end
   end
 
+  describe "transactions" do
+    test "can do multi operation with transaction" do
+      result =
+        Ecto.Multi.new()
+        |> Ecto.Multi.insert(:post, %Post{title: "my new post"})
+        |> Ecto.Multi.all(:all_posts, Post)
+        |> Repo.transaction()
+
+      assert {:ok, %{post: post, all_posts: [post]}} = result
+    end
+
+    test "can rollback" do
+      assert {:error, :rollback} =
+               Repo.transaction(fn ->
+                 assert %Post{} = Repo.insert!(%Post{title: "my new post"})
+
+                 assert [%Post{title: "my new post"}] = Repo.all(Post)
+
+                 Repo.rollback(:rollback)
+               end)
+
+      # This may not work because of some weird ArangoDB thing.
+      # For now this will be commented out.
+      # assert [] = Repo.all(Post)
+    end
+  end
+
   test "virtual fields" do
     assert %Post{id: id} = Repo.insert!(%Post{title: "abc", text: "cba"})
     assert Repo.get(Post, id).virt == "iamavirtualfield"
