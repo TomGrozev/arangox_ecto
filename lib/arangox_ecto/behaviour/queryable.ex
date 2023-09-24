@@ -6,11 +6,14 @@ defmodule ArangoXEcto.Behaviour.Queryable do
   @behaviour Ecto.Adapter.Queryable
 
   @doc """
-  Streams a previously prepared query.
+  Streams a query.
+
+  This utalises the `Arangox.cursor/4` implementation that ultimately
+  uses the `DBConnection.Stream` implementation.
   """
   @impl true
-  def stream(_adapter_meta, _query_meta, _query, _params, _options) do
-    raise "#{inspect(__MODULE__)}.stream: #{inspect(__MODULE__)} does not currently support stream"
+  def stream(adapter_meta, _query_meta, query, params, opts) do
+    do_stream(adapter_meta, query, params, opts)
   end
 
   @doc """
@@ -159,5 +162,30 @@ defmodule ArangoXEcto.Behaviour.Queryable do
       true ->
         ArangoXEcto.create_view(repo, schema)
     end
+  end
+
+  defp do_stream(adapter_meta, {:cache, _, prepared}, params, opts) do
+    prepare_stream(adapter_meta, prepared, params, opts)
+  end
+
+  defp do_stream(adapter_meta, {:cached, _, _, cached}, params, opts) do
+    prepare_stream(adapter_meta, String.Chars.to_string(cached), params, opts)
+  end
+
+  defp do_stream(adapter_meta, {:nocache, prepared}, params, opts) do
+    prepare_stream(adapter_meta, prepared, params, opts)
+  end
+
+  defp prepare_stream(adapter_meta, prepared, params, opts) do
+    adapter_meta
+    |> ArangoXEcto.Behaviour.Stream.build(prepared, params, opts)
+    |> Stream.map(fn %Arangox.Response{
+                       body: %{
+                         "extra" => %{"stats" => %{"cursorsCreated" => nrows}},
+                         "result" => rows
+                       }
+                     } ->
+      {nrows, rows}
+    end)
   end
 end

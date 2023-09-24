@@ -728,6 +728,22 @@ defmodule ArangoXEctoTest.Integration.RepoTest do
       # For now this will be commented out.
       # assert [] = Repo.all(Post)
     end
+
+    test "stream" do
+      assert %Post{} = Repo.insert!(%Post{title: "my new post"})
+
+      query =
+        from(p in Post,
+          select: p.title
+        )
+
+      stream = Repo.stream(query)
+
+      assert {:ok, ["my new post"]} =
+               Repo.transaction(fn ->
+                 Enum.to_list(stream)
+               end)
+    end
   end
 
   test "virtual fields" do

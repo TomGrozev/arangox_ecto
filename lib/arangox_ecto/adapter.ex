@@ -187,8 +187,67 @@ defmodule ArangoXEcto.Adapter do
   defdelegate rollback(adapter_meta, value),
     to: ArangoXEcto.Behaviour.Transaction
 
-  #  defp validate_struct(module, %{} = params),
-  #    do: module.changeset(struct(module.__struct__), params)
+  @doc false
+  def reduce(%{pid: pool}, statement, params, opts, acc, fun) do
+    case get_conn(pool) do
+      %DBConnection{conn_mode: :transaction} = conn ->
+        Arangox.cursor(conn, statement, params, opts)
+        |> Enumerable.reduce(acc, fun)
+
+      _ ->
+        raise "cannot reduce stream outside of transaction"
+    end
+  end
+
+  @doc false
+  def into(%{pid: pool}, statement, params, opts) do
+    case get_conn(pool) do
+      %DBConnection{conn_mode: :transaction} = conn ->
+        Arangox.cursor(conn, statement, params, opts)
+        |> Collectable.into()
+
+      _ ->
+        raise "cannot collect into stream outside of transaction"
+    end
+  end
+
+  @doc false
+  def load_integer(arg) when is_number(arg), do: {:ok, trunc(arg)}
+  def load_integer(_), do: :error
+
+  @doc false
+  def load_float(arg) when is_number(arg), do: {:ok, :erlang.float(arg)}
+  def load_float(_), do: :error
+
+  @doc false
+  def load_decimal(arg), do: {:ok, Decimal.new(arg)}
+
+  @doc false
+  def get_conn_or_pool(pool) do
+    Process.get(key(pool), pool)
+  end
+
+  @doc false
+  def get_conn(pool) do
+    Process.get(key(pool))
+  end
+
+  @doc false
+  def put_conn(pool, conn) do
+    Process.put(key(pool), conn)
+  end
+
+  @doc false
+  def reset_conn(pool, conn) do
+    if conn do
+      put_conn(pool, conn)
+    else
+      Process.delete(key(pool))
+    end
+  end
+
+  @doc false
+  def key(pool), do: {__MODULE__, pool}
 
   defp load_date(d) do
     case Date.from_iso8601(d) do
@@ -210,12 +269,4 @@ defmodule ArangoXEcto.Adapter do
       {:error, _reason} -> :error
     end
   end
-
-  def load_integer(arg) when is_number(arg), do: {:ok, trunc(arg)}
-  def load_integer(_), do: :error
-
-  def load_float(arg) when is_number(arg), do: {:ok, :erlang.float(arg)}
-  def load_float(_), do: :error
-
-  def load_decimal(arg), do: {:ok, Decimal.new(arg)}
 end
