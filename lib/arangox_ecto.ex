@@ -9,6 +9,7 @@ defmodule ArangoXEcto do
 
   import Ecto.Query, only: [from: 2]
 
+  alias ArangoXEcto.Adapter
   alias ArangoXEcto.Edge
   alias ArangoXEcto.Migration
 
@@ -31,8 +32,9 @@ defmodule ArangoXEcto do
 
   Accepts any of the options accepted by DBConnection.transaction/3, as well as any of the following:
 
-    :read - An array of collection names or a single collection name as a binary.
-    :write - An array of collection names or a single collection name as a binary.
+    :prefix - The prefix to use for the database. Defaults to the repo database.
+    :read - An array of collection names or a single collection name as a binary to mark as read-only.
+    :write - An array of collection names or a single collection name as a binary to mark as writable. If not set then no writes will be stored.
     :exclusive - An array of collection names or a single collection name as a binary.
     :properties - A list or map of additional body attributes to append to the request body when beginning a transaction.
 
@@ -46,33 +48,52 @@ defmodule ArangoXEcto do
             fname: "John",
             lname: "Smith"
           )
-      {:ok,
-      [
-        %{
-          "_id" => "users/12345",
-          "_key" => "12345",
-          "_rev" => "_bHZ8PAK---",
-          "first_name" => "John",
-          "last_name" => "Smith"
-        }
-      ]}
+      {:ok, {1, 
+        [
+          %{
+            "_id" => "users/12345",
+            "_key" => "12345",
+            "_rev" => "_bHZ8PAK---",
+            "first_name" => "John",
+            "last_name" => "Smith"
+          }
+        ]}}
   """
   @spec aql_query(Ecto.Repo.t(), query(), vars(), [DBConnection.option()]) ::
-          {:ok, list(map)} | {:error, any()}
-  def aql_query(repo, query, vars \\ [], opts \\ []) do
+          {:ok, {non_neg_integer(), list(map)}} | {:error, any()}
+  def aql_query(repo, query, vars \\ [], opts \\ []) when is_atom(repo) do
     conn = gen_conn_from_repo(repo)
 
+    is_write_operation = String.match?(query, ~r/(update|remove) .+/i)
+
+    database =
+      opts
+      |> Keyword.get(:prefix)
+      |> then(&ArangoXEcto.get_prefix_database(repo, &1))
+
     {query, vars} = process_vars(query, vars)
+
+    opts = Keyword.put(opts, :database, database)
 
     try do
       Arangox.transaction(
         conn,
         fn cursor ->
-          stream = Arangox.cursor(cursor, query, vars)
+          stream = Arangox.cursor(cursor, query, vars, opts)
 
-          Enum.reduce(stream, [], fn resp, acc ->
-            acc ++ resp.body["result"]
-          end)
+          Enum.reduce(
+            stream,
+            {0, []},
+            fn resp, {_len, acc} ->
+              len =
+                case is_write_operation do
+                  true -> resp.body["extra"]["stats"]["writesExecuted"]
+                  false -> resp.body["extra"]["stats"]["scannedFull"]
+                end
+
+              {len, acc ++ resp.body["result"]}
+            end
+          )
         end,
         opts
       )
@@ -94,7 +115,7 @@ defmodule ArangoXEcto do
             fname: "John",
             lname: "Smith"
           )
-      [
+       {1, [
         %{
           "_id" => "users/12345",
           "_key" => "12345",
@@ -102,9 +123,10 @@ defmodule ArangoXEcto do
           "first_name" => "John",
           "last_name" => "Smith"
         }
-      ]
+      ]}
   """
-  @spec aql_query!(Ecto.Repo.t(), query(), vars(), [DBConnection.option()]) :: list(map)
+  @spec aql_query!(Ecto.Repo.t(), query(), vars(), [DBConnection.option()]) ::
+          {non_neg_integer(), list(map)}
   def aql_query!(repo, query, vars \\ [], opts \\ []) do
     case aql_query(repo, query, vars, opts) do
       {:ok, res} -> res
@@ -951,10 +973,11 @@ defmodule ArangoXEcto do
         pid
 
       repo ->
-        %{pid: conn} = Ecto.Adapter.lookup_meta(repo)
+        %{pid: pool} = Ecto.Adapter.lookup_meta(repo)
 
-        conn
+        pool
     end
+    |> Adapter.get_conn_or_pool()
   end
 
   defp remove_existing_analyzers(repo, analyzers, opts) do
@@ -1225,8 +1248,8 @@ defmodule ArangoXEcto do
     {String.replace(query, "@" <> Atom.to_string(key), val), vars}
   end
 
-  defp process_vars({query, vars}, {_key, _val} = res),
-    do: {query, [res | vars]}
+  defp process_vars({query, vars}, {key, val}),
+    do: {query, [{key, dump(val)} | vars]}
 
   defp patch_map(map) do
     for {k, v} <- map, into: %{}, do: {String.to_atom(k), v}
@@ -1252,4 +1275,12 @@ defmodule ArangoXEcto do
       repo.config() |> Keyword.get(:database)
     end
   end
+
+  defp dump(list_type) when is_list(list_type), do: Enum.map(list_type, &dump/1)
+  defp dump(%NaiveDateTime{} = dt), do: NaiveDateTime.to_iso8601(dt)
+  defp dump(%DateTime{} = dt), do: DateTime.to_iso8601(dt)
+  defp dump(%Time{} = dt), do: Time.to_iso8601(dt)
+  defp dump(%Date{} = dt), do: Date.to_iso8601(dt)
+  defp dump(%Decimal{} = d), do: Decimal.to_string(d)
+  defp dump(val), do: val
 end

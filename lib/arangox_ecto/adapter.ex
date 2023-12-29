@@ -44,8 +44,13 @@ defmodule ArangoXEcto.Adapter do
   def init(config) do
     child = Arangox.child_spec(config)
 
-    # Maybe something here later
-    meta = %{}
+    log = Keyword.get(config, :log, :debug)
+    stacktrace = Keyword.get(config, :stacktrace, nil)
+    telemetry_prefix = Keyword.fetch!(config, :telemetry_prefix)
+    telemetry = {config[:repo], log, telemetry_prefix ++ [:query]}
+
+    opts = Keyword.take(config, [:repo])
+    meta = %{telemetry: telemetry, stacktrace: stacktrace, opts: opts}
 
     {:ok, child, meta}
   end
@@ -79,20 +84,17 @@ defmodule ArangoXEcto.Adapter do
   Returns true if a connection has been checked out
   """
   @impl Ecto.Adapter
-  def checked_out?(_adapter_meta) do
-    Logger.debug(
-      "#{inspect(__MODULE__)}.checked_out?: #{inspect(__MODULE__)} does not currently support checkout"
-    )
-
-    false
+  def checked_out?(adapter_meta) do
+    %{pid: pool} = adapter_meta
+    get_conn(pool) != nil
   end
 
   @doc """
   Checks out a connection for the duration of the given function.
   """
   @impl Ecto.Adapter
-  def checkout(_meta, _opts, _fun) do
-    raise "#{inspect(__MODULE__)}.checkout: #{inspect(__MODULE__)} does not currently support checkout"
+  def checkout(adapter_meta, opts, callback) do
+    checkout_or_transaction(:run, adapter_meta, opts, callback)
   end
 
   @impl true
@@ -188,7 +190,10 @@ defmodule ArangoXEcto.Adapter do
     to: ArangoXEcto.Behaviour.Transaction
 
   @doc false
-  def reduce(%{pid: pool}, statement, params, opts, acc, fun) do
+  def reduce(adapter_meta, statement, params, opts, acc, fun) do
+    %{pid: pool, telemetry: telemetry, opts: default_opts} = adapter_meta
+    opts = with_log(telemetry, params, opts ++ default_opts)
+
     case get_conn(pool) do
       %DBConnection{conn_mode: :transaction} = conn ->
         Arangox.cursor(conn, statement, params, opts)
@@ -200,7 +205,10 @@ defmodule ArangoXEcto.Adapter do
   end
 
   @doc false
-  def into(%{pid: pool}, statement, params, opts) do
+  def into(adapter_meta, statement, params, opts) do
+    %{pid: pool, telemetry: telemetry, opts: default_opts} = adapter_meta
+    opts = with_log(telemetry, params, opts ++ default_opts)
+
     case get_conn(pool) do
       %DBConnection{conn_mode: :transaction} = conn ->
         Arangox.cursor(conn, statement, params, opts)
@@ -222,9 +230,29 @@ defmodule ArangoXEcto.Adapter do
   @doc false
   def load_decimal(arg), do: {:ok, Decimal.new(arg)}
 
+  # Connection helpers
+
   @doc false
-  def get_conn_or_pool(pool) do
-    Process.get(key(pool), pool)
+  def checkout_or_transaction(func, adapter_meta, opts, callback)
+      when func in [:transaction, :run] do
+    %{pid: pool, telemetry: telemetry, opts: default_opts} = adapter_meta
+
+    opts =
+      with_log(telemetry, [], opts ++ default_opts)
+      |> process_sources()
+      |> dbg()
+
+    callback = fn conn ->
+      previous_conn = put_conn(pool, conn)
+
+      try do
+        callback.()
+      after
+        reset_conn(pool, previous_conn)
+      end
+    end
+
+    apply(Arangox, func, [get_conn_or_pool(pool), callback, opts])
   end
 
   @doc false
@@ -233,12 +261,15 @@ defmodule ArangoXEcto.Adapter do
   end
 
   @doc false
-  def put_conn(pool, conn) do
+  def get_conn_or_pool(pool) do
+    Process.get(key(pool), pool)
+  end
+
+  defp put_conn(pool, conn) do
     Process.put(key(pool), conn)
   end
 
-  @doc false
-  def reset_conn(pool, conn) do
+  defp reset_conn(pool, conn) do
     if conn do
       put_conn(pool, conn)
     else
@@ -246,8 +277,208 @@ defmodule ArangoXEcto.Adapter do
     end
   end
 
+  defp key(pool), do: {__MODULE__, pool}
+
+  ## Logging
+
   @doc false
-  def key(pool), do: {__MODULE__, pool}
+  def with_log(telemetry, params, opts) do
+    [log: &log(telemetry, params, &1, opts)] ++ opts
+  end
+
+  defp log({repo, log, event_name}, params, entry, opts) do
+    %{
+      connection_time: query_time,
+      decode_time: decode_time,
+      pool_time: queue_time,
+      idle_time: idle_time,
+      result: result,
+      query: query,
+      call: call
+    } = entry
+
+    source = Keyword.get(opts, :source)
+    type = Keyword.get(opts, :type, "query")
+    query = Keyword.get(opts, :query, process_query(query))
+    result = with {:ok, _query, res} <- result, do: {:ok, res}
+    stacktrace = Keyword.get(opts, :stacktrace)
+    log_params = opts[:cast_params] || params
+
+    acc = if idle_time, do: [idle_time: idle_time], else: []
+
+    measurements =
+      log_measurements(
+        [query_time: query_time, decode_time: decode_time, queue_time: queue_time],
+        0,
+        acc
+      )
+
+    metadata = %{
+      type: :arangox_ecto_query,
+      repo: repo,
+      result: result,
+      params: params,
+      cast_params: opts[:cast_params],
+      query: query,
+      source: source,
+      stacktrace: stacktrace,
+      options: Keyword.get(opts, :telemetry_options, [])
+    }
+
+    if event_name = Keyword.get(opts, :telemtry_event, event_name) do
+      :telemetry.execute(event_name, measurements, metadata)
+    end
+
+    case {opts[:log], log} do
+      {false, _level} ->
+        :ok
+
+      {opts_level, false} when opts_level in [nil, true] ->
+        :ok
+
+      {true, level} ->
+        Logger.log(
+          level,
+          fn ->
+            log_iodata(
+              {type, call},
+              measurements,
+              repo,
+              source,
+              query,
+              log_params,
+              result,
+              stacktrace
+            )
+          end,
+          ansi_color: aql_colour(query)
+        )
+
+      {opts_level, args_level} ->
+        Logger.log(
+          opts_level || args_level,
+          fn ->
+            log_iodata(
+              {type, call},
+              measurements,
+              repo,
+              source,
+              query,
+              log_params,
+              result,
+              stacktrace
+            )
+          end,
+          ansi_color: aql_colour(query)
+        )
+    end
+
+    :ok
+  end
+
+  defp process_query(%Arangox.Request{method: method, path: path, headers: headers, body: body}) do
+    "(#{Atom.to_string(method) |> String.upcase()}) (Path: #{path}) (Header: #{inspect(headers)})\n#{inspect(body)}"
+  end
+
+  defp process_query(query), do: String.Chars.to_string(query)
+
+  defp log_measurements([{_, nil} | rest], total, acc),
+    do: log_measurements(rest, total, acc)
+
+  defp log_measurements([{key, value} | rest], total, acc),
+    do: log_measurements(rest, total + value, [{key, value} | acc])
+
+  defp log_measurements([], total, acc),
+    do: Map.new([total_time: total] ++ acc)
+
+  defp log_iodata({type, call}, measurements, repo, source, query, params, result, stacktrace) do
+    [
+      String.upcase(type),
+      log_call(call),
+      ?\s,
+      log_ok_error(result),
+      log_ok_source(source),
+      log_time("db", measurements, :query_time, true),
+      log_time("decode", measurements, :decode_time, false),
+      log_time("queue", measurements, :queue_time, false),
+      log_time("idle", measurements, :idle_time, true),
+      log_query(query, params, call),
+      log_stacktrace(stacktrace, repo)
+    ]
+  end
+
+  defp log_call(call) when call in [:declare, :fetch, :deallocate],
+    do: " [#{String.upcase(Atom.to_string(call))}]"
+
+  defp log_call(_), do: ""
+
+  defp log_query(_query, _params, call) when call in [:fetch, :deallocate], do: ""
+
+  defp log_query(query, params, _call) do
+    [
+      ?\n,
+      query,
+      ?\s,
+      inspect(params, charlists: false)
+    ]
+  end
+
+  defp log_ok_error({:ok, _res}), do: "OK"
+  defp log_ok_error({:error, _err}), do: "ERROR"
+
+  defp log_ok_source(nil), do: ""
+  defp log_ok_source(source), do: " source=#{inspect(source)}"
+
+  defp log_time(label, measurements, key, force) do
+    case Map.fetch(measurements, key) do
+      {:ok, time} ->
+        us = System.convert_time_unit(time, :native, :microsecond)
+        ms = div(us, 100) / 10
+
+        if force or ms > 0 do
+          [?\s, label, ?=, :io_lib_format.fwrite_g(ms), ?m, ?s]
+        else
+          []
+        end
+
+      :error ->
+        []
+    end
+  end
+
+  defp log_stacktrace(stacktrace, repo) do
+    with [_ | _] <- stacktrace,
+         {module, function, arity, info} <- last_non_ecto(Enum.reverse(stacktrace), repo, nil) do
+      [
+        ?\n,
+        IO.ANSI.light_black(),
+        "↳ ",
+        Exception.format_mfa(module, function, arity),
+        log_stacktrace_info(info),
+        IO.ANSI.reset()
+      ]
+    else
+      _ -> []
+    end
+  end
+
+  defp log_stacktrace_info([file: file, line: line] ++ _) do
+    [", at: ", file, ?:, Integer.to_string(line)]
+  end
+
+  defp log_stacktrace_info(_), do: []
+
+  @repo_modules [Ecto.Repo.Queryable, Ecto.Repo.Schema, Ecto.Repo.Transaction]
+
+  defp last_non_ecto([{mod, _, _, _} | _stacktrace], repo, last)
+       when mod == repo or mod in @repo_modules,
+       do: last
+
+  defp last_non_ecto([last | stacktrace], repo, _last), do: last_non_ecto(stacktrace, repo, last)
+  defp last_non_ecto([], _repo, last), do: last
+
+  defp aql_colour("FOR" <> _), do: :cyan
+  defp aql_colour(_), do: nil
 
   defp load_date(d) do
     case Date.from_iso8601(d) do
@@ -269,4 +500,19 @@ defmodule ArangoXEcto.Adapter do
       {:error, _reason} -> :error
     end
   end
+
+  defp process_sources(opts) do
+    Keyword.take(opts, [:write, :read, :exclusive])
+    |> Enum.map(fn
+      {k, v} when is_list(v) ->
+        {k, Enum.map(v, &convert_source/1)}
+
+      {k, v} ->
+        {k, convert_source(v)}
+    end)
+  end
+
+  defp convert_source(source) when is_binary(source), do: source
+
+  defp convert_source(source) when is_atom(source), do: source.__schema__(:source)
 end

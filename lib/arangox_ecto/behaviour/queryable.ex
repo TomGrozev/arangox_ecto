@@ -1,7 +1,6 @@
 defmodule ArangoXEcto.Behaviour.Queryable do
   @moduledoc false
-
-  require Logger
+  alias ArangoXEcto.Adapter
 
   @behaviour Ecto.Adapter.Queryable
 
@@ -22,157 +21,90 @@ defmodule ArangoXEcto.Behaviour.Queryable do
   """
   @impl true
   def prepare(cmd, query) do
-    Logger.debug("#{inspect(__MODULE__)}.prepare: #{cmd}", %{
-      "#{inspect(__MODULE__)}.prepare-params" => %{
-        query: inspect(query, structs: false)
-      }
-    })
-
     aql_query = apply(ArangoXEcto.Query, cmd, [query])
-    {:nocache, aql_query}
+
+    {:cache, {System.unique_integer([:positive]), aql_query}}
   end
 
   @doc """
   Executes a previously prepared query.
   """
   @impl true
-  def execute(
-        %{pid: conn, repo: repo},
-        %{sources: sources},
-        {:nocache, query},
-        params,
-        opts
-      ) do
-    Logger.debug("#{inspect(__MODULE__)}.execute", %{
-      "#{inspect(__MODULE__)}.execute-params" => %{
-        query: inspect(query, structs: false)
-      }
-    })
+  def execute(adapter_meta, query_meta, {:cache, update, {id, prepared}}, params, opts) do
+    is_write_operation = String.match?(prepared, ~r/(update|remove) .+/i)
 
-    is_write_operation = String.match?(query, ~r/(update|remove) .+/i)
-    is_static = Keyword.get(repo.config(), :static, false)
+    case aql_call(
+           adapter_meta,
+           prepared,
+           params,
+           build_options(opts, query_meta, is_write_operation)
+         ) do
+      {:ok, res} ->
+        update.({id, prepared})
+        res
 
-    database =
-      opts
-      |> Keyword.get(:prefix)
-      |> then(&ArangoXEcto.get_prefix_database(repo, &1))
-
-    {run_query, options} = process_sources(repo, sources, is_static, is_write_operation)
-
-    dumped_params = Enum.map(params, &dump/1)
-
-    if run_query do
-      zipped_args =
-        Stream.zip(
-          Stream.iterate(1, &(&1 + 1))
-          |> Stream.map(&Integer.to_string(&1)),
-          dumped_params
-        )
-        |> Enum.into(%{})
-
-      res =
-        Arangox.transaction(
-          conn,
-          fn cursor ->
-            stream = Arangox.cursor(cursor, query, zipped_args, database: database)
-
-            Enum.reduce(
-              stream,
-              {0, []},
-              fn resp, {_len, acc} ->
-                len =
-                  case is_write_operation do
-                    true -> resp.body["extra"]["stats"]["writesExecuted"]
-                    false -> resp.body["extra"]["stats"]["scannedFull"]
-                  end
-
-                {len, acc ++ resp.body["result"]}
-              end
-            )
-          end,
-          Keyword.put(options, :database, database)
-        )
-
-      case res do
-        {:ok, {len, result}} -> {len, result}
-        {:error, _reason} -> {0, nil}
-      end
-    else
-      {0, []}
+      {:error, err} ->
+        raise err
     end
   end
 
-  defp dump(list_type) when is_list(list_type), do: Enum.map(list_type, &dump/1)
-  defp dump(%NaiveDateTime{} = dt), do: NaiveDateTime.to_iso8601(dt)
-  defp dump(%DateTime{} = dt), do: DateTime.to_iso8601(dt)
-  defp dump(%Time{} = dt), do: Time.to_iso8601(dt)
-  defp dump(%Date{} = dt), do: Date.to_iso8601(dt)
-  defp dump(%Decimal{} = d), do: Decimal.to_string(d)
-  defp dump(val), do: val
+  def execute(adapter_meta, query_meta, {:cached, update, _reset, {id, cached}}, params, opts) do
+    is_write_operation = String.match?(cached, ~r/(update|remove) .+/i)
 
-  defp process_sources(repo, sources, is_static, is_write_operation) do
+    case aql_call(
+           adapter_meta,
+           cached,
+           params,
+           build_options(opts, query_meta, is_write_operation)
+         ) do
+      {:ok, res} ->
+        update.({id, cached})
+        res
+
+      {:error, err} ->
+        raise err
+    end
+  end
+
+  def execute(adapter_meta, query_meta, {:nocache, {_id, prepared}}, params, opts) do
+    is_write_operation = String.match?(prepared, ~r/(update|remove) .+/i)
+
+    case aql_call(
+           adapter_meta,
+           prepared,
+           params,
+           build_options(opts, query_meta, is_write_operation)
+         ) do
+      {:ok, res} ->
+        res
+
+      {:error, err} ->
+        raise err
+    end
+  end
+
+  defp build_options(opts, %{sources: sources}, is_write) do
     sources = Tuple.to_list(sources)
-    run_query = ensure_all_collections_exist(repo, sources, is_static)
 
-    {run_query, build_options(sources, is_write_operation)}
+    Keyword.put(opts, :sources, sources)
+    |> maybe_put_write_sources(sources, is_write)
   end
 
-  defp build_options(sources, is_write_operation) do
-    collections = Enum.map(sources, fn {collection, _, _} -> collection end)
+  defp maybe_put_write_sources(opts, _sources, false), do: opts
 
-    if is_write_operation, do: [write: collections], else: []
+  defp maybe_put_write_sources(opts, sources, true) do
+    Keyword.put(opts, :write, Enum.map(sources, fn {collection, _, _} -> collection end))
   end
 
-  defp ensure_all_collections_exist(repo, sources, is_static) when is_list(sources) do
-    sources
-    |> Enum.all?(fn {collection, source_module, _} ->
-      case ArangoXEcto.schema_type(source_module) do
-        :view ->
-          maybe_create_view(repo, {collection, source_module}, is_static)
-
-          true
-
-        collection_type ->
-          maybe_raise_collection_error(repo, collection, collection_type, is_static)
-      end
-    end)
-  end
-
-  defp maybe_raise_collection_error(repo, collection, collection_type, is_static) do
-    cond do
-      ArangoXEcto.collection_exists?(repo, collection, collection_type) ->
-        true
-
-      is_static ->
-        raise("Collection (#{collection}) does not exist. Maybe a migration is missing.")
-
-      true ->
-        false
-    end
-  end
-
-  defp maybe_create_view(repo, {source, schema}, is_static) do
-    cond do
-      ArangoXEcto.view_exists?(repo, source) ->
-        true
-
-      is_static ->
-        raise("View (#{schema}) does not exist. Maybe a migration is missing.")
-
-      true ->
-        ArangoXEcto.create_view(repo, schema)
-    end
-  end
-
-  defp do_stream(adapter_meta, {:cache, _, prepared}, params, opts) do
+  defp do_stream(adapter_meta, {:cache, _, {_id, prepared}}, params, opts) do
     prepare_stream(adapter_meta, prepared, params, opts)
   end
 
-  defp do_stream(adapter_meta, {:cached, _, _, cached}, params, opts) do
+  defp do_stream(adapter_meta, {:cached, _, _, {_id, cached}}, params, opts) do
     prepare_stream(adapter_meta, String.Chars.to_string(cached), params, opts)
   end
 
-  defp do_stream(adapter_meta, {:nocache, prepared}, params, opts) do
+  defp do_stream(adapter_meta, {:nocache, {_id, prepared}}, params, opts) do
     prepare_stream(adapter_meta, prepared, params, opts)
   end
 
@@ -187,5 +119,48 @@ defmodule ArangoXEcto.Behaviour.Queryable do
                      } ->
       {nrows, rows}
     end)
+  end
+
+  defp aql_call(%{repo: repo, telemetry: telemetry, opts: default_opts}, query, params, opts) do
+    is_static = Keyword.get(repo.config(), :static, false)
+
+    zipped_args =
+      Enum.zip(
+        Stream.iterate(1, &(&1 + 1))
+        |> Stream.map(&Integer.to_string(&1)),
+        params
+      )
+
+    opts = Adapter.with_log(telemetry, zipped_args, opts ++ default_opts)
+    ensure_all_views_exist(repo, Keyword.get(opts, :sources, []), is_static)
+
+    case ArangoXEcto.aql_query(repo, query, zipped_args, opts) do
+      {:error, %Arangox.Error{status: 404, error_num: 1203}} when not is_static ->
+        {:ok, {0, []}}
+
+      any ->
+        any
+    end
+  end
+
+  defp ensure_all_views_exist(repo, sources, is_static) when is_list(sources) do
+    for {collection, source_module, _} <- sources do
+      if ArangoXEcto.is_view?(source_module) do
+        maybe_create_view(repo, {collection, source_module}, is_static)
+      end
+    end
+  end
+
+  defp maybe_create_view(repo, {source, schema}, is_static) do
+    cond do
+      ArangoXEcto.view_exists?(repo, source) ->
+        true
+
+      is_static ->
+        raise("View (#{schema}) does not exist. Maybe a migration is missing.")
+
+      true ->
+        ArangoXEcto.create_view(repo, schema)
+    end
   end
 end

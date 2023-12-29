@@ -94,7 +94,7 @@ defmodule ArangoXEctoTest.Integration.RepoTest do
     test "query from non existent collection" do
       assert [] = Repo.all(from(a in "abc", select: a.id))
 
-      assert_raise RuntimeError, ~r/does not exist. Maybe a migration is missing/, fn ->
+      assert_raise Arangox.Error, ~r/collection or view not found/, fn ->
         StaticRepo.all(from(a in "abc", select: a.id))
       end
     end
@@ -709,24 +709,25 @@ defmodule ArangoXEctoTest.Integration.RepoTest do
         Ecto.Multi.new()
         |> Ecto.Multi.insert(:post, %Post{title: "my new post"})
         |> Ecto.Multi.all(:all_posts, Post)
-        |> Repo.transaction()
+        |> Repo.transaction(write: Post)
 
       assert {:ok, %{post: post, all_posts: [post]}} = result
     end
 
     test "can rollback" do
+      assert [] = Repo.all(Post)
+
       assert {:error, :rollback} =
-               Repo.transaction(fn ->
-                 assert %Post{} = Repo.insert!(%Post{title: "my new post"})
+               Repo.transaction(
+                 fn ->
+                   assert %Post{} = Repo.insert!(%Post{title: "my other new post"})
 
-                 assert [%Post{title: "my new post"}] = Repo.all(Post)
+                   Repo.rollback(:rollback)
+                 end,
+                 write: [Post]
+               )
 
-                 Repo.rollback(:rollback)
-               end)
-
-      # This may not work because of some weird ArangoDB thing.
-      # For now this will be commented out.
-      # assert [] = Repo.all(Post)
+      assert [] = Repo.all(Post)
     end
 
     test "stream" do
@@ -743,6 +744,18 @@ defmodule ArangoXEctoTest.Integration.RepoTest do
                Repo.transaction(fn ->
                  Enum.to_list(stream)
                end)
+    end
+  end
+
+  describe "checkout" do
+    test "can checkout" do
+      refute Repo.checked_out?()
+
+      Repo.checkout(fn ->
+        assert Repo.checked_out?()
+      end)
+
+      refute Repo.checked_out?()
     end
   end
 

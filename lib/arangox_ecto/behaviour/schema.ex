@@ -1,5 +1,6 @@
 defmodule ArangoXEcto.Behaviour.Schema do
   @moduledoc false
+  alias ArangoXEcto.Adapter
 
   @behaviour Ecto.Adapter.Schema
 
@@ -20,14 +21,16 @@ defmodule ArangoXEcto.Behaviour.Schema do
   """
   @impl true
   def insert(
-        %{pid: conn, repo: repo},
+        %{pid: pool, repo: repo, telemetry: telemetry, opts: default_opts},
         %{source: collection, schema: schema, prefix: prefix},
-        fields,
+        params,
         on_conflict,
         returning,
-        options
+        opts
       ) do
-    return_new = should_return_new?(returning, options)
+    conn = Adapter.get_conn_or_pool(pool)
+
+    return_new = should_return_new?(returning, opts)
 
     options =
       build_options([
@@ -36,21 +39,24 @@ defmodule ArangoXEcto.Behaviour.Schema do
       ])
 
     insert_fields =
-      fields
+      params
       |> process_fields(schema)
 
     doc = Enum.into(insert_fields, %{})
 
-    Logger.debug("#{inspect(__MODULE__)}.insert", %{
-      "#{inspect(__MODULE__)}.insert-params" => %{document: inspect(doc)}
-    })
+    opts =
+      opts
+      |> Keyword.merge(source: collection, type: "insert")
+      |> then(&Adapter.with_log(telemetry, doc, &1 ++ default_opts))
 
     maybe_create_collection(repo, schema, prefix)
 
     Arangox.post(
       conn,
       ArangoXEcto.__build_connection_url__(repo, "document/#{collection}", prefix, options),
-      doc
+      doc,
+      %{},
+      opts
     )
     |> extract_doc(return_new, on_conflict)
     |> single_doc_result(returning)
@@ -61,17 +67,18 @@ defmodule ArangoXEcto.Behaviour.Schema do
   """
   @impl true
   def insert_all(
-        %{pid: conn, repo: repo},
+        %{pid: pool, repo: repo, telemetry: telemetry, opts: default_opts},
         %{source: collection, schema: schema, prefix: prefix},
         _header,
         list,
         on_conflict,
         returning,
         _placeholders,
-        options
+        opts
       ) do
-    docs = build_docs(list)
-    return_new = should_return_new?(returning, options)
+    conn = Adapter.get_conn_or_pool(pool)
+
+    return_new = should_return_new?(returning, opts)
 
     options =
       build_options([
@@ -79,16 +86,21 @@ defmodule ArangoXEcto.Behaviour.Schema do
         {replace_conflict?(on_conflict), "overwrite"}
       ])
 
-    Logger.debug("#{inspect(__MODULE__)}.insert_all", %{
-      "#{inspect(__MODULE__)}.insert_all-params" => %{documents: inspect(docs)}
-    })
+    docs = build_docs(list)
+
+    opts =
+      opts
+      |> Keyword.merge(source: collection, type: "insert_all")
+      |> then(&Adapter.with_log(telemetry, docs, &1 ++ default_opts))
 
     maybe_create_collection(repo, schema, prefix)
 
     case Arangox.post(
            conn,
            ArangoXEcto.__build_connection_url__(repo, "document/#{collection}", prefix, options),
-           docs
+           docs,
+           %{},
+           opts
          ) do
       {:ok, %{body: body}} ->
         body
@@ -103,7 +115,7 @@ defmodule ArangoXEcto.Behaviour.Schema do
   defp replace_conflict?({fields, _, _targets}) when is_list(fields), do: true
   defp replace_conflict?({_, _, _targets}), do: false
 
-  defp build_options(options_matrix) do
+  defp build_options(options_matrix) when is_list(options_matrix) do
     Enum.reduce(options_matrix, [], fn {bool, option}, acc ->
       ["#{option}=#{bool}" | acc]
     end)
@@ -149,18 +161,21 @@ defmodule ArangoXEcto.Behaviour.Schema do
   """
   @impl true
   def delete(
-        %{pid: conn, repo: repo},
+        %{pid: pool, repo: repo, telemetry: telemetry, opts: default_opts},
         %{source: collection, prefix: prefix},
         [{:_key, key}],
-        _options
+        opts
       ) do
-    Logger.debug("#{inspect(__MODULE__)}.delete", %{
-      "#{inspect(__MODULE__)}.delete-params" => %{collection: collection, key: key}
-    })
+    conn = Adapter.get_conn_or_pool(pool)
+
+    opts =
+      opts
+      |> Keyword.merge(source: collection, type: "delete")
+      |> then(&Adapter.with_log(telemetry, key, &1 ++ default_opts))
 
     url = ArangoXEcto.__build_connection_url__(repo, "document/#{collection}/#{key}", prefix)
 
-    case Arangox.delete(conn, url) do
+    case Arangox.delete(conn, url, %{}, opts) do
       {:ok, _} -> {:ok, []}
       {:error, %{status: 404}} -> {:error, :stale}
       {:error, %{status: status}} -> {:error, status}
@@ -176,21 +191,26 @@ defmodule ArangoXEcto.Behaviour.Schema do
   """
   @impl true
   def update(
-        %{pid: conn, repo: repo},
+        %{pid: pool, repo: repo, telemetry: telemetry, opts: default_opts},
         %{source: collection, schema: schema, prefix: prefix},
         fields,
         [{:_key, key}],
         returning,
-        options
+        opts
       ) do
-    document = Enum.into(fields, %{})
+    conn = Adapter.get_conn_or_pool(pool)
 
-    return_new = should_return_new?(returning, options)
-    options = if return_new, do: "?returnNew=true", else: ""
+    return_new = should_return_new?(returning, opts)
 
-    Logger.debug("#{inspect(__MODULE__)}.update", %{
-      "#{inspect(__MODULE__)}.update-params" => %{document: inspect(document)}
-    })
+    options =
+      build_options([{return_new, "returnNew"}])
+
+    doc = Enum.into(fields, %{})
+
+    opts =
+      opts
+      |> Keyword.merge(source: collection, type: "update")
+      |> then(&Adapter.with_log(telemetry, doc, &1 ++ default_opts))
 
     maybe_create_collection(repo, schema, prefix)
 
@@ -202,7 +222,9 @@ defmodule ArangoXEcto.Behaviour.Schema do
         prefix,
         options
       ),
-      document
+      doc,
+      %{},
+      opts
     )
     |> extract_doc(return_new)
     |> single_doc_result(returning)

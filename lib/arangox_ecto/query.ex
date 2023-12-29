@@ -73,6 +73,24 @@ defmodule ArangoXEcto.Query do
   end
 
   @doc """
+  Creates an AQL query to insert an entry
+  """
+  @doc since: "1.4.0"
+  @spec insert(
+          String.t(),
+          [atom()],
+          Ecto.Adapter.Schema.on_conflict(),
+          Ecto.Adapter.Schema.returning()
+        ) :: binary()
+  def insert(collection, rows, on_conflict, returning) do
+    dbg({collection, rows, on_conflict, returning})
+
+    document = document(rows)
+
+    IO.iodata_to_binary(["INSERT ", document, " INTO ", quote_name(collection)])
+  end
+
+  @doc """
   An AND search query expression.
 
   Extention to the `Ecto.Query` api for arango searches.
@@ -373,9 +391,22 @@ defmodule ArangoXEcto.Query do
     Enum.intersperse(fields, ", ")
   end
 
+  defp kv_list(key, value) do
+    [key, ": " | value]
+  end
+
+  defp document(fields) do
+    params =
+      for field <- fields do
+        kv_list(quote_name(field), [?@ | Atom.to_string(field)])
+      end
+
+    ["{ ", Enum.intersperse(params, ", "), " }"]
+  end
+
   defp update_op(cmd, name, quoted_key, value, sources, query) do
     value = update_op_value(cmd, name, quoted_key, value, sources, query)
-    [quoted_key, ": " | value]
+    kv_list(quoted_key, value)
   end
 
   defp update_op_value(:set, _name, _quoted_key, value, sources, query),

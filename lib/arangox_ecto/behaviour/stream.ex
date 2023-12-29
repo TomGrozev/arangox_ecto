@@ -5,7 +5,8 @@ defmodule ArangoXEcto.Behaviour.Stream do
   @type t :: %__MODULE__{}
 
   @doc false
-  @spec build(meta :: map(), statement :: String.t(), params :: map(), opts :: Keyword.t()) :: t()
+  @spec build(meta :: map(), statement :: String.t(), params :: [any()], opts :: Keyword.t()) ::
+          t()
   def build(meta, statement, params, opts) do
     %__MODULE__{meta: meta, statement: statement, params: params, opts: opts}
   end

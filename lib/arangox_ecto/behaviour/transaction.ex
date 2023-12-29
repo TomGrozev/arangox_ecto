@@ -11,18 +11,8 @@ defmodule ArangoXEcto.Behaviour.Transaction do
   end
 
   @impl true
-  def transaction(%{pid: pool}, opts, callback) do
-    callback = fn conn ->
-      previous_conn = Adapter.put_conn(pool, conn)
-
-      try do
-        callback.()
-      after
-        Adapter.reset_conn(pool, previous_conn)
-      end
-    end
-
-    Arangox.transaction(Adapter.get_conn_or_pool(pool), callback, opts)
+  def transaction(adapter_meta, opts, callback) do
+    Adapter.checkout_or_transaction(:transaction, adapter_meta, opts, callback)
   end
 
   @impl true
