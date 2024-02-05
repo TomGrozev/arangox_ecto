@@ -22,37 +22,68 @@ defmodule ArangoXEcto.Adapter do
   require Logger
 
   @doc """
-  Starts the Agent with an empty list
-  """
-  def start_link({_module, config}) do
-    Logger.debug(
-      "#{inspect(__MODULE__)}.start_link",
-      %{
-        "#{inspect(__MODULE__)}.start_link-params" => %{
-          config: config
-        }
-      }
-    )
-
-    Agent.start_link(fn -> [] end)
-  end
-
-  @doc """
   Initialise adapter with `config`
   """
   @impl Ecto.Adapter
   def init(config) do
-    child = Arangox.child_spec(config)
-
     log = Keyword.get(config, :log, :debug)
+
+    valid_log_levels = [
+      false,
+      :debug,
+      :info,
+      :notice,
+      :warning,
+      :error,
+      :critical,
+      :alert,
+      :emergency
+    ]
+
+    if log not in valid_log_levels do
+      raise """
+      invalid value for :log option in Repo config
+
+      The accepted values for the :log option are:
+      #{Enum.map_join(valid_log_levels, ", ", &inspect/1)}
+
+      See https://hexdocs.pm/ecto/Ecto.Repo.html for more information.
+      """
+    end
+
     stacktrace = Keyword.get(config, :stacktrace, nil)
     telemetry_prefix = Keyword.fetch!(config, :telemetry_prefix)
     telemetry = {config[:repo], log, telemetry_prefix ++ [:query]}
 
+    config = adapter_config(config)
     opts = Keyword.take(config, [:repo])
     meta = %{telemetry: telemetry, stacktrace: stacktrace, opts: opts}
+    child = Arangox.child_spec(config)
 
     {:ok, child, meta}
+  end
+
+  defp adapter_config(config) do
+    if Keyword.has_key?(config, :pool_timeout) do
+      message = """
+      :pool_timeout option no longer has an effect and has been replaced with an improved queuing system.
+      See \"Queue config\" in DBConnection.start_link/2 documentation for more information.
+      """
+
+      IO.warn(message)
+    end
+
+    config
+    |> Keyword.delete(:name)
+    |> Keyword.update(:pool, DBConnection.ConnectionPool, &normalize_pool/1)
+  end
+
+  defp normalize_pool(pool) do
+    if Code.ensure_loaded?(pool) && function_exported?(pool, :unboxed_run, 2) do
+      DBConnection.Ownership
+    else
+      pool
+    end
   end
 
   @doc """
@@ -256,6 +287,29 @@ defmodule ArangoXEcto.Adapter do
   end
 
   @doc false
+  def get_database(repo, opts) do
+    Keyword.get(
+      opts,
+      :database,
+      ArangoXEcto.get_prefix_database(repo, Keyword.get(opts, :prefix))
+    )
+  end
+
+  @doc false
+  def get_conn_from_repo(repo_or_conn) do
+    case repo_or_conn do
+      pid when is_pid(pid) ->
+        pid
+
+      repo ->
+        %{pid: pool} = Ecto.Adapter.lookup_meta(repo)
+
+        pool
+    end
+    |> get_conn_or_pool()
+  end
+
+  @doc false
   def get_conn(pool) do
     Process.get(key(pool))
   end
@@ -377,7 +431,7 @@ defmodule ArangoXEcto.Adapter do
   end
 
   defp process_query(%Arangox.Request{method: method, path: path, headers: headers, body: body}) do
-    "(#{Atom.to_string(method) |> String.upcase()}) (Path: #{path}) (Header: #{inspect(headers)})\n#{inspect(body)}"
+    "(#{Atom.to_string(method) |> String.upcase()}) (Path: #{path}) (Header: #{inspect(headers)})"
   end
 
   defp process_query(query), do: String.Chars.to_string(query)
@@ -418,7 +472,7 @@ defmodule ArangoXEcto.Adapter do
     [
       ?\n,
       query,
-      ?\s,
+      ?\n,
       inspect(params, charlists: false)
     ]
   end

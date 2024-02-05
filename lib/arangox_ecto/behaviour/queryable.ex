@@ -121,7 +121,7 @@ defmodule ArangoXEcto.Behaviour.Queryable do
     end)
   end
 
-  defp aql_call(%{repo: repo, telemetry: telemetry, opts: default_opts}, query, params, opts) do
+  defp aql_call(%{repo: repo}, query, params, opts) do
     is_static = Keyword.get(repo.config(), :static, false)
 
     zipped_args =
@@ -131,7 +131,6 @@ defmodule ArangoXEcto.Behaviour.Queryable do
         params
       )
 
-    opts = Adapter.with_log(telemetry, zipped_args, opts ++ default_opts)
     ensure_all_views_exist(repo, Keyword.get(opts, :sources, []), is_static)
 
     case ArangoXEcto.aql_query(repo, query, zipped_args, opts) do

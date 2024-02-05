@@ -59,21 +59,30 @@ defmodule ArangoXEcto do
           }
         ]}}
   """
-  @spec aql_query(Ecto.Repo.t(), query(), vars(), [DBConnection.option()]) ::
+  @spec aql_query(Ecto.Repo.t() | Ecto.Adapter.adapter_meta(), query(), vars(), [
+          DBConnection.option()
+        ]) ::
           {:ok, {non_neg_integer(), list(map)}} | {:error, any()}
-  def aql_query(repo, query, vars \\ [], opts \\ []) when is_atom(repo) do
-    conn = gen_conn_from_repo(repo)
+  def aql_query(
+        repo_or_meta,
+        query,
+        vars \\ [],
+        opts \\ []
+      )
+
+  def aql_query(
+        %{pid: pool, telemetry: telemetry, opts: default_opts},
+        query,
+        vars,
+        opts
+      ) do
+    conn = Adapter.get_conn_or_pool(pool)
 
     is_write_operation = String.match?(query, ~r/(update|remove) .+/i)
 
-    database =
-      opts
-      |> Keyword.get(:prefix)
-      |> then(&ArangoXEcto.get_prefix_database(repo, &1))
-
     {query, vars} = process_vars(query, vars)
 
-    opts = Keyword.put(opts, :database, database)
+    opts = Adapter.with_log(telemetry, vars, opts ++ default_opts)
 
     try do
       Arangox.transaction(
@@ -102,6 +111,12 @@ defmodule ArangoXEcto do
     end
   end
 
+  def aql_query(repo, query, vars, opts) when is_atom(repo) do
+    adapter_meta = Ecto.Adapter.lookup_meta(repo)
+
+    aql_query(adapter_meta, query, vars, opts)
+  end
+
   @doc """
   Same as `ArangoXEcto.aql_query/4 but will raise an error.`
 
@@ -125,10 +140,12 @@ defmodule ArangoXEcto do
         }
       ]}
   """
-  @spec aql_query!(Ecto.Repo.t(), query(), vars(), [DBConnection.option()]) ::
+  @spec aql_query!(Ecto.Repo.t() | Ecto.Adapter.adapter_meta(), query(), vars(), [
+          DBConnection.option()
+        ]) ::
           {non_neg_integer(), list(map)}
-  def aql_query!(repo, query, vars \\ [], opts \\ []) do
-    case aql_query(repo, query, vars, opts) do
+  def aql_query!(repo_or_meta, query, vars \\ [], opts \\ []) do
+    case aql_query(repo_or_meta, query, vars, opts) do
       {:ok, res} -> res
       {:error, err} -> raise err
     end
@@ -143,9 +160,10 @@ defmodule ArangoXEcto do
 
   - `repo` - The Ecto repo module used for connection
   - `function` - An atom of the Arangox function to run
-  - `args` - The options passed to the function (not including the conn argument)
-
-  The `conn` argument is automatically prepended to your supplied `args`
+  - `path` - The path of the query
+  - `body` - The body of the request
+  - `headers` - The headers of the request
+  - `opts` - The last opts arg passed to the function
 
   ## Supported Functions
 
@@ -173,10 +191,10 @@ defmodule ArangoXEcto do
 
   ## Examples
 
-      iex> ArangoXEcto.api_query(Repo, :get, ["/_api/collection"])
+      iex> ArangoXEcto.api_query(Repo, :get, "/_api/collection")
       {:ok, %Arangox.Response{body: ...}}
 
-      iex> ArangoXEcto.api_query(Repo, :non_existent, ["/_api/collection"])
+      iex> ArangoXEcto.api_query(Repo, :non_existent, "/_api/collection")
       ** (ArgumentError) Invalid function passed to `Arangox` module
 
   """
@@ -203,16 +221,50 @@ defmodule ArangoXEcto do
     :status,
     :transaction
   ]
-  @spec api_query(Ecto.Repo.t(), atom(), list()) :: {:ok, Arangox.Response.t()} | {:error, any()}
-  def api_query(repo, function, args \\ []) do
-    conn = gen_conn_from_repo(repo)
+  @spec api_query(
+          Ecto.Repo.t() | Ecto.Adapter.adapter_meta(),
+          atom(),
+          Arangox.path(),
+          Arangox.body(),
+          Arangox.headers(),
+          [
+            DBConnection.option()
+          ]
+        ) :: {:ok, Arangox.Response.t()} | {:error, any()}
+  def api_query(
+        repo_or_meta,
+        function,
+        path,
+        body \\ "",
+        headers \\ %{},
+        opts \\ []
+      )
+
+  def api_query(
+        %{pid: pool, telemetry: telemetry, opts: default_opts},
+        function,
+        path,
+        body,
+        headers,
+        opts
+      ) do
+    conn = Adapter.get_conn_or_pool(pool)
+
+    opts = Adapter.with_log(telemetry, body, opts ++ default_opts)
 
     if function in @allowed_arangox_funcs and
          function in Keyword.keys(Arangox.__info__(:functions)) do
-      apply(Arangox, function, [conn | args])
+      Arangox.request(conn, function, path, body, headers, opts)
+      |> do_result()
     else
-      raise ArgumentError, "Invalid function passed to `Arangox` module"
+      raise ArgumentError, "Invalid function [#{function}] passed to `Arangox` module"
     end
+  end
+
+  def api_query(repo, function, path, body, headers, opts) when is_atom(repo) do
+    adapter_meta = Ecto.Adapter.lookup_meta(repo)
+
+    api_query(adapter_meta, function, path, body, headers, opts)
   end
 
   @doc """
@@ -323,7 +375,7 @@ defmodule ArangoXEcto do
 
   """
   @doc since: "1.3.0"
-  @spec create_view(Ecto.Repo.t() | pid(), ArangoXEcto.View.t(), Keyword.t()) ::
+  @spec create_view(Ecto.Repo.t(), ArangoXEcto.View.t(), Keyword.t()) ::
           {:ok, Arangox.Response.t()} | {:error, Arangox.Error.t()}
   def create_view(repo, view, opts \\ []) do
     view_definition = ArangoXEcto.View.definition(view)
@@ -344,10 +396,14 @@ defmodule ArangoXEcto do
       end)
     end
 
-    ArangoXEcto.api_query(repo, :post, [
-      __build_connection_url__(repo, "view", Keyword.get(opts, :prefix)),
-      view_definition
-    ])
+    ArangoXEcto.api_query(
+      repo,
+      :post,
+      __build_connection_url__(repo, "view", opts),
+      view_definition,
+      %{},
+      opts
+    )
   end
 
   @doc """
@@ -385,17 +441,17 @@ defmodule ArangoXEcto do
 
   """
   @doc since: "1.3.0"
-  @spec create_analyzers(Ecto.Repo.t() | pid(), ArangoXEcto.Analyzer.t(), Keyword.t()) ::
+  @spec create_analyzers(Ecto.Repo.t(), ArangoXEcto.Analyzer.t(), Keyword.t()) ::
           {:ok, Arangox.Response.t()} | {:error, [Arangox.Response.t()], [Arangox.Error.t()]}
   def create_analyzers(repo, analyzer_module, opts \\ []) do
     analyzers = analyzer_module.__analyzers__()
 
     remove_existing_analyzers(repo, analyzers, opts)
 
-    url = __build_connection_url__(repo, "analyzer", Keyword.get(opts, :prefix))
+    url = __build_connection_url__(repo, "analyzer", opts)
 
     Enum.reduce(analyzers, {[], []}, fn analyzer, {success, fail} ->
-      case ArangoXEcto.api_query(repo, :post, [url, analyzer]) do
+      case ArangoXEcto.api_query(repo, :post, url, analyzer, %{}, opts) do
         {:ok, res} -> {[{analyzer.name, res} | success], fail}
         {:error, res} -> {success, [{analyzer.name, res} | fail]}
       end
@@ -449,7 +505,7 @@ defmodule ArangoXEcto do
 
       collection = Migration.collection(collection_name, type, collection_opts)
 
-      case Migration.create(collection, opts) do
+      case Migration.create_object(collection, opts) do
         :ok ->
           maybe_create_indexes(collection_name, indexes, opts)
 
@@ -800,23 +856,25 @@ defmodule ArangoXEcto do
       true
   """
   @spec collection_exists?(
-          Ecto.Repo.t() | pid(),
+          Ecto.Repo.t(),
           binary() | atom(),
           atom() | integer(),
           Keyword.t()
         ) ::
           boolean()
-  def collection_exists?(repo_or_conn, collection_name, type \\ :document, opts \\ [])
+  def collection_exists?(repo, collection_name, type \\ :document, opts \\ [])
       when is_binary(collection_name) or is_atom(collection_name) do
-    conn = gen_conn_from_repo(repo_or_conn)
-
-    Arangox.get(
-      conn,
+    api_query(
+      repo,
+      :get,
       __build_connection_url__(
-        repo_or_conn,
+        repo,
         "collection/#{collection_name}",
-        Keyword.get(opts, :prefix)
-      )
+        opts
+      ),
+      "",
+      %{},
+      opts
     )
     |> case do
       {:ok, %Arangox.Response{body: %{"isSystem" => false} = body}} ->
@@ -848,11 +906,9 @@ defmodule ArangoXEcto do
       iex> ArangoXEcto.view_exists?(Repo, :users_search)
       true
   """
-  @spec view_exists?(Ecto.Repo.t() | pid(), binary() | atom()) :: boolean()
-  def view_exists?(repo_or_conn, view_name) when is_binary(view_name) or is_atom(view_name) do
-    conn = gen_conn_from_repo(repo_or_conn)
-
-    Arangox.get(conn, "/_api/view/#{view_name}")
+  @spec view_exists?(Ecto.Repo.t(), binary() | atom()) :: boolean()
+  def view_exists?(repo, view_name) when is_binary(view_name) or is_atom(view_name) do
+    api_query(repo, :get, "/_api/view/#{view_name}")
     |> case do
       {:ok, %Arangox.Response{}} ->
         true
@@ -955,41 +1011,30 @@ defmodule ArangoXEcto do
   end
 
   @doc false
-  def __build_connection_url__(repo, string, _prefix, options \\ "")
+  def __build_connection_url__(repo, string, opts, options \\ "") do
+    database = Adapter.get_database(repo, opts)
 
-  def __build_connection_url__(repo, string, _prefix, options) when is_pid(repo),
-    do: "/_api/#{string}#{options}"
-
-  def __build_connection_url__(repo, string, prefix, options),
-    do: "/_db/#{get_prefix_database(repo, prefix)}/_api/#{string}#{options}"
+    "/_db/#{database}/_api/#{string}#{options}"
+  end
 
   ###############
   ##  Helpers  ##
   ###############
 
-  defp gen_conn_from_repo(repo_or_conn) do
-    case repo_or_conn do
-      pid when is_pid(pid) ->
-        pid
-
-      repo ->
-        %{pid: pool} = Ecto.Adapter.lookup_meta(repo)
-
-        pool
-    end
-    |> Adapter.get_conn_or_pool()
-  end
-
   defp remove_existing_analyzers(repo, analyzers, opts) do
     for %{name: name} <- analyzers do
-      ArangoXEcto.api_query(repo, :delete, [
+      ArangoXEcto.api_query(
+        repo,
+        :delete,
         __build_connection_url__(
           repo,
           "analyzer/#{name}",
-          Keyword.get(opts, :prefix),
+          opts,
           "?force=true"
-        )
-      ])
+        ),
+        %{},
+        opts
+      )
     end
   end
 
@@ -1283,4 +1328,7 @@ defmodule ArangoXEcto do
   defp dump(%Date{} = dt), do: Date.to_iso8601(dt)
   defp dump(%Decimal{} = d), do: Decimal.to_string(d)
   defp dump(val), do: val
+
+  defp do_result({:ok, _request, response}), do: {:ok, response}
+  defp do_result({:error, exception}), do: {:error, exception}
 end

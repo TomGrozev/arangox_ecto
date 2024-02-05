@@ -21,15 +21,13 @@ defmodule ArangoXEcto.Behaviour.Schema do
   """
   @impl true
   def insert(
-        %{pid: pool, repo: repo, telemetry: telemetry, opts: default_opts},
+        %{repo: repo} = adapter_meta,
         %{source: collection, schema: schema, prefix: prefix},
         params,
         on_conflict,
         returning,
         opts
       ) do
-    conn = Adapter.get_conn_or_pool(pool)
-
     return_new = should_return_new?(returning, opts)
 
     options =
@@ -44,16 +42,18 @@ defmodule ArangoXEcto.Behaviour.Schema do
 
     doc = Enum.into(insert_fields, %{})
 
-    opts =
-      opts
-      |> Keyword.merge(source: collection, type: "insert")
-      |> then(&Adapter.with_log(telemetry, doc, &1 ++ default_opts))
+    opts = Keyword.merge(opts, source: collection, type: "insert")
 
     maybe_create_collection(repo, schema, prefix)
 
-    Arangox.post(
-      conn,
-      ArangoXEcto.__build_connection_url__(repo, "document/#{collection}", prefix, options),
+    ArangoXEcto.api_query(
+      adapter_meta,
+      ArangoXEcto.__build_connection_url__(
+        repo,
+        "document/#{collection}",
+        Keyword.put(opts, :prefix, prefix),
+        options
+      ),
       doc,
       %{},
       opts
@@ -67,7 +67,7 @@ defmodule ArangoXEcto.Behaviour.Schema do
   """
   @impl true
   def insert_all(
-        %{pid: pool, repo: repo, telemetry: telemetry, opts: default_opts},
+        %{repo: repo} = adapter_meta,
         %{source: collection, schema: schema, prefix: prefix},
         _header,
         list,
@@ -76,8 +76,6 @@ defmodule ArangoXEcto.Behaviour.Schema do
         _placeholders,
         opts
       ) do
-    conn = Adapter.get_conn_or_pool(pool)
-
     return_new = should_return_new?(returning, opts)
 
     options =
@@ -88,15 +86,12 @@ defmodule ArangoXEcto.Behaviour.Schema do
 
     docs = build_docs(list)
 
-    opts =
-      opts
-      |> Keyword.merge(source: collection, type: "insert_all")
-      |> then(&Adapter.with_log(telemetry, docs, &1 ++ default_opts))
+    opts = Keyword.merge(opts, source: collection, type: "insert_all")
 
     maybe_create_collection(repo, schema, prefix)
 
-    case Arangox.post(
-           conn,
+    case ArangoXEcto.api_query(
+           adapter_meta,
            ArangoXEcto.__build_connection_url__(repo, "document/#{collection}", prefix, options),
            docs,
            %{},
@@ -161,21 +156,21 @@ defmodule ArangoXEcto.Behaviour.Schema do
   """
   @impl true
   def delete(
-        %{pid: pool, repo: repo, telemetry: telemetry, opts: default_opts},
+        %{repo: repo} = adapter_meta,
         %{source: collection, prefix: prefix},
         [{:_key, key}],
         opts
       ) do
-    conn = Adapter.get_conn_or_pool(pool)
+    opts = Keyword.merge(opts, source: collection, type: "delete")
 
-    opts =
-      opts
-      |> Keyword.merge(source: collection, type: "delete")
-      |> then(&Adapter.with_log(telemetry, key, &1 ++ default_opts))
+    url =
+      ArangoXEcto.__build_connection_url__(
+        repo,
+        "document/#{collection}/#{key}",
+        Keyword.put(opts, :prefix, prefix)
+      )
 
-    url = ArangoXEcto.__build_connection_url__(repo, "document/#{collection}/#{key}", prefix)
-
-    case Arangox.delete(conn, url, %{}, opts) do
+    case ArangoXEcto.api_query(adapter_meta, :delete, url, "", %{}, opts) do
       {:ok, _} -> {:ok, []}
       {:error, %{status: 404}} -> {:error, :stale}
       {:error, %{status: status}} -> {:error, status}
@@ -191,15 +186,13 @@ defmodule ArangoXEcto.Behaviour.Schema do
   """
   @impl true
   def update(
-        %{pid: pool, repo: repo, telemetry: telemetry, opts: default_opts},
+        %{repo: repo} = adapter_meta,
         %{source: collection, schema: schema, prefix: prefix},
         fields,
         [{:_key, key}],
         returning,
         opts
       ) do
-    conn = Adapter.get_conn_or_pool(pool)
-
     return_new = should_return_new?(returning, opts)
 
     options =
@@ -207,19 +200,17 @@ defmodule ArangoXEcto.Behaviour.Schema do
 
     doc = Enum.into(fields, %{})
 
-    opts =
-      opts
-      |> Keyword.merge(source: collection, type: "update")
-      |> then(&Adapter.with_log(telemetry, doc, &1 ++ default_opts))
+    opts = Keyword.merge(opts, source: collection, type: "update")
 
     maybe_create_collection(repo, schema, prefix)
 
-    Arangox.patch(
-      conn,
+    ArangoXEcto.api_query(
+      adapter_meta,
+      :patch,
       ArangoXEcto.__build_connection_url__(
         repo,
         "document/#{collection}/#{key}",
-        prefix,
+        Keyword.put(opts, :prefix, prefix),
         options
       ),
       doc,
