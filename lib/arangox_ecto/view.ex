@@ -219,6 +219,32 @@ defmodule ArangoXEcto.View do
     end
   end
 
+  @doc false
+  def __after_compile__(%{module: module} = env, _) do
+    # If we are compiling code, we can validate associations now,
+    # as the Elixir compiler will solve dependencies.
+    if Code.can_await_module_compilation?() do
+      for {schema, link} <- module.__view__(:links) do
+        unless is_atom(schema) and
+                 (ArangoXEcto.is_document?(schema) or ArangoXEcto.is_edge?(schema)) do
+          IO.warn(
+            "the schema passed must be an Ecto schema, got: #{inspect(schema)}",
+            Macro.Env.stacktrace(env)
+          )
+        end
+
+        unless Link.valid?(link) do
+          IO.warn(
+            "the link is invalid for field `#{schema}` got: #{inspect(link)}",
+            Macro.Env.stacktrace(env)
+          )
+        end
+      end
+    end
+
+    :ok
+  end
+
   @doc """
   Defines a primary sort field on the view.
 
@@ -302,17 +328,6 @@ defmodule ArangoXEcto.View do
     quote do
       schema = unquote(schema)
       link = unquote(link)
-
-      unless is_atom(schema) and
-               (ArangoXEcto.is_document?(schema) or ArangoXEcto.is_edge?(schema)) do
-        raise ArgumentError,
-              "the schema passed must be an Ecto schema, got: #{inspect(schema)}"
-      end
-
-      unless Link.valid?(link) do
-        raise ArgumentError,
-              "the link is invalid for field `#{schema}` got: #{inspect(link)}"
-      end
 
       Module.put_attribute(
         __MODULE__,
