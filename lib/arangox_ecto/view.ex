@@ -391,7 +391,7 @@ defmodule ArangoXEcto.View do
   """
   @spec definition(Module.t()) :: map()
   def definition(view) when is_atom(view) do
-    if function_exported?(view, :__view__, 1) do
+    if Code.ensure_loaded?(view) and function_exported?(view, :__view__, 1) do
       opts = Enum.into(view.__view__(:options), %{})
 
       %{
@@ -406,7 +406,7 @@ defmodule ArangoXEcto.View do
       |> add_stored_values(view)
       |> Map.merge(opts)
     else
-      raise ArgumentError, "not a valid view schema"
+      raise ArgumentError, "#{inspect(view)} is not a valid view schema"
     end
   end
 
