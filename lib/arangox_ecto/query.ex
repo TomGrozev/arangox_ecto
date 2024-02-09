@@ -205,7 +205,8 @@ defmodule ArangoXEcto.Query do
           raise "Fragments are not supported."
 
         {coll, schema, _} ->
-          name = [String.first(coll) | Integer.to_string(pos)]
+          stripped_coll = String.replace(coll, ~r/[^A-Za-z]/, "")
+          name = [String.first(stripped_coll) | Integer.to_string(pos)]
           {quote_collection(coll), name, schema}
 
         %Ecto.SubQuery{} ->

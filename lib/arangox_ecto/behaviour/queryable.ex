@@ -1,6 +1,5 @@
 defmodule ArangoXEcto.Behaviour.Queryable do
   @moduledoc false
-  alias ArangoXEcto.Adapter
 
   @behaviour Ecto.Adapter.Queryable
 

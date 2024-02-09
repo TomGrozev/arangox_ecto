@@ -46,13 +46,364 @@ defmodule ArangoXEcto.Migration do
 
   require Logger
 
-  alias ArangoXEcto.Migration.{Collection, Index}
+  alias ArangoXEcto.Migration.Runner
+
+  defmodule View do
+    @moduledoc """
+    Represents a view module in ArangoDB
+    """
+
+    @enforce_keys [:module]
+    defstruct [
+      :module,
+      :prefix
+    ]
+
+    @type t :: %__MODULE__{}
+  end
+
+  defmodule Analyzer do
+    @moduledoc """
+    Represents a analyzer module in ArangoDB
+    """
+
+    @enforce_keys [:module]
+    defstruct [
+      :module,
+      :prefix
+    ]
+
+    @type t :: %__MODULE__{}
+  end
+
+  defmodule Index do
+    @moduledoc """
+    Represents a collection index in ArangoDB
+
+    The attributes in this struct are directly passed to the
+    ArangoDB API for creation. No validation is done on the
+    attributes and is left to the database to manage.
+    """
+
+    @enforce_keys [:collection_name]
+    defstruct [
+      :collection_name,
+      :fields,
+      :sparse,
+      :unique,
+      :deduplication,
+      :minLength,
+      :geoJson,
+      :expireAfter,
+      :prefix,
+      :name,
+      type: :hash
+    ]
+
+    @type t :: %__MODULE__{}
+
+    @type index_option ::
+            {:type, atom}
+            | {:unique, boolean}
+            | {:sparse, boolean}
+            | {:deduplication, boolean}
+            | {:minLength, integer}
+            | {:geoJson, boolean}
+            | {:expireAfter, integer}
+            | {:name, atom}
+
+    @doc """
+    Creates a new Index struct
+    """
+    @spec new(String.t(), [atom() | String.t()], [index_option()]) :: t()
+    def new(name, fields, opts \\ []) do
+      keys =
+        [collection_name: name, fields: fields]
+        |> Keyword.merge(opts)
+
+      index = struct(__MODULE__, keys)
+      %{index | name: index.name || default_index_name(index)}
+    end
+
+    defp default_index_name(index) do
+      ["idx", index.collection_name, index.fields]
+      |> List.flatten()
+      |> Enum.map_join(
+        "_",
+        fn item ->
+          item
+          |> to_string()
+          |> String.replace(~r"[^\w]", "_")
+          |> String.replace_trailing("_", "")
+        end
+      )
+    end
+  end
+
+  defmodule Collection do
+    @moduledoc """
+    Represent a collection in ArangoDB
+
+    The attributes in this struct are directly passed to the
+    ArangoDB API for creation. No validation is done on the
+    attributes and is left to the database to manage.
+    """
+
+    @enforce_keys [:name]
+    defstruct [
+      :name,
+      :waitForSync,
+      :schema,
+      :keyOptions,
+      :type,
+      :isSystem,
+      :prefix,
+      :cacheEnabled,
+      :numberOfShards,
+      :shardKeys,
+      :replicationFactor,
+      :writeConcern,
+      :distributeShardsLike,
+      :shardingStrategy,
+      :smartJoinAttribute
+    ]
+
+    @type t :: %__MODULE__{}
+
+    @type collection_option ::
+            {:waitForSync, boolean}
+            | {:schema, map}
+            | {:prefix, String.t()}
+            | {:keyOptions, map}
+            | {:cacheEnabled, boolean}
+            | {:numberOfShards, integer}
+            | {:isSystem, boolean()}
+            | {:shardKeys, String.t()}
+            | {:replicationFactor, integer}
+            | {:writeConcern, integer}
+            | {:distributeShardsLike, String.t()}
+            | {:shardingStrategy, String.t()}
+            | {:smartJoinAttribute, String.t()}
+
+    @doc """
+    Creates a new Collection struct
+    """
+    @spec new(String.t(), atom(), [collection_option()]) :: t()
+    def new(name, type \\ :document, opts \\ []) do
+      keys =
+        [name: name, type: collection_type(type)]
+        |> Keyword.merge(opts)
+
+      struct(__MODULE__, keys)
+    end
+
+    defp collection_type(:document), do: 2
+    defp collection_type(:edge), do: 3
+  end
+
+  defmodule Command do
+    @moduledoc """
+    Represents the up and down of a reversible raw command.
+    """
+
+    defstruct up: nil, down: nil
+    @type t :: %__MODULE__{up: String.t(), down: String.t()}
+  end
+
+  @doc """
+  Migration code to run immediately after the transaction is opened.
+
+  Keep in mind that it is treated like any normal migration code, and should
+  consider both the up *and* down cases of the migration.
+  """
+  @callback after_begin() :: term
+
+  @doc """
+  Migration code to run immediately before the transaction is closed.
+
+  Keep in mind that it is treated like any normal migration code, and should
+  consider both the up *and* down cases of the migration.
+  """
+  @callback before_commit() :: term
+  @optional_callbacks after_begin: 0, before_commit: 0
 
   defmacro __using__(_) do
     # Init conn
     quote do
       import ArangoXEcto.Migration
+
+      def __migration__, do: :ok
     end
+  end
+
+  @doc """
+  Creates a collection.
+
+  The collection `:id` type will be `:binary_id`.
+
+  ## Example
+
+      create collection(:users) do
+        add :first_name, :string
+        add :last_name, :string, default: "Smith"
+
+        timestamps()
+      end
+  """
+  defmacro create(object, do: block) do
+    expand_create(object, :create, block)
+  end
+
+  @doc """
+  Creates a collection if it doesn't exist.
+
+  Works just the same as `create/2` but will raise an error
+  when the object already exists.
+  """
+  defmacro create_if_not_exists(object, do: block) do
+    expand_create(object, :create_if_not_exists, block)
+  end
+
+  defp expand_create(object, command, block) do
+    quote do
+      collection = %Collection{} = unquote(object)
+      Runner.start_command({unquote(command), ArangoXEcto.Migration.__prefix__(collection)})
+      unquote(block)
+      Runner.end_command()
+
+      collection
+    end
+  end
+
+  @doc """
+  Alters a collection
+
+  ## Examples 
+
+      alter collection(:users) do
+        add :middle_name, :string
+        modify :people, :integer
+        rename :people, to: :num
+        remove :last_name
+      end
+  """
+  defmacro alter(object, do: block) do
+    quote do
+      collection = %Collection{} = unquote(object)
+      Runner.start_command({:alter, ArangoXEcto.Migration.__prefix__(collection)})
+      unquote(block)
+      Runner.end_command()
+    end
+  end
+
+  @doc """
+  Creates on of the following: 
+
+    * an index
+    * a collection with no schema
+
+  When reversing (in a `change/0` running backwards), indexes are only dropped
+  if they exist, and no errors are raised. To enforce dropping an index, use
+  `drop/1`.
+
+  ## Examples
+
+      create index("users", [:name])
+      create collection("posts")
+
+  """
+  def create(%Collection{} = collection) do
+    do_create(collection, :create)
+  end
+
+  def create(%Index{} = index) do
+    Runner.execute({:create, __prefix__(index)})
+    index
+  end
+
+  def create(%mod{} = view_or_analyzer) when mod in [View, Analyzer] do
+    Runner.execute({:create, __prefix__(view_or_analyzer)})
+    mod
+  end
+
+  @doc """
+  Creates a collection without a schema or an index if it doesn't exist already.
+
+  ## Examples
+
+      create_if_not_exists index("users", [:name])
+
+      create_if_not_exists collection("posts")
+
+  """
+  def create_if_not_exists(%Index{} = index) do
+    Runner.execute({:create_if_not_exists, __prefix__(index)})
+  end
+
+  def create_if_not_exists(%Collection{} = collection) do
+    do_create(collection, :create_if_not_exists)
+  end
+
+  defp do_create(collection, command) do
+    Runner.execute({command, __prefix__(collection), []})
+  end
+
+  @doc """
+  Drops one of the following: 
+
+    * an index
+    * a collection
+
+  ## Examples 
+
+      drop index("users", [:name])
+      drop collection("posts")
+
+  """
+  def drop(%mod{} = collection_or_index) when mod in [Collection, Index] do
+    Runner.execute({:drop, __prefix__(collection_or_index)})
+
+    collection_or_index
+  end
+
+  @doc """
+  Drops a collection or index if it exists
+
+  Does not raise an error if the specified collection or index does not exist.
+
+  ## Examples 
+
+      drop_if_exists index("users", [:name])
+      drop_if_exists collection("posts")
+
+  """
+  def drop_if_exists(%mod{} = collection_or_index) when mod in [Collection, Index] do
+    Runner.execute({:drop_if_exists, __prefix__(collection_or_index)})
+
+    collection_or_index
+  end
+
+  @doc """
+  Gets the migrator direction.
+  """
+  @spec direction :: :up | :down
+  def direction do
+    Runner.migrator_direction()
+  end
+
+  @doc """
+  Gets the migrator repo.
+  """
+  @spec repo :: Ecto.Repo.t()
+  def repo do
+    Runner.repo()
+  end
+
+  @doc """
+  Gets the migrator prefix.
+  """
+  def prefix do
+    Runner.prefix()
   end
 
   @doc """
@@ -96,6 +447,9 @@ defmodule ArangoXEcto.Migration do
 
   Default index type is a hash. To change this pass the `:type` option in options.
 
+  This will generate a name for the index if not provided. This allows for the dropping
+  of the index.
+
   ## Options
 
   Options only apply to the creation of indexes and has no effect when using the `drop/1` function.
@@ -132,186 +486,354 @@ defmodule ArangoXEcto.Migration do
   def index(collection_name, fields, opts \\ []), do: Index.new(collection_name, fields, opts)
 
   @doc """
-  Creates an object
+  Shortcut for creating a unique index.
 
-  Will create the passed object, one of a collection, an index, analyzers or a view.
+  See `index/3` for more information.
+  """
+  @spec unique_index(String.t(), [atom() | String.t()], [Index.index_option()]) :: Index.t()
+  def unique_index(collection, fields, opts \\ []) when is_list(opts) do
+    index(collection, fields, [unique: true] ++ opts)
+  end
 
-  Since view schemas and analyzers are just module definitions we can use them directly here. Therefore
-  the module is just passed directly.
+  @doc """
+  Represents a view module
+  """
+  @spec view(module(), Keyword.t()) :: View.t()
+  def view(module, opts \\ []) when is_list(opts) do
+    keys = [module: module] |> Keyword.merge(opts)
 
-  There is the ability to pass additional options as the second argument
+    struct(View, keys)
+  end
 
-  ## Options
+  @doc """
+  Represents a analyzer module
+  """
+  @spec analyzer(module(), Keyword.t()) :: Analyzer.t()
+  def analyzer(module, opts \\ []) when is_list(opts) do
+    keys = [module: module] |> Keyword.merge(opts)
 
-  - `:repo` - The repo or connection to use for the migration create action
-  - `:prefix` - The prefix to use for tenant creation
+    struct(Analyzer, keys)
+  end
+
+  @doc """
+  Executes arbitrary AQL.
+
+  The argument is typically a string, containing the AQL command to be executed.
+
+  Reversible commands can be defined by calling `execute/2`.
 
   ## Examples
 
-  Create a collection
-
-      iex> create(collection("users"))
-      :ok
-
-  Create an index
-
-      iex> create(index("users", [:email])
-      :ok
-
-  Create a view
-
-      iex> create(MyProject.UsersView)
-      :ok
+      execute "FOR u IN `users` RETURN u.name"
   """
-  @spec create(Collection.t() | Index.t() | atom(), Keyword.t()) ::
-          :ok | {:error, binary()}
-  def create(object_to_create, opts \\ [])
-
-  def create(%Collection{} = collection, opts) do
-    repo_or_conn = Keyword.get(opts, :repo)
-    {:ok, conn} = get_db_conn(repo_or_conn)
-
-    args =
-      collection
-      |> Map.from_struct()
-
-    args = :maps.filter(fn _, v -> not is_nil(v) end, args)
-
-    case Arangox.post(
-           conn,
-           ArangoXEcto.__build_connection_url__(
-             conn,
-             "collection",
-             Keyword.get(opts, :prefix)
-           ),
-           args
-         ) do
-      {:ok, _} ->
-        :ok
-
-      {:error, %{status: status, message: message}} ->
-        msg = "#{status} - #{message}"
-
-        Logger.debug("#{inspect(__MODULE__)}.create", %{
-          "#{inspect(__MODULE__)}.create-collection" => %{collection: collection, message: msg}
-        })
-
-        {:error, msg}
-    end
+  def execute(command) when is_binary(command) do
+    Runner.execute(command)
   end
 
-  def create(%Index{collection_name: collection_name} = index, opts) do
-    repo_or_conn = Keyword.get(opts, :repo)
-    {:ok, conn} = get_db_conn(repo_or_conn)
+  @doc """
+  Executes reversible AQL commands.
 
-    case Arangox.post(
-           conn,
-           ArangoXEcto.__build_connection_url__(
-             conn,
-             "index",
-             Keyword.get(opts, :prefix),
-             "?collection=#{collection_name}"
-           ),
-           Map.from_struct(index)
-         ) do
-      {:ok, _} ->
-        :ok
+  This is useful for database-specific functionality that does not
+  warrant special support in ArangoXEcto. The `execute/2` form avoids having
+  having to define separate `up/0` and `down/0` blocks that each contain an `execute/1`
+  expression.
 
-      {:error, %{status: status, message: message}} ->
-        msg = "#{status} - #{message}"
+  The allowed parameters are explained in `execute/1`.
 
-        Logger.debug("#{inspect(__MODULE__)}.create", %{
-          "#{inspect(__MODULE__)}.create-index" => %{index: index, message: msg}
-        })
+  ## Examples
 
-        {:error, msg}
-    end
+      defmodule MyApp.MyMigration do
+        use ArangoXEcto.Migration
+
+        def change do
+          execute "FOR u IN `users` RETURN u", "FOR u IN `users` RETURN u"
+          execute(&execute_up/0, &execute_down/0)
+        end
+
+        defp execute_up, do: repo().query!("'Up query …';", [], [log: :info])
+        defp execute_down, do: repo().query!("'Down query …';", [], [log: :info])
+      end
+  """
+  def execute(up, down)
+      when (is_binary(up) or is_function(up, 0) or is_list(up)) and
+             (is_binary(down) or is_function(down, 0) or is_list(down)) do
+    Runner.execute(%Command{up: up, down: down})
   end
 
-  def create(module, opts) when is_atom(module) do
-    {:ok, conn} = Keyword.get(opts, :repo) |> get_db_conn()
+  @doc """
+  Adds a field when creating or altering a collection with subfields.
 
-    cond do
-      function_exported?(module, :__analyzers__, 0) -> create_analyzers(conn, module, opts)
-      function_exported?(module, :__view__, 1) -> create_view(conn, module, opts)
-      true -> {:error, "invalid module, not a view or an anlyzer module"}
-    end
-  end
+  See `add/3` for options and more info.
+  """
+  defmacro add_embed(field, opts \\ [], do: block) when is_atom(field) and is_list(opts) do
+    quote do
+      Runner.subcommand({:add_embed, unquote(field), [], unquote(opts)})
+      unquote(block)
+      Runner.end_subcommand()
 
-  defp create_analyzers(conn, module, opts) do
-    case ArangoXEcto.create_analyzers(conn, module, opts) do
-      {:ok, _} ->
-        :ok
-
-      {:error, success, errors} ->
-        msg = "Failed with errrors (Success: #{length(success)}, Error: #{length(errors)})"
-
-        Logger.debug("#{inspect(__MODULE__)}.create", %{
-          "#{inspect(__MODULE__)}.create-analyzer" => %{analyzers: module, message: msg}
-        })
-
-        {:error, msg}
-    end
-  end
-
-  defp create_view(conn, module, opts) do
-    case ArangoXEcto.create_view(conn, module, opts) do
-      {:ok, _} ->
-        :ok
-
-      {:error, %{status: status, message: message}} ->
-        msg = "#{status} - #{message}"
-
-        Logger.debug("#{inspect(__MODULE__)}.create", %{
-          "#{inspect(__MODULE__)}.create-view" => %{view: module, message: msg}
-        })
-
-        {:error, msg}
+      :ok
     end
   end
 
   @doc """
-  Deletes an object
+  Adds a field when creating or altering a collection.
 
-  Will delete an object passed, can only be a collection, indexes cannot be deleted here. This is because indexes have a randomly generated id and this needs to be known to delete the index, for now this is outside the scope of this project.
+  TODO: Add note about what types are accepted
 
-  ## Example
+  TODO: Update examples and options
+  ## Examples
 
-      iex> drop(collection("users"))
-      :ok
+      create collection("posts") do
+        add :title, :string, default: "Untitled"
+      end
+
+  ## Options
+
+    * `:primary_key` - when `true`, marks this field as the primary key.
+      If multiple fields are marked, a composite primary key will be created.
+    * `:default` - the column's default value. It can be a string, number, empty
+      list, list of strings, list of numbers, or a fragment generated by
+      `fragment/1`.
+    * `:null` - determines whether the column accepts null values. When not specified,
+      the database will use its default behaviour (which is to treat the column as nullable
+      in most databases).
+    * `:size` - the size of the type (for example, the number of characters).
+      The default is no size, except for `:string`, which defaults to `255`.
+    * `:precision` - the precision for a numeric type. Required when `:scale` is
+      specified.
+    * `:scale` - the scale of a numeric type. Defaults to `0`.
+    * `:comment` - adds a comment to the added column.
+    * `:after` - positions field after the specified one. Only supported on MySQL,
+      it is ignored by other databases.
+    * `:generated` - a string representing the expression for a generated column. See
+      above for a comprehensive set of examples for each of the built-in adapters. If
+      specified alongside `:start_value`/`:increment`, those options will be ignored.
+    * `:start_value` - option for `:identity` key, represents initial value in sequence
+      generation. Default is defined by the database.
+    * `:increment` - option for `:identity` key, represents increment value for
+      sequence generation. Default is defined by the database.
+
   """
-  @spec drop(Collection.t()) :: :ok | {:error, binary()}
-  def drop(%Collection{name: collection_name}, conn \\ nil) do
-    {:ok, conn} = get_db_conn(conn)
+  def add(field, type, opts \\ []) when is_atom(field) and is_list(opts) do
+    validate_precision_opts!(opts, field)
+    validate_type!(type)
+    Runner.subcommand({:add, field, type, opts})
+  end
 
-    case Arangox.delete(conn, "/_api/collection/#{collection_name}") do
-      {:ok, _} -> :ok
-      {:error, %{status: status, message: message}} -> {:error, "#{status} - #{message}"}
+  @doc """
+  Renames a collection or a field
+
+  ## Examples
+
+      # rename a collection
+      rename collection("users"), to: collection("new_users")
+
+      alter collection("users") do
+        rename :name, to: :first_name
+      end
+
+  """
+  def rename(%Collection{} = collection_current, to: %Collection{} = collection_new) do
+    Runner.execute({:rename, __prefix__(collection_current), __prefix__(collection_new)})
+    collection_new
+  end
+
+  def rename(current_field, to: new_field) when is_atom(current_field) and is_atom(new_field) do
+    Runner.subcommand({:rename, current_field, new_field})
+  end
+
+  @doc """
+  Removes a field when altering a collection.
+
+  If it doesn't exist it will simply be ignored.
+
+  This command is not reversible as Ecto does not know what type it should add
+  the field back as. See `remove/3` as a reversible alternative.
+
+  ## Examples
+
+      alter collection("users") do
+        remove :name
+      end
+
+  """
+  def remove(field) when is_atom(field) do
+    Runner.subcommand({:remove, field})
+  end
+
+  @doc """
+  Removes a field in a reversible way when altering a collection.
+
+  `type` and `opts` are exactly the same as in `add/3`, and
+  they are used when the command is reversed.
+
+  ## Examples
+
+      alter collection("users") do
+        remove :name, :string, default: ""
+      end
+
+  """
+  def remove(field, type, opts \\ []) when is_atom(field) do
+    validate_type!(type)
+    Runner.subcommand({:remove, field, type, opts})
+  end
+
+  @doc """
+  Modifies the type of a field when altering a collection.
+
+  This command is not reversible unless the `:from` option is provided.
+
+  See `add/3` for more information on supported types.
+
+  ## Examples
+
+      alter collection("users") do
+        modify :name, :string
+      end
+
+      # Self rollback when using the :from option
+      alter collection("users") do
+        modify :name, :string, from: :integer
+      end
+
+  ## Options
+
+    * `:default` - changes the default value of the column.
+    * `:from` - specifies the current type and options of the field.
+    * `:comment` - adds a comment to the modified column.
+  """
+  def modify(field, type, opts \\ []) when is_atom(field) and is_list(opts) do
+    validate_precision_opts!(opts, field)
+    validate_type!(type)
+    Runner.subcommand({:modify, field, type, opts})
+  end
+
+  @doc """
+  Modifies a field when creating or altering a collection with subfields.
+
+  See `modify/3` for options and more info.
+  """
+  defmacro modify_embed(field, opts \\ [], do: block) when is_atom(field) and is_list(opts) do
+    quote do
+      Runner.subcommand({:modify_embed, unquote(field), [], unquote(opts)})
+      unquote(block)
+      Runner.end_subcommand()
+
+      :ok
     end
   end
 
-  defp get_db_conn(nil) do
-    config(pool_size: 1)
-    |> Arangox.start_link()
+  @doc """
+  Adds `:inserted_at` and `:updated_at` timestamp fields.
+
+  Those fields are of `:naive_datetime` type and by default cannot be null. A
+  list of `opts` can be given to customize the generated fields.
+
+  Following options will override the repo configuration specified by
+  `:migration_timestamps` option.
+
+  ## Options
+
+    * `:inserted_at` - the name of the column for storing insertion times.
+      Setting it to `false` disables the column.
+    * `:updated_at` - the name of the column for storing last-updated-at times.
+      Setting it to `false` disables the column.
+    * `:type` - the type of the `:inserted_at` and `:updated_at` columns.
+      Defaults to `:naive_datetime`.
+    * `:default` - the columns' default value. It can be a string, number, empty
+      list, list of strings, list of numbers, or a fragment generated by
+      `fragment/1`.
+
+  """
+  def timestamps(opts \\ []) when is_list(opts) do
+    opts = Keyword.merge(Runner.repo_config(:migration_timestamps, []), opts)
+
+    {type, opts} = Keyword.pop(opts, :type, :naive_datetime)
+    {inserted_at, opts} = Keyword.pop(opts, :inserted_at, :inserted_at)
+    {updated_at, opts} = Keyword.pop(opts, :updated_at, :updated_at)
+
+    if inserted_at != false, do: add(inserted_at, type, opts)
+    if updated_at != false, do: add(updated_at, type, opts)
   end
 
-  defp get_db_conn(repo) when is_atom(repo) do
-    repo.config()
-    |> Arangox.start_link()
-  end
-
-  defp get_db_conn(conn), do: {:ok, conn}
-
-  defp get_default_repo! do
-    case Mix.Ecto.parse_repo([])
-         |> List.first() do
-      nil -> raise "No Default Repo Found"
-      repo -> repo
+  @doc """
+  Executes queued migration commands
+  """
+  defmacro flush do
+    quote do
+      if direction() == :down and not function_exported?(__MODULE__, :down, 0) do
+        raise "calling flush() inside change when doing rollback is not supported."
+      else
+        Runner.flush()
+      end
     end
   end
 
-  defp config(opts) do
-    get_default_repo!().config()
-    |> Keyword.merge(opts)
+  @doc false
+  def __prefix__(%{prefix: prefix} = module) do
+    runner_prefix = Runner.prefix()
+
+    cond do
+      is_nil(prefix) ->
+        prefix = runner_prefix || Runner.repo_config(:migration_default_prefix, nil)
+        %{module | prefix: prefix}
+
+      is_nil(runner_prefix) or runner_prefix == to_string(prefix) ->
+        module
+
+      true ->
+        raise Ecto.MigrationError,
+          message:
+            "the :prefix option `#{prefix}` does not match the migrator prefix `#{runner_prefix}`"
+    end
+  end
+
+  ###########
+  # Helpers #
+  ###########
+
+  # Validation helpers
+  defp validate_type!(type) when is_atom(type) do
+    case Atom.to_string(type) do
+      "Elixir." <> _ ->
+        raise_invalid_migration_type!(type)
+
+      _ ->
+        :ok
+    end
+  end
+
+  defp validate_type!({type, subtype}) when is_atom(type) and is_atom(subtype) do
+    validate_type!(subtype)
+  end
+
+  defp validate_type!({type, subtype}) when is_atom(type) and is_tuple(subtype) do
+    for t <- Tuple.to_list(subtype), do: validate_type!(t)
+  end
+
+  defp validate_type!(type) do
+    raise_invalid_migration_type!(type)
+  end
+
+  defp raise_invalid_migration_type!(type) do
+    raise ArgumentError, """
+    invalid migration type: #{inspect(type)}. Expected one of:
+
+      * an atom, such as :string
+      * a tuple representing a composite type, such as {:array, :integer} or {:map, :string}
+
+    Ecto types are automatically translated to JSON Schema types. All other types
+    are sent to the database as is.
+
+    Types defined through Ecto.Type or Ecto.ParameterizedType aren't allowed,
+    use their underlying types instead.
+    """
+  end
+
+  defp validate_precision_opts!(opts, field) when is_list(opts) do
+    if opts[:scale] && !opts[:precision] do
+      raise ArgumentError, "field #{Atom.to_string(field)} is missing precision option"
+    end
   end
 end

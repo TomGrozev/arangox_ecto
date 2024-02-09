@@ -12,6 +12,7 @@ defmodule ArangoXEcto do
   alias ArangoXEcto.Adapter
   alias ArangoXEcto.Edge
   alias ArangoXEcto.Migration
+  alias ArangoXEcto.Migrator
 
   @type query :: binary()
   @type vars :: keyword() | map()
@@ -330,7 +331,7 @@ defmodule ArangoXEcto do
       %UserPosts{_from: "users/12345", _to: "users/54321", from: #Ecto.Association.NotLoaded<association :from is not loaded>, to: #Ecto.Association.NotLoaded<association :to is not loaded>, type: "wrote"}
 
   """
-  @spec create_edge(Ecto.Repo.t(), module(), module(), keyword()) ::
+  @spec create_edge(Ecto.Repo.t(), module(), module(), Keyword.t()) ::
           {:ok, Ecto.Schema.t()} | {:error, Ecto.Changeset.t()}
   def create_edge(repo, from, to, opts \\ [])
 
@@ -376,14 +377,12 @@ defmodule ArangoXEcto do
   """
   @doc since: "1.3.0"
   @spec create_view(Ecto.Repo.t(), ArangoXEcto.View.t(), Keyword.t()) ::
-          {:ok, Arangox.Response.t()} | {:error, Arangox.Error.t()}
+          :ok | {:error, Arangox.Error.t()}
   def create_view(repo, view, opts \\ []) do
-    view_definition = ArangoXEcto.View.definition(view)
-    analyzer_module = view.__analyzer_module__()
-
     # check if is dynamic mode
-    if not is_pid(repo) and
-         not Keyword.get(repo.config(), :static, false) do
+    if not Keyword.get(repo.config(), :static, false) do
+      analyzer_module = view.__analyzer_module__()
+
       # create the analyzers if in dynamic mode
       if not is_nil(analyzer_module) do
         create_analyzers(repo, analyzer_module, opts)
@@ -396,14 +395,12 @@ defmodule ArangoXEcto do
       end)
     end
 
-    ArangoXEcto.api_query(
-      repo,
-      :post,
-      __build_connection_url__(repo, "view", opts),
-      view_definition,
-      %{},
-      opts
-    )
+    view_def = Migration.view(view, opts)
+
+    case Migrator.execute_command(repo, {:create, view_def}, opts) do
+      {:info, _, _} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   @doc """
@@ -442,23 +439,13 @@ defmodule ArangoXEcto do
   """
   @doc since: "1.3.0"
   @spec create_analyzers(Ecto.Repo.t(), ArangoXEcto.Analyzer.t(), Keyword.t()) ::
-          {:ok, Arangox.Response.t()} | {:error, [Arangox.Response.t()], [Arangox.Error.t()]}
+          :ok | {:error, [Arangox.Response.t()], [Arangox.Error.t()]}
   def create_analyzers(repo, analyzer_module, opts \\ []) do
-    analyzers = analyzer_module.__analyzers__()
+    analyzer_def = Migration.analyzer(analyzer_module, opts)
 
-    remove_existing_analyzers(repo, analyzers, opts)
-
-    url = __build_connection_url__(repo, "analyzer", opts)
-
-    Enum.reduce(analyzers, {[], []}, fn analyzer, {success, fail} ->
-      case ArangoXEcto.api_query(repo, :post, url, analyzer, %{}, opts) do
-        {:ok, res} -> {[{analyzer.name, res} | success], fail}
-        {:error, res} -> {success, [{analyzer.name, res} | fail]}
-      end
-    end)
-    |> case do
-      {success, []} -> {:ok, success}
-      {success, fail} -> {:error, success, fail}
+    case Migrator.execute_command(repo, {:create, analyzer_def}, opts) do
+      {:info, _, _} -> :ok
+      {:error, success, fail} -> {:error, success, fail}
     end
   end
 
@@ -501,13 +488,12 @@ defmodule ArangoXEcto do
       collection_name = source_name(schema)
       collection_opts = schema.__collection_options__()
       indexes = schema.__collection_indexes__()
-      opts = Keyword.put(opts, :repo, repo)
 
       collection = Migration.collection(collection_name, type, collection_opts)
 
-      case Migration.create_object(collection, opts) do
+      case Migrator.execute_command(repo, {:create, collection, []}, opts) do
         :ok ->
-          maybe_create_indexes(collection_name, indexes, opts)
+          maybe_create_indexes(repo, collection_name, indexes, opts)
 
         error ->
           error
@@ -554,7 +540,7 @@ defmodule ArangoXEcto do
       iex> ArangoXEcto.delete_all_edges(Repo, user1, user2, conditions: [type: "best_friend"])
       :ok
   """
-  @spec delete_all_edges(Ecto.Repo.t(), module(), module(), keyword()) :: :ok
+  @spec delete_all_edges(Ecto.Repo.t(), module(), module(), Keyword.t()) :: :ok
   def delete_all_edges(repo, from, to, opts \\ [])
 
   def delete_all_edges(repo, from, to, [edge: edge_module] = opts) do
@@ -788,7 +774,7 @@ defmodule ArangoXEcto do
       iex> ArangoXEcto.edge_module(MyProject.User, MyProject.Company)
       MyProject.UsersCompanies
   """
-  @spec edge_module(module(), module(), keyword()) :: atom()
+  @spec edge_module(module(), module(), Keyword.t()) :: atom()
   def edge_module(from_module, to_module, opts \\ [])
 
   def edge_module(%from_module{}, %to_module{}, opts),
@@ -1021,23 +1007,6 @@ defmodule ArangoXEcto do
   ##  Helpers  ##
   ###############
 
-  defp remove_existing_analyzers(repo, analyzers, opts) do
-    for %{name: name} <- analyzers do
-      ArangoXEcto.api_query(
-        repo,
-        :delete,
-        __build_connection_url__(
-          repo,
-          "analyzer/#{name}",
-          opts,
-          "?force=true"
-        ),
-        %{},
-        opts
-      )
-    end
-  end
-
   defp add_associations(%{} = loaded, module, %{} = map) when is_atom(module) do
     module.__schema__(:associations)
     |> Enum.reduce(loaded, fn assoc, acc ->
@@ -1263,12 +1232,12 @@ defmodule ArangoXEcto do
     end
   end
 
-  defp maybe_create_indexes(_, [], _), do: :ok
+  defp maybe_create_indexes(_, _, [], _), do: :ok
 
-  defp maybe_create_indexes(collection_name, %{} = indexes, opts),
-    do: maybe_create_indexes(collection_name, Map.to_list(indexes), opts)
+  defp maybe_create_indexes(repo, collection_name, %{} = indexes, opts),
+    do: maybe_create_indexes(repo, collection_name, Map.to_list(indexes), opts)
 
-  defp maybe_create_indexes(collection_name, indexes, opts) when is_list(indexes) do
+  defp maybe_create_indexes(repo, collection_name, indexes, opts) when is_list(indexes) do
     Enum.reduce(indexes, nil, fn
       _index, {:error, reason} ->
         {:error, reason}
@@ -1276,12 +1245,12 @@ defmodule ArangoXEcto do
       index, _acc ->
         {fields, index_opts} = Keyword.pop(index, :fields)
 
-        Migration.index(collection_name, fields, index_opts)
-        |> Migration.create(opts)
+        index_mod = Migration.index(collection_name, fields, index_opts)
+        Migrator.execute_command(repo, index_mod, opts)
     end)
   end
 
-  defp maybe_create_indexes(_, _, _),
+  defp maybe_create_indexes(_, _, _, _),
     do: raise("Invalid indexes provided. Should be a list of keyword lists.")
 
   defp process_vars(query, vars) when is_list(vars),

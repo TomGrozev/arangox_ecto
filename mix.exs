@@ -24,7 +24,7 @@ defmodule ArangoXEcto.MixProject do
   def application do
     [
       extra_applications: [:logger],
-      mod: [],
+      mod: {ArangoXEcto.Application, []},
       env: [
         log_levels: [:info],
         log_colours: %{info: :green, debug: :normal},

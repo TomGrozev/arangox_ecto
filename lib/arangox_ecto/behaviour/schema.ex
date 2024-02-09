@@ -1,6 +1,5 @@
 defmodule ArangoXEcto.Behaviour.Schema do
   @moduledoc false
-  alias ArangoXEcto.Adapter
 
   @behaviour Ecto.Adapter.Schema
 
@@ -48,6 +47,7 @@ defmodule ArangoXEcto.Behaviour.Schema do
 
     ArangoXEcto.api_query(
       adapter_meta,
+      :post,
       ArangoXEcto.__build_connection_url__(
         repo,
         "document/#{collection}",
@@ -92,6 +92,7 @@ defmodule ArangoXEcto.Behaviour.Schema do
 
     case ArangoXEcto.api_query(
            adapter_meta,
+           :post,
            ArangoXEcto.__build_connection_url__(repo, "document/#{collection}", prefix, options),
            docs,
            %{},
@@ -159,6 +160,7 @@ defmodule ArangoXEcto.Behaviour.Schema do
         %{repo: repo} = adapter_meta,
         %{source: collection, prefix: prefix},
         [{:_key, key}],
+        _returning,
         opts
       ) do
     opts = Keyword.merge(opts, source: collection, type: "delete")
@@ -177,7 +179,7 @@ defmodule ArangoXEcto.Behaviour.Schema do
     end
   end
 
-  def delete(_adapter_meta, _schema_meta, _filters, _options) do
+  def delete(_adapter_meta, _schema_meta, _filters, _returning, _options) do
     raise "Deleting with filters other than _key is not supported yet"
   end
 

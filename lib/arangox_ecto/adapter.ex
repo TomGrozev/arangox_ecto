@@ -183,7 +183,7 @@ defmodule ArangoXEcto.Adapter do
 
   @behaviour Ecto.Adapter.Schema
   @impl true
-  defdelegate delete(adapter_meta, schema_meta, filters, options),
+  defdelegate delete(adapter_meta, schema_meta, filters, returning, options),
     to: ArangoXEcto.Behaviour.Schema
 
   @impl true
@@ -430,7 +430,7 @@ defmodule ArangoXEcto.Adapter do
     :ok
   end
 
-  defp process_query(%Arangox.Request{method: method, path: path, headers: headers, body: body}) do
+  defp process_query(%Arangox.Request{method: method, path: path, headers: headers}) do
     "(#{Atom.to_string(method) |> String.upcase()}) (Path: #{path}) (Header: #{inspect(headers)})"
   end
 
