@@ -380,7 +380,7 @@ defmodule ArangoXEcto do
           :ok | {:error, Arangox.Error.t()}
   def create_view(repo, view, opts \\ []) do
     # check if is dynamic mode
-    if not Keyword.get(repo.config(), :static, false) do
+    if not Keyword.get(repo.config(), :static, true) do
       analyzer_module = view.__analyzer_module__()
 
       # create the analyzers if in dynamic mode
@@ -480,7 +480,7 @@ defmodule ArangoXEcto do
   @spec create_collection(Ecto.Repo.t(), ArangoXEcto.Schema.t(), Keyword.t()) ::
           :ok | {:error, any()}
   def create_collection(repo, schema, opts \\ []) do
-    if Keyword.get(repo.config(), :static, false) do
+    if Keyword.get(repo.config(), :static, true) do
       raise("This function cannot be called in static mode. Please use migrations instead.")
     else
       # will throw if not a schema

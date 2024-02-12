@@ -121,7 +121,7 @@ defmodule ArangoXEcto.Behaviour.Queryable do
   end
 
   defp aql_call(%{repo: repo}, query, params, opts) do
-    is_static = Keyword.get(repo.config(), :static, false)
+    is_static = Keyword.get(repo.config(), :static, true)
 
     zipped_args =
       Enum.zip(
