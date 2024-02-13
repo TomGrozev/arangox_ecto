@@ -41,9 +41,9 @@ defmodule ArangoXEcto.MixProject do
       {:velocy, "~> 0.1"},
       {:jason, "~> 1.2"},
       {:geo, "~> 3.0"},
-      {:ex_doc, "~> 0.24", only: :dev, runtime: false},
-      {:credo, "~> 1.6.0", only: [:dev, :test], runtime: false},
-      {:doctor, "~> 0.18.0", only: [:dev, :test], runtime: false},
+      {:ex_doc, "~> 0.31", only: :dev, runtime: false},
+      {:credo, "~> 1.7.4", only: [:dev, :test], runtime: false},
+      {:doctor, "~> 0.21.0", only: [:dev, :test], runtime: false},
       {:git_hooks, "~> 0.7.0", only: [:test, :dev], runtime: false}
     ]
   end
