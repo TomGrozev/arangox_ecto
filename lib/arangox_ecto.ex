@@ -917,22 +917,21 @@ defmodule ArangoXEcto do
 
   Checks for the presence of the `__edge__/0` function on the module.
   """
-  @spec is_edge?(atom()) :: boolean()
-  def is_edge?(module) when is_atom(module), do: function_exported?(module, :__edge__, 0)
+  @spec edge?(atom()) :: boolean()
+  def edge?(module) when is_atom(module), do: function_exported?(module, :__edge__, 0)
 
-  def is_edge?(_), do: false
+  def edge?(_), do: false
 
   @doc """
   Returns if a Schema is a document schema or not
 
   Checks for the presence of the `__schema__/1` function on the module and not an edge.
   """
-  @spec is_document?(atom()) :: boolean()
-  def is_document?(module) when is_atom(module),
-    do:
-      function_exported?(module, :__schema__, 1) and not is_edge?(module) and not is_view?(module)
+  @spec document?(atom()) :: boolean()
+  def document?(module) when is_atom(module),
+    do: function_exported?(module, :__schema__, 1) and not edge?(module) and not view?(module)
 
-  def is_document?(_), do: false
+  def document?(_), do: false
 
   @doc """
   Returns if a Schema is a view schema or not
@@ -940,11 +939,11 @@ defmodule ArangoXEcto do
   Checks for the presence of the `__view__/1` function on the module.
   """
   @doc since: "1.3.0"
-  @spec is_view?(atom()) :: boolean()
-  def is_view?(module) when is_atom(module),
+  @spec view?(atom()) :: boolean()
+  def view?(module) when is_atom(module),
     do: function_exported?(module, :__view__, 1)
 
-  def is_view?(_), do: false
+  def view?(_), do: false
 
   @doc """
   Returns the type of a module
