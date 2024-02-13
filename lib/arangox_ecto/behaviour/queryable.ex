@@ -143,7 +143,7 @@ defmodule ArangoXEcto.Behaviour.Queryable do
 
   defp ensure_all_views_exist(repo, sources, is_static) when is_list(sources) do
     for {collection, source_module, _} <- sources do
-      if ArangoXEcto.is_view?(source_module) do
+      if ArangoXEcto.view?(source_module) do
         maybe_create_view(repo, {collection, source_module}, is_static)
       end
     end

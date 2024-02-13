@@ -157,7 +157,7 @@ defmodule ArangoXEcto.Query do
   defp ensure_not_view(%{sources: sources}) do
     sources
     |> Tuple.to_list()
-    |> Enum.any?(fn {_, schema, _} -> ArangoXEcto.is_view?(schema) end)
+    |> Enum.any?(fn {_, schema, _} -> ArangoXEcto.view?(schema) end)
     |> if do
       raise ArgumentError, "queries containing views cannot be update or delete operations"
     end

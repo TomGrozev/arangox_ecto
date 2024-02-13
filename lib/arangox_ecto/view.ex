@@ -226,7 +226,7 @@ defmodule ArangoXEcto.View do
     if Code.can_await_module_compilation?() do
       for {schema, link} <- module.__view__(:links) do
         unless is_atom(schema) and
-                 (ArangoXEcto.is_document?(schema) or ArangoXEcto.is_edge?(schema)) do
+                 (ArangoXEcto.document?(schema) or ArangoXEcto.edge?(schema)) do
           IO.warn(
             "the schema passed must be an Ecto schema, got: #{inspect(schema)}",
             Macro.Env.stacktrace(env)

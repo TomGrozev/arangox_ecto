@@ -948,7 +948,7 @@ defmodule ArangoXEcto do
   @doc """
   Returns the type of a module
 
-  This is just a shortcut to using `is_edge/1`, `is_document/1` and `is_view/1`. If it is none of them nil is returned.
+  This is just a shortcut to using `edge?/1`, `document?/1` and `view?/1`. If it is none of them nil is returned.
 
   ## Examples
 
@@ -970,9 +970,9 @@ defmodule ArangoXEcto do
   @spec schema_type(atom()) :: :document | :edge | nil
   def schema_type(module) do
     cond do
-      is_view?(module) -> :view
-      is_edge?(module) -> :edge
-      is_document?(module) -> :document
+      view?(module) -> :view
+      edge?(module) -> :edge
+      document?(module) -> :document
       true -> nil
     end
   end
