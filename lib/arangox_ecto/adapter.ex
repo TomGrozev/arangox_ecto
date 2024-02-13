@@ -271,7 +271,6 @@ defmodule ArangoXEcto.Adapter do
     opts =
       with_log(telemetry, [], opts ++ default_opts)
       |> process_sources()
-      |> dbg()
 
     callback = fn conn ->
       previous_conn = put_conn(pool, conn)

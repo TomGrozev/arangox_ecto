@@ -83,8 +83,6 @@ defmodule ArangoXEcto.Query do
           Ecto.Adapter.Schema.returning()
         ) :: binary()
   def insert(collection, rows, on_conflict, returning) do
-    dbg({collection, rows, on_conflict, returning})
-
     document = document(rows)
 
     IO.iodata_to_binary(["INSERT ", document, " INTO ", quote_name(collection)])
