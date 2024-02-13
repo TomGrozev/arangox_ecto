@@ -237,27 +237,7 @@ defmodule ArangoXEcto.Migrator do
       else
         result = do_up(repo, config, version, module, opts)
 
-        if version != Enum.max([version | versions]) do
-          latest = Enum.max(versions)
-
-          message = """
-          You are running migration #{version} but an older \
-          migration with version #{latest} has already run.
-
-          This can be an issue if you have already ran #{latest} in production \
-          because a new deployment may migrate #{version} but a rollback command \
-          would revert #{latest} instead of #{version}.
-
-          If this can be an issue, we recommend to rollback #{version} and change \
-          it to a version later than #{latest}.
-          """
-
-          if opts[:strict_version_order] do
-            raise Ecto.MigrationError, message
-          else
-            Logger.warning(message)
-          end
-        end
+        check_newer_migration(version, versions, opts)
 
         result
       end
@@ -793,6 +773,30 @@ defmodule ArangoXEcto.Migrator do
 
       true ->
         ensure_no_duplication!(t)
+    end
+  end
+
+  defp check_newer_migration(version, versions, opts) do
+    if version != Enum.max([version | versions]) do
+      latest = Enum.max(versions)
+
+      message = """
+      You are running migration #{version} but an older \
+      migration with version #{latest} has already run.
+
+      This can be an issue if you have already ran #{latest} in production \
+      because a new deployment may migrate #{version} but a rollback command \
+      would revert #{latest} instead of #{version}.
+
+      If this can be an issue, we recommend to rollback #{version} and change \
+      it to a version later than #{latest}.
+      """
+
+      if opts[:strict_version_order] do
+        raise Ecto.MigrationError, message
+      else
+        Logger.warning(message)
+      end
     end
   end
 
