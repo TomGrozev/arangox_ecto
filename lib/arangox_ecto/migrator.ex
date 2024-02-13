@@ -597,55 +597,31 @@ defmodule ArangoXEcto.Migrator do
   # Analyzer
   def execute_command(
         repo,
-        {command, %Analyzer{module: analyzer_module, prefix: prefix}},
+        {command, %Analyzer{prefix: prefix} = analyzer},
         opts
       )
       when command in @creates do
-    analyzers = analyzer_module.__analyzers__()
-
     opts = Keyword.put(opts, :prefix, prefix)
-
-    remove_existing_analyzers(repo, analyzers, opts)
 
     url = ArangoXEcto.__build_connection_url__(repo, "analyzer", opts)
 
-    Enum.reduce(analyzers, {[], []}, fn analyzer, {success, fail} ->
-      case ArangoXEcto.api_query(repo, :post, url, analyzer, %{}, opts) do
-        {:ok, res} -> {[{analyzer.name, res} | success], fail}
-        {:error, res} -> {success, [{analyzer.name, res} | fail]}
-      end
-    end)
-    |> case do
-      {success, []} -> {:ok, success}
-      {success, fail} -> {:error, success, fail}
-    end
+    ArangoXEcto.api_query(repo, :post, url, analyzer, %{}, opts)
     |> process_existing(command)
     |> log_execute()
   end
 
   def execute_command(
         repo,
-        {command, %Analyzer{module: analyzer_module, prefix: prefix}},
+        {command, %Analyzer{name: name, prefix: prefix}},
         opts
       )
       when command in @drops do
-    analyzers = analyzer_module.__analyzers__()
-
     opts = Keyword.put(opts, :prefix, prefix)
 
-    Enum.reduce(analyzers, {[], []}, fn %{name: name}, {success, fail} ->
-      url = ArangoXEcto.__build_connection_url__(repo, "analyzer/#{name}", opts)
+    url = ArangoXEcto.__build_connection_url__(repo, "analyzer/#{name}", opts)
 
-      case ArangoXEcto.api_query(repo, :delete, url, "", %{}, opts)
-           |> process_existing(command) do
-        {:ok, _} -> {[name | success], fail}
-        {:error, res} -> {success, [{name, res} | fail]}
-      end
-    end)
-    |> case do
-      {success, []} -> {:ok, success}
-      {success, fail} -> {:error, success, fail}
-    end
+    ArangoXEcto.api_query(repo, :delete, url, "", %{}, opts)
+    |> process_existing(command)
     |> log_execute()
   end
 
@@ -689,24 +665,6 @@ defmodule ArangoXEcto.Migrator do
 
       error ->
         error
-    end
-  end
-
-  defp remove_existing_analyzers(repo, analyzers, opts) do
-    for %{name: name} <- analyzers do
-      ArangoXEcto.api_query(
-        repo,
-        :delete,
-        ArangoXEcto.__build_connection_url__(
-          repo,
-          "analyzer/#{name}",
-          opts,
-          "?force=true"
-        ),
-        "",
-        %{},
-        opts
-      )
     end
   end
 

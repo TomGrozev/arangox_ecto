@@ -397,21 +397,21 @@ defmodule ArangoXEcto.Migration.Runner do
   defp command(aql) when is_binary(aql) or is_list(aql), do: "execute #{inspect(aql)}"
 
   # Analyzer
-  defp command({:create, %Analyzer{prefix: prefix, module: module}}),
-    do: "create analyzer #{quote_name(prefix, module)}"
+  defp command({:create, %Analyzer{prefix: prefix, name: name}}),
+    do: "create analyzer #{quote_name(prefix, name)}"
 
-  defp command({:create_if_not_exists, %Analyzer{prefix: prefix, module: module}}),
-    do: "create analyzer if not exists #{quote_name(prefix, module)}"
+  defp command({:create_if_not_exists, %Analyzer{prefix: prefix, name: name}}),
+    do: "create analyzer if not exists #{quote_name(prefix, name)}"
 
   defp command({:rename, %Analyzer{} = current_analyzer, %Analyzer{} = new_analyzer}),
     do:
-      "rename analyzer #{quote_name(current_analyzer.prefix, current_analyzer.module)} to #{quote_name(new_analyzer.prefix, new_analyzer.module)}"
+      "rename analyzer #{quote_name(current_analyzer.prefix, current_analyzer.name)} to #{quote_name(new_analyzer.prefix, new_analyzer.name)}"
 
-  defp command({:drop, %Analyzer{prefix: prefix, module: module}}),
-    do: "drop analyzer #{quote_name(prefix, module)}"
+  defp command({:drop, %Analyzer{prefix: prefix, name: name}}),
+    do: "drop analyzer #{quote_name(prefix, name)}"
 
-  defp command({:drop_if_exists, %Analyzer{prefix: prefix, module: module}}),
-    do: "drop analyzer if exists #{quote_name(prefix, module)}"
+  defp command({:drop_if_exists, %Analyzer{prefix: prefix, name: name}}),
+    do: "drop analyzer if exists #{quote_name(prefix, name)}"
 
   # View
   defp command({:create, %View{prefix: prefix, module: module}}),

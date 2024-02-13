@@ -439,13 +439,21 @@ defmodule ArangoXEcto do
   """
   @doc since: "1.3.0"
   @spec create_analyzers(Ecto.Repo.t(), ArangoXEcto.Analyzer.t(), Keyword.t()) ::
-          :ok | {:error, [Arangox.Response.t()], [Arangox.Error.t()]}
+          :ok | {:error, [atom()], [{atom(), Arangox.Error.t()}]}
   def create_analyzers(repo, analyzer_module, opts \\ []) do
-    analyzer_def = Migration.analyzer(analyzer_module, opts)
+    analyzers = analyzer_module.__analyzers__()
 
-    case Migrator.execute_command(repo, {:create, analyzer_def}, opts) do
-      {:info, _, _} -> :ok
-      {:error, success, fail} -> {:error, success, fail}
+    remove_existing_analyzers(repo, analyzers, opts)
+
+    Enum.reduce(analyzers, {[], []}, fn analyzer, {success, fail} ->
+      case Migrator.execute_command(repo, {:create, analyzer}, opts) do
+        {:info, _, _} -> {[analyzer.name | success], fail}
+        {:error, reason, _} -> {success, [{analyzer.name, reason} | fail]}
+      end
+    end)
+    |> case do
+      {_, []} -> :ok
+      {success, fail} -> {:error, success, fail}
     end
   end
 
@@ -1006,6 +1014,24 @@ defmodule ArangoXEcto do
   ###############
   ##  Helpers  ##
   ###############
+
+  defp remove_existing_analyzers(repo, analyzers, opts) do
+    for %{name: name} <- analyzers do
+      ArangoXEcto.api_query(
+        repo,
+        :delete,
+        ArangoXEcto.__build_connection_url__(
+          repo,
+          "analyzer/#{name}",
+          opts,
+          "?force=true"
+        ),
+        "",
+        %{},
+        opts
+      )
+    end
+  end
 
   defp add_associations(%{} = loaded, module, %{} = map) when is_atom(module) do
     module.__schema__(:associations)

@@ -67,13 +67,188 @@ defmodule ArangoXEcto.Migration do
     Represents a analyzer module in ArangoDB
     """
 
-    @enforce_keys [:module]
+    @enforce_keys [:name, :type, :features]
     defstruct [
-      :module,
+      :name,
+      :properties,
+      :type,
+      :features,
       :prefix
     ]
 
     @type t :: %__MODULE__{}
+
+    @type type ::
+            :identity
+            | :delimiter
+            | :stem
+            | :norm
+            | :ngram
+            | :text
+            | :collation
+            | :aql
+            | :pipeline
+            | :stopwords
+            | :segmentation
+            | :minhash
+            | :classification
+            | :nearest_neighbors
+            | :geojson
+            | :geo_s2
+            | :geopoint
+
+    @type feature :: :frequency | :norm | :position
+
+    @doc """
+    Creates a new Analyzer struct
+    """
+    @spec new(atom() | String.t(), type(), [feature()], map(), prefix: atom()) :: t()
+    def new(name, type, features, properties \\ %{}, opts \\ []) do
+      validate_name!(name)
+      validate_features!(features)
+      validate_properties!(properties, name, type)
+
+      keys =
+        [name: name, type: type, features: features, properties: properties]
+        |> Keyword.merge(opts)
+
+      struct(__MODULE__, keys)
+    end
+
+    @doc false
+    @spec validate_name!(atom()) :: atom()
+    def validate_name!(name) do
+      unless is_atom(name) do
+        raise ArgumentError, "the name for analyzer must be an atom, got: #{inspect(name)}"
+      end
+    end
+
+    @valid_keys [:frequency, :norm, :position]
+
+    @doc false
+    @spec validate_features!([atom()]) :: [atom()]
+    def validate_features!(features) do
+      unless is_list(features) and Enum.all?(features, &Enum.member?(@valid_keys, &1)) do
+        raise ArgumentError,
+              "the features provided are invalid, only accepts keys [:frequency, :norm, :position], got: #{inspect(features)}"
+      end
+    end
+
+    @doc false
+    @spec validate_properties!([atom()], atom(), type()) :: [atom()]
+    def validate_properties!(properties, name, type) do
+      keys = valid_keys(type)
+
+      Enum.all?(properties, fn {k, v} ->
+        Enum.member?(keys, k) and valid_key?(k, v)
+      end)
+      |> unless do
+        raise ArgumentError,
+              "the properties provided for analyzer '#{name}' are invalid, only accepts keys #{inspect(keys)}, got: #{inspect(properties)}"
+      end
+    end
+
+    defp valid_keys(:delimiter), do: [:delimiter]
+    defp valid_keys(:stem), do: [:locale]
+    defp valid_keys(:norm), do: [:locale, :accent, :case]
+    defp valid_keys(:collation), do: [:locale]
+    defp valid_keys(:stopwords), do: [:stopwords, :hex]
+    defp valid_keys(:segmentation), do: [:break, :graphic, :case]
+    defp valid_keys(:minhash), do: [:numHashes, :analyzer]
+    defp valid_keys(:classification), do: [:model_location, :top_k, :threshold]
+    defp valid_keys(:nearest_neighbors), do: [:model_location, :top_k]
+    defp valid_keys(:geojson), do: [:type, :options]
+    defp valid_keys(:geo_s2), do: [:format, :type, :options]
+    defp valid_keys(:geopoint), do: [:latitude, :longitude, :options]
+    defp valid_keys(:pipeline), do: [:pipeline]
+
+    defp valid_keys(:ngram) do
+      [
+        :min,
+        :max,
+        :preserveOriginal,
+        :startMarker,
+        :endMarker,
+        :streamType
+      ]
+    end
+
+    defp valid_keys(:text) do
+      [
+        :locale,
+        :accent,
+        :case,
+        :stemming,
+        :edgeNgram,
+        :stopwords,
+        :stopwordsPath
+      ]
+    end
+
+    defp valid_keys(:aql) do
+      [
+        :queryString,
+        :collapsePositions,
+        :keepNull,
+        :batchSize,
+        :memoryLimit,
+        :returnType
+      ]
+    end
+
+    defp valid_keys(_), do: []
+
+    defp valid_key?(:delimiter, value), do: is_binary(value)
+    defp valid_key?(:locale, value), do: is_binary(value)
+    defp valid_key?(:accent, value), do: is_boolean(value)
+    defp valid_key?(:case, value), do: value in [:none, :lower, :upper]
+    defp valid_key?(:min, value), do: is_integer(value)
+    defp valid_key?(:max, value), do: is_integer(value)
+    defp valid_key?(:preserveOriginal, value), do: is_boolean(value)
+    defp valid_key?(:startMarker, value), do: is_binary(value)
+    defp valid_key?(:endMarker, value), do: is_binary(value)
+    defp valid_key?(:streamType, value), do: value in [:binary, :utf8]
+    defp valid_key?(:stemming, value), do: is_boolean(value)
+    defp valid_key?(:stopwords, value), do: is_list(value) and Enum.all?(value, &is_binary/1)
+    defp valid_key?(:stopwordsPath, value), do: is_binary(value)
+    defp valid_key?(:queryString, value), do: is_binary(value)
+    defp valid_key?(:collapsePositions, value), do: is_boolean(value)
+    defp valid_key?(:keepNull, value), do: is_boolean(value)
+    defp valid_key?(:batchSize, value), do: is_integer(value) and value >= 1 and value <= 1000
+    defp valid_key?(:numHashes, value), do: is_integer(value) and value >= 1
+    defp valid_key?(:hex, value), do: is_boolean(value)
+    defp valid_key?(:model_location, value), do: is_binary(value)
+    defp valid_key?(:top_k, value), do: is_integer(value)
+    defp valid_key?(:threshold, value), do: is_float(value) or is_integer(value)
+    defp valid_key?(:latitude, value), do: is_list(value) and Enum.all?(value, &is_binary/1)
+    defp valid_key?(:longitude, value), do: is_list(value) and Enum.all?(value, &is_binary/1)
+    defp valid_key?(:returnType, value), do: value in [:string, :number, :bool]
+    defp valid_key?(:break, value), do: value in [:all, :alpha, :graphic]
+    defp valid_key?(:type, value), do: value in [:shape, :centroid, :point]
+    defp valid_key?(:format, value), do: value in [:latLngDouble, :latLngInt, :s2Point]
+    defp valid_key?(:analyzer, %Analyzer{}), do: true
+
+    defp valid_key?(:pipeline, analyzers),
+      do: Enum.all?(analyzers, fn analyzer -> match?(%Analyzer{}, analyzer) end)
+
+    defp valid_key?(:memoryLimit, value),
+      do: is_integer(value) and value >= 1_048_576 and value <= 33_554_432
+
+    defp valid_key?(:edgeNgram, value) do
+      is_map(value) and
+        Enum.all?(value, fn {k, v} ->
+          k in [:min, :max, :preserveOriginal] and valid_key?(k, v)
+        end)
+    end
+
+    defp valid_key?(:options, value) do
+      is_map(value) and
+        Enum.all?(value, fn {k, v} ->
+          k in [:maxCells, :minLevel, :maxLevel] and is_integer(v)
+        end)
+    end
+
+    defp valid_key?(_, _), do: false
   end
 
   defmodule Index do
@@ -506,14 +681,9 @@ defmodule ArangoXEcto.Migration do
   end
 
   @doc """
-  Represents a analyzer module
+  Represents an analyzer module
   """
-  @spec analyzer(module(), Keyword.t()) :: Analyzer.t()
-  def analyzer(module, opts \\ []) when is_list(opts) do
-    keys = [module: module] |> Keyword.merge(opts)
-
-    struct(Analyzer, keys)
-  end
+  defdelegate analyzer(name, type, features, properties, opts), to: Analyzer, as: :new
 
   @doc """
   Executes arbitrary AQL.
