@@ -357,12 +357,12 @@ defmodule ArangoXEcto.Migrator do
   `opts` is passed to the adapter when the command is run
   """
   @spec execute_command(
-          Ecto.Repo.t(),
+          Ecto.Adapter.adapter_meta(),
           {command(), Collection.t() | Index.t() | View.t() | Analyzer.t(), list()},
           Keyword.t()
         ) :: log()
   # Collection
-  def execute_command(repo, {command, %Collection{prefix: prefix} = collection, fields}, opts)
+  def execute_command(meta, {command, %Collection{prefix: prefix} = collection, fields}, opts)
       when command in @creates do
     args =
       collection
@@ -373,10 +373,10 @@ defmodule ArangoXEcto.Migrator do
     opts = Keyword.put(opts, :prefix, prefix)
 
     ArangoXEcto.api_query(
-      repo,
+      meta,
       :post,
       ArangoXEcto.__build_connection_url__(
-        repo,
+        meta,
         "collection",
         opts
       ),
@@ -389,7 +389,7 @@ defmodule ArangoXEcto.Migrator do
   end
 
   def execute_command(
-        repo,
+        meta,
         {command, %Collection{name: name, prefix: prefix, isSystem: is_system}},
         opts
       )
@@ -397,10 +397,10 @@ defmodule ArangoXEcto.Migrator do
     opts = Keyword.put(opts, :prefix, prefix)
 
     ArangoXEcto.api_query(
-      repo,
+      meta,
       :delete,
       ArangoXEcto.__build_connection_url__(
-        repo,
+        meta,
         "collection/#{name}",
         opts,
         "?isSystem=#{is_system}"
@@ -414,13 +414,13 @@ defmodule ArangoXEcto.Migrator do
   end
 
   def execute_command(
-        repo,
+        meta,
         {:alter, %Collection{name: name, prefix: prefix} = collection, columns},
         opts
       ) do
     opts = Keyword.put(opts, :prefix, prefix)
 
-    current_schema = get_current_schema!(repo, collection, opts)
+    current_schema = get_current_schema!(meta, collection, opts)
 
     args =
       collection
@@ -432,10 +432,10 @@ defmodule ArangoXEcto.Migrator do
       |> Map.reject(fn {_, v} -> is_nil(v) end)
 
     ArangoXEcto.api_query(
-      repo,
+      meta,
       :put,
       ArangoXEcto.__build_connection_url__(
-        repo,
+        meta,
         "collection/#{name}/properties",
         opts
       ),
@@ -447,7 +447,7 @@ defmodule ArangoXEcto.Migrator do
   end
 
   def execute_command(
-        repo,
+        meta,
         {:rename, %Collection{name: current_name, prefix: prefix},
          %Collection{name: new_name, prefix: prefix}},
         opts
@@ -457,10 +457,10 @@ defmodule ArangoXEcto.Migrator do
     opts = Keyword.put(opts, :prefix, prefix)
 
     ArangoXEcto.api_query(
-      repo,
+      meta,
       :put,
       ArangoXEcto.__build_connection_url__(
-        repo,
+        meta,
         "collection/#{current_name}/rename",
         opts
       ),
@@ -473,7 +473,7 @@ defmodule ArangoXEcto.Migrator do
 
   # Index
   def execute_command(
-        repo,
+        meta,
         {command, %Index{collection_name: collection_name, prefix: prefix} = index},
         opts
       )
@@ -486,10 +486,10 @@ defmodule ArangoXEcto.Migrator do
     opts = Keyword.put(opts, :prefix, prefix)
 
     ArangoXEcto.api_query(
-      repo,
+      meta,
       :post,
       ArangoXEcto.__build_connection_url__(
-        repo,
+        meta,
         "index",
         opts,
         "?collection=#{collection_name}"
@@ -503,20 +503,20 @@ defmodule ArangoXEcto.Migrator do
   end
 
   def execute_command(
-        repo,
+        meta,
         {command, %Index{prefix: prefix} = index},
         opts
       )
       when command in @drops do
     opts = Keyword.put(opts, :prefix, prefix)
 
-    case get_index_id_by_name(repo, index, opts) do
+    case get_index_id_by_name(meta, index, opts) do
       {:ok, id} ->
         ArangoXEcto.api_query(
-          repo,
+          meta,
           :delete,
           ArangoXEcto.__build_connection_url__(
-            repo,
+            meta,
             "index/#{id}",
             opts
           ),
@@ -531,7 +531,7 @@ defmodule ArangoXEcto.Migrator do
 
   # View
   def execute_command(
-        repo,
+        meta,
         {command, %View{module: module, prefix: prefix}},
         opts
       )
@@ -541,9 +541,9 @@ defmodule ArangoXEcto.Migrator do
     opts = Keyword.put(opts, :prefix, prefix)
 
     ArangoXEcto.api_query(
-      repo,
+      meta,
       :post,
-      ArangoXEcto.__build_connection_url__(repo, "view", opts),
+      ArangoXEcto.__build_connection_url__(meta, "view", opts),
       view_definition,
       %{},
       opts
@@ -553,7 +553,7 @@ defmodule ArangoXEcto.Migrator do
   end
 
   def execute_command(
-        repo,
+        meta,
         {command, %View{module: module, prefix: prefix}},
         opts
       )
@@ -563,9 +563,9 @@ defmodule ArangoXEcto.Migrator do
     opts = Keyword.put(opts, :prefix, prefix)
 
     ArangoXEcto.api_query(
-      repo,
+      meta,
       :delete,
-      ArangoXEcto.__build_connection_url__(repo, "view/#{name}", opts),
+      ArangoXEcto.__build_connection_url__(meta, "view/#{name}", opts),
       "",
       %{},
       opts
@@ -576,42 +576,42 @@ defmodule ArangoXEcto.Migrator do
 
   # Analyzer
   def execute_command(
-        repo,
+        meta,
         {command, %Analyzer{prefix: prefix} = analyzer},
         opts
       )
       when command in @creates do
     opts = Keyword.put(opts, :prefix, prefix)
 
-    url = ArangoXEcto.__build_connection_url__(repo, "analyzer", opts)
+    url = ArangoXEcto.__build_connection_url__(meta, "analyzer", opts)
 
-    ArangoXEcto.api_query(repo, :post, url, analyzer, %{}, opts)
+    ArangoXEcto.api_query(meta, :post, url, analyzer, %{}, opts)
     |> process_existing(command)
     |> log_execute()
   end
 
   def execute_command(
-        repo,
+        meta,
         {command, %Analyzer{name: name, prefix: prefix}},
         opts
       )
       when command in @drops do
     opts = Keyword.put(opts, :prefix, prefix)
 
-    url = ArangoXEcto.__build_connection_url__(repo, "analyzer/#{name}", opts)
+    url = ArangoXEcto.__build_connection_url__(meta, "analyzer/#{name}", opts)
 
-    ArangoXEcto.api_query(repo, :delete, url, "", %{}, opts)
+    ArangoXEcto.api_query(meta, :delete, url, "", %{}, opts)
     |> process_existing(command)
     |> log_execute()
   end
 
   def execute_command(
-        repo,
+        meta,
         aql,
         opts
       )
       when is_binary(aql) do
-    ArangoXEcto.aql_query(repo, aql, [], opts)
+    ArangoXEcto.aql_query(meta, aql, [], opts)
     |> log_execute()
   end
 
@@ -619,12 +619,12 @@ defmodule ArangoXEcto.Migrator do
   # Helpers #
   ###########
 
-  defp get_index_id_by_name(repo, %Index{collection_name: collection_name, name: name}, opts) do
+  defp get_index_id_by_name(meta, %Index{collection_name: collection_name, name: name}, opts) do
     ArangoXEcto.api_query(
-      repo,
+      meta,
       :get,
       ArangoXEcto.__build_connection_url__(
-        repo,
+        meta,
         "index",
         opts,
         "?collection=#{collection_name}"
@@ -648,12 +648,12 @@ defmodule ArangoXEcto.Migrator do
     end
   end
 
-  defp get_current_schema!(repo, %Collection{name: name}, opts) do
+  defp get_current_schema!(meta, %Collection{name: name}, opts) do
     ArangoXEcto.api_query(
-      repo,
+      meta,
       :get,
       ArangoXEcto.__build_connection_url__(
-        repo,
+        meta,
         "collection/#{name}/properties",
         opts
       ),

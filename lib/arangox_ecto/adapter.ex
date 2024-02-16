@@ -220,6 +220,22 @@ defmodule ArangoXEcto.Adapter do
   defdelegate rollback(adapter_meta, value),
     to: ArangoXEcto.Behaviour.Transaction
 
+  @doc """
+  Receives a DDL command and executes it
+  """
+  @spec execute_ddl(
+          Ecto.Repo.t() | Ecto.Adapter.adapter_meta(),
+          ArangoXEcto.Migration.command(),
+          Keyword.t()
+        ) ::
+          {:ok, [{Logger.level(), any(), Keyword.t()}]}
+  def execute_ddl(repo, command, opts) when is_atom(repo),
+    do: execute_ddl(Ecto.Adapter.lookup_meta(repo), command, opts)
+
+  def execute_ddl(meta, command, opts) do
+    ArangoXEcto.Migrator.execute_command(meta, command, opts)
+  end
+
   @doc false
   def reduce(adapter_meta, statement, params, opts, acc, fun) do
     %{pid: pool, telemetry: telemetry, opts: default_opts} = adapter_meta

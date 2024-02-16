@@ -105,7 +105,7 @@ defmodule ArangoXEcto.Migration.SchemaMigration do
       {:add, :inserted_at, :naive_datetime, []}
     ]
 
-    ArangoXEcto.Migrator.execute_command(
+    repo.__adapter__().execute_ddl(
       repo,
       {:create_if_not_exists, collection, commands},
       opts

@@ -397,7 +397,7 @@ defmodule ArangoXEcto do
 
     view_def = Migration.view(view, opts)
 
-    case Migrator.execute_command(repo, {:create, view_def}, opts) do
+    case repo.__adapter__().execute_ddl(repo, {:create, view_def}, opts) do
       {:info, _, _} -> :ok
       {:error, reason} -> {:error, reason}
     end
@@ -446,7 +446,7 @@ defmodule ArangoXEcto do
     remove_existing_analyzers(repo, analyzers, opts)
 
     Enum.reduce(analyzers, {[], []}, fn analyzer, {success, fail} ->
-      case Migrator.execute_command(repo, {:create, analyzer}, opts) do
+      case repo.__adapter__().execute_ddl(repo, {:create, analyzer}, opts) do
         {:info, _, _} -> {[analyzer.name | success], fail}
         {:error, reason, _} -> {success, [{analyzer.name, reason} | fail]}
       end
@@ -499,9 +499,11 @@ defmodule ArangoXEcto do
 
       collection = Migration.collection(collection_name, type, collection_opts)
 
-      case Migrator.execute_command(repo, {:create, collection, []}, opts) do
+      meta = Ecto.Adapter.lookup_meta(repo)
+
+      case repo.__adapter__().execute_ddl(meta, {:create, collection, []}, opts) do
         :ok ->
-          maybe_create_indexes(repo, collection_name, indexes, opts)
+          maybe_create_indexes(meta, collection_name, indexes, opts)
 
         error ->
           error
@@ -1004,7 +1006,12 @@ defmodule ArangoXEcto do
   end
 
   @doc false
-  def __build_connection_url__(repo, string, opts, options \\ "") do
+  def __build_connection_url__(repo, string, opts, options \\ "")
+
+  def __build_connection_url__(%{repo: repo}, string, opts, options),
+    do: __build_connection_url__(repo, string, opts, options)
+
+  def __build_connection_url__(repo, string, opts, options) do
     database = Adapter.get_database(repo, opts)
 
     "/_db/#{database}/_api/#{string}#{options}"
@@ -1271,7 +1278,8 @@ defmodule ArangoXEcto do
         {fields, index_opts} = Keyword.pop(index, :fields)
 
         index_mod = Migration.index(collection_name, fields, index_opts)
-        Migrator.execute_command(repo, index_mod, opts)
+
+        repo.__adapter__().execute_ddl(repo, index_mod, opts)
     end)
   end
 

@@ -372,7 +372,8 @@ defmodule ArangoXEcto.Migration.Runner do
   defp log_and_execute_command(repo, %{level: level, log_migrations: log_migrations}, command) do
     log(level, command(command))
 
-    {res_level, message, metadata} = Migrator.execute_command(repo, command, log: log_migrations)
+    {res_level, message, metadata} =
+      repo.__adapter__().execute_ddl(repo, command, log: log_migrations)
 
     log_result(res_level, level, message, metadata)
 
