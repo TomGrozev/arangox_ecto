@@ -919,7 +919,8 @@ defmodule ArangoXEcto do
   Checks for the presence of the `__edge__/0` function on the module.
   """
   @spec edge?(atom()) :: boolean()
-  def edge?(module) when is_atom(module), do: function_exported?(module, :__edge__, 0)
+  def edge?(module) when is_atom(module),
+    do: Code.ensure_loaded?(module) and function_exported?(module, :__edge__, 0)
 
   def edge?(_), do: false
 
@@ -929,8 +930,10 @@ defmodule ArangoXEcto do
   Checks for the presence of the `__schema__/1` function on the module and not an edge.
   """
   @spec document?(atom()) :: boolean()
-  def document?(module) when is_atom(module),
-    do: function_exported?(module, :__schema__, 1) and not edge?(module) and not view?(module)
+  def document?(module) when is_atom(module) do
+    Code.ensure_loaded?(module) and function_exported?(module, :__schema__, 1) and
+      not edge?(module) and not view?(module)
+  end
 
   def document?(_), do: false
 
@@ -942,7 +945,7 @@ defmodule ArangoXEcto do
   @doc since: "1.3.0"
   @spec view?(atom()) :: boolean()
   def view?(module) when is_atom(module),
-    do: function_exported?(module, :__view__, 1)
+    do: Code.ensure_loaded?(module) and function_exported?(module, :__view__, 1)
 
   def view?(_), do: false
 
