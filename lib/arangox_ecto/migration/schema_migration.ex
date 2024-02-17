@@ -98,7 +98,7 @@ defmodule ArangoXEcto.Migration.SchemaMigration do
   end
 
   defp create_migrations_collection(repo, source, opts) do
-    collection = Collection.new(source, :document, isSystem: true)
+    collection = Collection.new(source, isSystem: true)
 
     commands = [
       {:add, :version, :integer, primary_key: true},

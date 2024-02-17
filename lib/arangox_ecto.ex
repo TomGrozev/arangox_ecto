@@ -493,10 +493,10 @@ defmodule ArangoXEcto do
       # will throw if not a schema
       type = ArangoXEcto.schema_type!(schema)
       collection_name = source_name(schema)
-      collection_opts = schema.__collection_options__()
+      collection_opts = schema.__collection_options__() |> Keyword.put(:type, type)
       indexes = schema.__collection_indexes__()
 
-      collection = Migration.collection(collection_name, type, collection_opts)
+      collection = Migration.collection(collection_name, collection_opts)
 
       meta = Ecto.Adapter.lookup_meta(repo)
 

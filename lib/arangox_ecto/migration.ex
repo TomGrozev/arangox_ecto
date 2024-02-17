@@ -373,6 +373,7 @@ defmodule ArangoXEcto.Migration do
 
     @type collection_option ::
             {:waitForSync, boolean}
+            | {:type, :document | :edge}
             | {:schema, map}
             | {:prefix, String.t()}
             | {:keyOptions, map}
@@ -389,8 +390,10 @@ defmodule ArangoXEcto.Migration do
     @doc """
     Creates a new Collection struct
     """
-    @spec new(String.t(), atom(), [collection_option()]) :: t()
-    def new(name, type \\ :document, opts \\ []) do
+    @spec new(String.t(), [collection_option()]) :: t()
+    def new(name, opts \\ []) do
+      type = Keyword.get(opts, :type, :document)
+
       keys =
         [name: name, type: collection_type(type)]
         |> Keyword.merge(opts)
@@ -636,23 +639,23 @@ defmodule ArangoXEcto.Migration do
       iex> collection("users")
       %ArangoXEcto.Migration.Collection{name: "users", type: 2)
 
-      iex> collection("users", :edge)
+      iex> collection("users", type: :edge)
       %ArangoXEcto.Migration.Collection{name: "users", type: 3)
 
-      iex> collection("users", :document, keyOptions: %{type: :uuid})
+      iex> collection("users", keyOptions: %{type: :uuid})
       %ArangoXEcto.Migration.Collection{name: "users", type: 2, keyOptions: %{type: :uuid})
   """
-  @spec collection(String.t(), atom(), [Collection.collection_option()]) :: Collection.t()
-  def collection(collection_name, type \\ :document, opts \\ []),
-    do: Collection.new(collection_name, type, opts)
+  @spec collection(String.t(), [Collection.collection_option()]) :: Collection.t()
+  def collection(collection_name, opts \\ []),
+    do: Collection.new(collection_name, opts)
 
   @doc """
   Creates an edge collection struct
 
-  Same as passing `:edge` as the second parameter to `collection/3`.
+  Same as passing `:edge` as the type to `collection/3`.
   """
   @spec edge(String.t(), [Collection.collection_option()]) :: Collection.t()
-  def edge(edge_name, opts \\ []), do: collection(edge_name, :edge, opts)
+  def edge(edge_name, opts \\ []), do: collection(edge_name, Keyword.put(opts, :type, :edge))
 
   @doc """
   Creates an index struct
