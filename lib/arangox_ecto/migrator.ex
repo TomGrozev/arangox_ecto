@@ -776,6 +776,7 @@ defmodule ArangoXEcto.Migrator do
       {version, module} ->
         [{version, module, module}]
     end)
+    |> Enum.sort()
   end
 
   defp extract_migration_info(file) do
