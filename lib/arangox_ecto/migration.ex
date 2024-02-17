@@ -48,6 +48,32 @@ defmodule ArangoXEcto.Migration do
 
   alias ArangoXEcto.Migration.Runner
 
+  @typedoc "All migration commands"
+  @type command ::
+          raw ::
+          String.t()
+          | {:create, Collection.t(), [collection_subcommand]}
+          | {:create_if_not_exists, Collection.t(), [collection_subcommand]}
+          | {:alter, Collection.t(), [collection_subcommand]}
+          | {:drop, Collection.t()}
+          | {:drop_if_exists, Collection.t()}
+          | {:create, Index.t()}
+          | {:create_if_not_exists, Index.t()}
+          | {:drop, Index.t()}
+          | {:drop_if_exists, Index.t()}
+
+  @typedoc "All commands allowed within the block passed to `collection/2`"
+  @type collection_subcommand ::
+          {:add, field :: atom, type :: Ecto.Type.t() | Reference.t() | binary(), Keyword.t()}
+          | {:add_if_not_exists, field :: atom, type :: Ecto.Type.t() | Reference.t() | binary(),
+             Keyword.t()}
+          | {:modify, field :: atom, type :: Ecto.Type.t() | Reference.t() | binary(),
+             Keyword.t()}
+          | {:remove, field :: atom, type :: Ecto.Type.t() | Reference.t() | binary(),
+             Keyword.t()}
+          | {:remove, field :: atom}
+          | {:remove_if_exists, type :: Ecto.Type.t() | Reference.t() | binary()}
+
   defmodule View do
     @moduledoc """
     Represents a view module in ArangoDB

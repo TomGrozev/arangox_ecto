@@ -233,7 +233,9 @@ defmodule ArangoXEcto.Adapter do
     do: execute_ddl(Ecto.Adapter.lookup_meta(repo), command, opts)
 
   def execute_ddl(meta, command, opts) do
-    ArangoXEcto.Migrator.execute_command(meta, command, opts)
+    logs = ArangoXEcto.Migrator.execute_command(meta, command, opts)
+
+    {:ok, logs}
   end
 
   @doc false
