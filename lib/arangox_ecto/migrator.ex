@@ -83,6 +83,8 @@ defmodule ArangoXEcto.Migrator do
 
   """
 
+  use GenServer
+
   require Logger
 
   alias ArangoXEcto.Migration.JsonSchema
@@ -92,6 +94,40 @@ defmodule ArangoXEcto.Migrator do
   @type command :: :create | :create_if_not_exists | :drop | :drop_if_exists
   @type subcommand :: :add | :add_enum | :rename
   @type log :: {Logger.level(), Logger.message(), Logger.metadata()}
+
+  @doc """
+  Runs migrations as part of your supervision tree.
+
+  ## Options
+
+    * `:repos` - Required option to tell the migrator which Repo's to
+      migrate. Example: `repos: [MyApp.Repo]`
+
+    * `:skip` - Option to skip migrations. Defaults to `false`.
+
+  Plus all other options described in `up/4`.
+
+  See "Example: Running migrations on application startup" for more info.
+  """
+  def start_link(opts) do
+    GenServer.start_link(__MODULE__, opts, name: __MODULE__)
+  end
+
+  @impl true
+  def init(opts) do
+    {repos, opts} = Keyword.pop!(opts, :repos)
+    {skip?, opts} = Keyword.pop(opts, :skip, false)
+    {migrator, opts} = Keyword.pop(opts, :migrator, &ArangoXEcto.Migrator.run/3)
+    opts = Keyword.put(opts, :all, true)
+
+    unless skip? do
+      for repo <- repos do
+        {:ok, _, _} = with_repo(repo, &migrator.(&1, :up, opts))
+      end
+    end
+
+    :ignore
+  end
 
   @doc """
   Ensures the repo is started to perform migration operations.
@@ -125,8 +161,8 @@ defmodule ArangoXEcto.Migrator do
   ## Examples
 
       {:ok, _, _} =
-        Ecto.Migrator.with_repo(repo, fn repo ->
-          Ecto.Migrator.run(repo, :up, all: true)
+        ArangoXEcto.Migrator.with_repo(repo, fn repo ->
+          ArangoXEcto.Migrator.run(repo, :up, all: true)
         end)
 
   """
@@ -273,6 +309,20 @@ defmodule ArangoXEcto.Migrator do
     end)
   end
 
+  @doc """
+  Runs migrations for the given repository.
+
+  Equivalent to:
+
+      ArangoXEcto.Migrator.run(repo, [ArangoXEcto.Migrator.migrations_path(repo)], direction, opts)
+
+  See `run/4` for more information.
+  """
+  @spec run(Ecto.Repo.t(), atom, Keyword.t()) :: [integer]
+  def run(repo, direction, opts) do
+    run(repo, [migrations_path(repo)], direction, opts)
+  end
+
   @doc ~S"""
   Apply migrations to a repository with a given strategy.
 
@@ -283,7 +333,7 @@ defmodule ArangoXEcto.Migrator do
   may also be a list of tuples that identify the version number and
   migration modules to be run, for example:
 
-      Ecto.Migrator.run(Repo, [{0, MyApp.Migration1}, {1, MyApp.Migration2}, ...], :up, opts)
+      ArangoXEcto.Migrator.run(Repo, [{0, MyApp.Migration1}, {1, MyApp.Migration2}, ...], :up, opts)
 
   A strategy (which is one of `:all`, `:step`, `:to`, or `:to_exclusive`) must be given as
   an option.
