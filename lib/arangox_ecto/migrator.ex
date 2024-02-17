@@ -820,7 +820,7 @@ defmodule ArangoXEcto.Migrator do
   end
 
   defp do_up(repo, config, version, module, opts) do
-    async_migrate(repo, config, version, :up, opts, fn ->
+    async_migrate(repo, config, version, module, :up, opts, fn ->
       attempt(repo, config, version, module, :forward, :up, :up, opts) ||
         attempt(repo, config, version, module, :forward, :change, :up, opts) ||
         {:error,
@@ -831,7 +831,7 @@ defmodule ArangoXEcto.Migrator do
   end
 
   defp do_down(repo, config, version, module, opts) do
-    async_migrate(repo, config, version, :down, opts, fn ->
+    async_migrate(repo, config, version, module, :down, opts, fn ->
       attempt(repo, config, version, module, :forward, :down, :down, opts) ||
         attempt(repo, config, version, module, :backward, :change, :down, opts) ||
         {:error,
@@ -841,7 +841,9 @@ defmodule ArangoXEcto.Migrator do
     end)
   end
 
-  defp async_migrate(repo, config, version, direction, opts, fun) do
+  defp async_migrate(repo, config, version, module, direction, opts, fun) do
+    dynamic_repo = repo.get_dynamic_repo()
+
     fun_with_status = fn ->
       result = fun.()
       apply(SchemaMigration, direction, [repo, config, version, opts])
@@ -849,8 +851,24 @@ defmodule ArangoXEcto.Migrator do
       result
     end
 
-    Task.async(fun_with_status)
+    fn -> run_maybe_in_transaction(repo, dynamic_repo, module, fun_with_status, opts) end
+    |> Task.async()
     |> Task.await(:infinity)
+  end
+
+  defp run_maybe_in_transaction(repo, dynamic_repo, module, fun, opts) do
+    repo.put_dynamic_repo(dynamic_repo)
+
+    if module.__migration__()[:disable_ddl_transaction] do
+      fun.()
+    else
+      {:ok, result} = repo.transaction(fun, log: migrator_log(opts), timeout: :infinity)
+
+      result
+    end
+  catch
+    kind, reason ->
+      {kind, reason, __STACKTRACE__}
   end
 
   defp attempt(repo, config, version, module, direction, operation, reference, opts) do
@@ -993,4 +1011,8 @@ defmodule ArangoXEcto.Migrator do
   defp log(false, _msg), do: :ok
   defp log(true, msg), do: Logger.info(msg)
   defp log(level, msg), do: Logger.log(level, msg)
+
+  defp migrator_log(opts) do
+    Keyword.get(opts, :log_migrator, false)
+  end
 end

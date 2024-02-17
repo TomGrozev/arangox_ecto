@@ -403,11 +403,22 @@ defmodule ArangoXEcto.Migration do
   @optional_callbacks after_begin: 0, before_commit: 0
 
   defmacro __using__(_) do
-    # Init conn
-    quote do
+    quote location: :keep do
       import ArangoXEcto.Migration
 
-      def __migration__, do: :ok
+      @disable_ddl_transaction false
+      @before_compile ArangoXEcto.Migration
+    end
+  end
+
+  @doc false
+  defmacro __before_compile__(_env) do
+    quote do
+      def __migration__ do
+        [
+          disable_ddl_transaction: @disable_ddl_transaction
+        ]
+      end
     end
   end
 
@@ -696,7 +707,7 @@ defmodule ArangoXEcto.Migration do
 
       execute "FOR u IN `users` RETURN u.name"
   """
-  def execute(command) when is_binary(command) do
+  def execute(command) when is_binary(command) or is_function(command, 0) or is_list(command) do
     Runner.execute(command)
   end
 

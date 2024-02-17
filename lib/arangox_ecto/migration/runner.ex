@@ -4,7 +4,6 @@ defmodule ArangoXEcto.Migration.Runner do
 
   require Logger
 
-  alias ArangoXEcto.Migrator
   alias ArangoXEcto.Migration.{Analyzer, Collection, Command, Index, View}
 
   @doc """

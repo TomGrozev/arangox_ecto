@@ -12,7 +12,6 @@ defmodule ArangoXEcto do
   alias ArangoXEcto.Adapter
   alias ArangoXEcto.Edge
   alias ArangoXEcto.Migration
-  alias ArangoXEcto.Migrator
 
   @type query :: binary()
   @type vars :: keyword() | map()
