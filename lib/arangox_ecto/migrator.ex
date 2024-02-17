@@ -346,6 +346,37 @@ defmodule ArangoXEcto.Migrator do
     migrate(Enum.map(pending, &load_migration!/1), direction, repo, opts)
   end
 
+  @doc """
+  Returns an array of the statuses of migrations for the given repo
+
+  Doesn't actually run the migrations.
+
+  This is a shortcut to
+
+      ArangoXEcto.Migrator.migrations(repo, [ArangoXEcto.Migrator.migrations_path(repo)])
+  """
+  @spec migrations(Ecto.Repo.t()) :: [{:up | :down, id :: integer(), name :: String.t()}]
+  def migrations(repo) do
+    migrations(repo, [migrations_path(repo)])
+  end
+
+  @doc """
+  Returns an array of the statuses of migrations for the given repo
+
+  Doesn't actually run the migrations.
+  """
+  @spec migrations(Ecto.Repo.t(), String.t() | [String.t()], Keyword.t()) :: [
+          {:up | :down, id :: integer(), name :: String.t()}
+        ]
+  def migrations(repo, directories, opts \\ []) do
+    directories = List.wrap(directories)
+
+    repo
+    |> migrated_versions(opts)
+    |> collect_migrations(directories)
+    |> Enum.sort_by(fn {_, version, _} -> version end)
+  end
+
   @creates [:create, :create_if_not_exists]
   @drops [:drop, :drop_if_exists]
 
@@ -948,6 +979,34 @@ defmodule ArangoXEcto.Migrator do
   defp after_action(repo, :stop), do: repo.stop()
 
   defp after_action(_repo, :noop), do: :noop
+
+  defp collect_migrations(versions, migration_source) do
+    ups_with_file =
+      versions
+      |> pending_in_direction(migration_source, :down)
+      |> Enum.map(fn {version, name, _} -> {:up, version, name} end)
+
+    ups_without_file =
+      versions
+      |> versions_without_file(migration_source)
+      |> Enum.map(fn version -> {:up, version, "** FILE NOT FOUND **"} end)
+
+    downs =
+      versions
+      |> pending_in_direction(migration_source, :up)
+      |> Enum.map(fn {version, name, _} -> {:down, version, name} end)
+
+    ups_with_file ++ ups_without_file ++ downs
+  end
+
+  defp versions_without_file(versions, migration_source) do
+    versions_with_file =
+      migration_source
+      |> migrations_for()
+      |> Enum.map(fn {version, _, _} -> version end)
+
+    versions -- versions_with_file
+  end
 
   defp ensure_migrations_collection(repo, opts, fun) do
     dynamic_repo = Keyword.get(opts, :dynamic_repo, repo.get_dynamic_repo())
