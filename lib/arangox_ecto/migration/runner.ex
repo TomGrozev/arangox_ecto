@@ -314,7 +314,7 @@ defmodule ArangoXEcto.Migration.Runner do
 
       {reverse_type, from_opts} when is_list(from_opts) ->
         reverse_from = {type, Keyword.delete(opts, :from)}
-        reverse_opts = Keyword.put(opts, :from, reverse_from)
+        reverse_opts = Keyword.put(from_opts, :from, reverse_from)
         collection_reverse(t, [{:modify, name, reverse_type, reverse_opts} | acc])
 
       reverse_type ->
