@@ -135,8 +135,7 @@ defmodule ArangoXEcto.Migration do
       validate_properties!(properties, name, type)
 
       keys =
-        [name: name, type: type, features: features, properties: properties]
-        |> Keyword.merge(opts)
+        Keyword.merge(opts, name: name, type: type, features: features, properties: properties)
 
       struct(__MODULE__, keys)
     end
@@ -305,6 +304,7 @@ defmodule ArangoXEcto.Migration do
 
     @type index_option ::
             {:type, atom}
+            | {:prefix, String.t()}
             | {:unique, boolean}
             | {:sparse, boolean}
             | {:deduplication, boolean}
@@ -317,10 +317,14 @@ defmodule ArangoXEcto.Migration do
     Creates a new Index struct
     """
     @spec new(String.t(), [atom() | String.t()], [index_option()]) :: t()
-    def new(name, fields, opts \\ []) do
-      keys =
-        [collection_name: name, fields: fields]
-        |> Keyword.merge(opts)
+    def new(name, fields, opts \\ [])
+    def new(name, fields, opts) when is_atom(name), do: new(Atom.to_string(name), fields, opts)
+
+    def new(name, fields, opts) when is_binary(name) and is_atom(fields),
+      do: new(name, [fields], opts)
+
+    def new(name, fields, opts) when is_binary(name) and is_list(fields) and is_list(opts) do
+      keys = Keyword.merge(opts, collection_name: name, fields: fields)
 
       index = struct(__MODULE__, keys)
       %{index | name: index.name || default_index_name(index)}
@@ -391,12 +395,13 @@ defmodule ArangoXEcto.Migration do
     Creates a new Collection struct
     """
     @spec new(String.t(), [collection_option()]) :: t()
-    def new(name, opts \\ []) do
+    def new(name, opts \\ [])
+    def new(name, opts) when is_atom(name), do: new(Atom.to_string(name), opts)
+
+    def new(name, opts) when is_binary(name) and is_list(opts) do
       type = Keyword.get(opts, :type, :document)
 
-      keys =
-        [name: name, type: collection_type(type)]
-        |> Keyword.merge(opts)
+      keys = Keyword.merge(opts, name: name, type: collection_type(type))
 
       struct(__MODULE__, keys)
     end
