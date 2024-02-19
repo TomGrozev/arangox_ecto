@@ -47,6 +47,31 @@ defmodule ArangoXEcto.Migration.JsonSchema do
     |> maybe_add_opt(command_opts, :maxLength, :max_length)
     |> maybe_add_opt(command_opts, :pattern)
     |> maybe_add_opt(command_opts, :format)
+    |> maybe_add_opt(command_opts, :contentEncoding, :content_encoding)
+    |> maybe_add_opt(command_opts, :contentMediaType, :content_media_type)
+    |> maybe_add_opt(command_opts, :"$comment", :comment)
+  end
+
+  defp command_to_schema({_name, :enum, command_opts}, _opts) do
+    %{enum: Keyword.fetch!(command_opts, :values)}
+    |> maybe_add_opt(command_opts, :"$comment", :comment)
+  end
+
+  defp command_to_schema({_name, :const, command_opts}, _opts) do
+    %{const: Keyword.fetch!(command_opts, :value)}
+    |> maybe_add_opt(command_opts, :"$comment", :comment)
+  end
+
+  defp command_to_schema({_name, :boolean, _command_opts}, _opts) do
+    %{type: "boolean"}
+  end
+
+  defp command_to_schema({_name, {:array, type}, command_opts}, _opts) do
+    %{type: "array", items: %{type: type}}
+    |> maybe_add_opt(command_opts, :minItems, :min_items)
+    |> maybe_add_opt(command_opts, :maxItems, :max_items)
+    |> maybe_add_opt(command_opts, :uniqueItems, :unique_items)
+    |> maybe_add_opt(command_opts, :"$comment", :comment)
   end
 
   defp command_to_schema({name, [_ | _] = subcommands, command_opts}, opts) do
@@ -64,6 +89,7 @@ defmodule ArangoXEcto.Migration.JsonSchema do
     |> maybe_add_opt(command_opts, :required)
     |> maybe_add_opt(command_opts, :minProperties, :min_properties)
     |> maybe_add_opt(command_opts, :maxProperties, :max_properties)
+    |> maybe_add_opt(command_opts, :"$comment", :comment)
   end
 
   defp command_to_schema({_name, numeric, command_opts}, _opts)
@@ -74,6 +100,7 @@ defmodule ArangoXEcto.Migration.JsonSchema do
     |> maybe_add_opt(command_opts, :maximum)
     |> maybe_add_opt(command_opts, :exclusiveMaximum, :exclusive_maximum)
     |> maybe_add_opt(command_opts, :multipleOf, :multiple_of)
+    |> maybe_add_opt(command_opts, :"$comment", :comment)
   end
 
   defp command_to_schema({name, datetime, command_opts}, opts)
@@ -90,7 +117,7 @@ defmodule ArangoXEcto.Migration.JsonSchema do
       "^(-?(?:[1-9][0-9]*)?[0-9]{4})-(1[0-2]|0[1-9])-(3[01]|0[1-9]|[12][0-9])T(2[0-3]|[01][0-9]):([0-5][0-9]):([0-5][0-9])(\.[0-9]+)?(Z|[+-](?:2[0-3]|[01][0-9]):[0-5][0-9])?$"
 
     command_to_schema(
-      {name, :string, Keyword.put(command_opts, :patternn, pattern)},
+      {name, :string, Keyword.put(command_opts, :pattern, pattern)},
       opts
     )
   end
