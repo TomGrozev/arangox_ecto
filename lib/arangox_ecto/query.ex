@@ -570,6 +570,18 @@ defmodule ArangoXEcto.Query do
     [expr(value, sources, query)]
   end
 
+  defp expr(%Ecto.Query.Tagged{value: value, type: :integer}, sources, query) do
+    ["TO_NUMBER(", expr(value, sources, query), ")"]
+  end
+
+  defp expr(%Ecto.Query.Tagged{value: value, type: :string}, sources, query) do
+    ["TO_STRING(", expr(value, sources, query), ")"]
+  end
+
+  defp expr(%Ecto.Query.Tagged{value: value, type: :boolean}, sources, query) do
+    ["TO_BOOL(", expr(value, sources, query), ")"]
+  end
+
   defp expr(nil, _sources, _query), do: "NULL"
   defp expr(true, _sources, _query), do: "TRUE"
   defp expr(false, _sources, _query), do: "FALSE"

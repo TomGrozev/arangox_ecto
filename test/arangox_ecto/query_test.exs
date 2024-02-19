@@ -154,6 +154,15 @@ defmodule ArangoXEctoTest.QueryTest do
              ) =~
                "FOR p0 IN `posts` FILTER (date_add(p0.`posted`, p0.`counter`, 'day') < @1) RETURN [ p0.`_key` ]"
     end
+
+    test "with type casting" do
+      assert {_, "FOR p0 IN `posts` RETURN [ TO_NUMBER(p0.`_key`) ]"} =
+               aql(
+                 from(p in Post,
+                   select: type(p.id, :integer)
+                 )
+               )
+    end
   end
 
   describe "create remove query" do
