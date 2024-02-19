@@ -59,7 +59,12 @@ defmodule ArangoXEcto.Migration.SchemaMigration do
   def versions(repo, config, prefix) do
     {repo, source} = get_repo_and_source(repo, config)
 
-    query = from(m in source, select: m.version)
+    query =
+      if Keyword.get(config, :migration_cast_version_field, false) do
+        from(m in source, select: type(m.version, :integer))
+      else
+        from(m in source, select: m.version)
+      end
 
     {repo, query, [prefix: prefix] ++ @default_opts}
   end
