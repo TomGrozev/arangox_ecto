@@ -360,7 +360,6 @@ defmodule ArangoXEcto.Migration do
       :waitForSync,
       :schema,
       :keyOptions,
-      :type,
       :isSystem,
       :prefix,
       :cacheEnabled,
@@ -370,7 +369,8 @@ defmodule ArangoXEcto.Migration do
       :writeConcern,
       :distributeShardsLike,
       :shardingStrategy,
-      :smartJoinAttribute
+      :smartJoinAttribute,
+      type: 2
     ]
 
     @type t :: %__MODULE__{}
@@ -835,6 +835,12 @@ defmodule ArangoXEcto.Migration do
     Runner.subcommand({:add, field, type, opts})
   end
 
+  def add_if_not_exists(field, type, opts \\ []) when is_atom(field) and is_list(opts) do
+    validate_precision_opts!(opts, field)
+    validate_type!(type)
+    Runner.subcommand({:add_if_not_exists, field, type, opts})
+  end
+
   @doc """
   Renames a collection or a field
 
@@ -885,13 +891,31 @@ defmodule ArangoXEcto.Migration do
   ## Examples
 
       alter collection("users") do
-        remove :name, :string, default: ""
+        remove :name, :string, min_length: 4
       end
 
   """
   def remove(field, type, opts \\ []) when is_atom(field) do
     validate_type!(type)
     Runner.subcommand({:remove, field, type, opts})
+  end
+
+  @doc """
+  Removes a field only if it exists in the schema
+
+  `type` and `opts` are exactly the same as in `add/3`, and
+  they are used when the command is reversed.
+
+  ## Examples
+
+      alter collection("users") do
+        remove_if_exists :name, :string, min_length: 4
+      end
+
+  """
+  def remove_if_exists(field, type, opts \\ []) when is_atom(field) do
+    validate_type!(type)
+    Runner.subcommand({:remove_if_exists, field, type, opts})
   end
 
   @doc """
