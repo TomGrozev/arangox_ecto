@@ -125,12 +125,33 @@ defmodule ArangoXEcto.Migration do
 
     @type feature :: :frequency | :norm | :position
 
+    @valid_types [
+      :identity,
+      :delimiter,
+      :stem,
+      :norm,
+      :ngram,
+      :text,
+      :collation,
+      :aql,
+      :pipeline,
+      :stopwords,
+      :segmentation,
+      :minhash,
+      :classification,
+      :nearest_neighbors,
+      :geojson,
+      :geo_s2,
+      :geopoint
+    ]
+
     @doc """
     Creates a new Analyzer struct
     """
     @spec new(atom() | String.t(), type(), [feature()], map(), prefix: atom()) :: t()
     def new(name, type, features, properties \\ %{}, opts \\ []) do
       validate_name!(name)
+      validate_type!(type)
       validate_features!(features)
       validate_properties!(properties, name, type)
 
@@ -141,26 +162,41 @@ defmodule ArangoXEcto.Migration do
     end
 
     @doc false
-    @spec validate_name!(atom()) :: atom()
+    @spec validate_name!(atom()) :: :ok
     def validate_name!(name) do
       unless is_atom(name) do
         raise ArgumentError, "the name for analyzer must be an atom, got: #{inspect(name)}"
       end
+
+      :ok
+    end
+
+    @doc false
+    @spec validate_type!(atom()) :: :ok
+    def validate_type!(type) do
+      unless type in @valid_types do
+        raise ArgumentError,
+              "the type for analyzer must be one of (#{inspect(@valid_types)}), got: #{inspect(type)}"
+      end
+
+      :ok
     end
 
     @valid_keys [:frequency, :norm, :position]
 
     @doc false
-    @spec validate_features!([atom()]) :: [atom()]
+    @spec validate_features!([atom()]) :: :ok
     def validate_features!(features) do
       unless is_list(features) and Enum.all?(features, &Enum.member?(@valid_keys, &1)) do
         raise ArgumentError,
               "the features provided are invalid, only accepts keys [:frequency, :norm, :position], got: #{inspect(features)}"
       end
+
+      :ok
     end
 
     @doc false
-    @spec validate_properties!([atom()], atom(), type()) :: [atom()]
+    @spec validate_properties!([atom()], atom(), type()) :: :ok
     def validate_properties!(properties, name, type) do
       keys = valid_keys(type)
 
@@ -171,6 +207,8 @@ defmodule ArangoXEcto.Migration do
         raise ArgumentError,
               "the properties provided for analyzer '#{name}' are invalid, only accepts keys #{inspect(keys)}, got: #{inspect(properties)}"
       end
+
+      :ok
     end
 
     defp valid_keys(:delimiter), do: [:delimiter]
