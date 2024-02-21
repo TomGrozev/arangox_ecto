@@ -96,10 +96,10 @@ defmodule ArangoXEcto.Migration do
     @enforce_keys [:name, :type, :features]
     defstruct [
       :name,
-      :properties,
       :type,
       :features,
-      :prefix
+      :prefix,
+      properties: %{}
     ]
 
     @type t :: %__MODULE__{}
@@ -766,7 +766,9 @@ defmodule ArangoXEcto.Migration do
   @doc """
   Represents an analyzer module
   """
-  defdelegate analyzer(name, type, features, properties, opts), to: Analyzer, as: :new
+  defdelegate analyzer(name, type, features, properties \\ %{}, opts \\ []),
+    to: Analyzer,
+    as: :new
 
   @doc """
   Executes arbitrary AQL.
