@@ -5,7 +5,7 @@ defmodule ArangoXEctoTest.MigrationTest do
 
   import ArangoXEcto.Support.FileHelpers
 
-  alias ArangoXEcto.Migration.{Collection, Index}
+  alias ArangoXEcto.Migration.{Analyzer, Collection, Index, View}
   alias ArangoXEcto.TestRepo
   alias ArangoXEcto.Migration.{Runner, SchemaMigration}
   #
@@ -106,6 +106,263 @@ defmodule ArangoXEctoTest.MigrationTest do
                name: "idx_collection_one__collection_two_first_name",
                fields: [:first_name]
              }
+  end
+
+  test "creates an analyzer" do
+    assert analyzer(:a, :identity, [:norm]) == %Analyzer{
+             name: :a,
+             type: :identity,
+             features: [:norm],
+             properties: %{}
+           }
+
+    assert analyzer(:b, :delimiter, [:frequency, :position], %{
+             delimiter: ","
+           }) == %Analyzer{
+             name: :b,
+             type: :delimiter,
+             features: [:frequency, :position],
+             properties: %{
+               delimiter: ","
+             }
+           }
+
+    assert analyzer(:c, :stem, [:frequency, :norm, :position], %{
+             locale: "en"
+           }) == %Analyzer{
+             name: :c,
+             type: :stem,
+             features: [:frequency, :norm, :position],
+             properties: %{
+               locale: "en"
+             }
+           }
+
+    assert analyzer(:d, :norm, [:frequency, :position], %{
+             locale: "en",
+             accent: false,
+             case: :lower
+           }) == %Analyzer{
+             name: :d,
+             type: :norm,
+             features: [:frequency, :position],
+             properties: %{
+               locale: "en",
+               accent: false,
+               case: :lower
+             }
+           }
+
+    assert analyzer(:e, :ngram, [], %{
+             min: 3,
+             max: 5,
+             preserveOriginal: true,
+             startMarker: "a",
+             endMarker: "b",
+             streamType: :binary
+           }) == %Analyzer{
+             name: :e,
+             type: :ngram,
+             features: [],
+             properties: %{
+               min: 3,
+               max: 5,
+               preserveOriginal: true,
+               startMarker: "a",
+               endMarker: "b",
+               streamType: :binary
+             }
+           }
+
+    assert analyzer(:f, :text, [:frequency, :norm], %{
+             locale: "en",
+             accent: false,
+             case: :lower,
+             stemming: false,
+             edgeNgram: %{
+               min: 3
+             },
+             stopwords: ["abc"]
+           }) == %Analyzer{
+             name: :f,
+             type: :text,
+             features: [:frequency, :norm],
+             properties: %{
+               locale: "en",
+               accent: false,
+               case: :lower,
+               stemming: false,
+               edgeNgram: %{
+                 min: 3
+               },
+               stopwords: ["abc"]
+             }
+           }
+
+    assert analyzer(:g, :collation, [:frequency], %{
+             locale: "en"
+           }) == %Analyzer{
+             name: :g,
+             type: :collation,
+             features: [:frequency],
+             properties: %{
+               locale: "en"
+             }
+           }
+
+    assert analyzer(:h, :aql, [:norm], %{
+             queryString: "RETURN SOUNDEX(@param)",
+             collapsePositions: true,
+             keepNull: false,
+             batchSize: 500,
+             memoryLimit: 2_097_152,
+             returnType: :string
+           }) == %Analyzer{
+             name: :h,
+             type: :aql,
+             features: [:norm],
+             properties: %{
+               queryString: "RETURN SOUNDEX(@param)",
+               collapsePositions: true,
+               keepNull: false,
+               batchSize: 500,
+               memoryLimit: 2_097_152,
+               returnType: :string
+             }
+           }
+
+    assert analyzer(:i, :pipeline, [:frequency], %{
+             pipeline: [
+               analyzer(:x, :norm, [], %{
+                 locale: "en",
+                 accent: false,
+                 case: :lower
+               }),
+               analyzer(:y, :text, [], %{
+                 locale: "en",
+                 accent: false,
+                 stemming: true,
+                 case: :lower
+               })
+             ]
+           }) == %Analyzer{
+             name: :i,
+             type: :pipeline,
+             features: [:frequency],
+             properties: %{
+               pipeline: [
+                 %Analyzer{
+                   name: :x,
+                   type: :norm,
+                   features: [],
+                   properties: %{
+                     locale: "en",
+                     accent: false,
+                     case: :lower
+                   }
+                 },
+                 %Analyzer{
+                   name: :y,
+                   type: :text,
+                   features: [],
+                   properties: %{
+                     locale: "en",
+                     accent: false,
+                     stemming: true,
+                     case: :lower
+                   }
+                 }
+               ]
+             }
+           }
+
+    assert analyzer(:j, :stopwords, [], %{
+             stopwords: ["xyz"],
+             hex: false
+           }) == %Analyzer{
+             name: :j,
+             type: :stopwords,
+             features: [],
+             properties: %{
+               stopwords: ["xyz"],
+               hex: false
+             }
+           }
+
+    assert analyzer(:k, :segmentation, [], %{
+             break: :all,
+             case: :none
+           }) == %Analyzer{
+             name: :k,
+             type: :segmentation,
+             features: [],
+             properties: %{
+               break: :all,
+               case: :none
+             }
+           }
+
+    assert analyzer(:l, :geojson, [:norm], %{
+             type: :shape,
+             options: %{
+               maxCells: 21,
+               minLevel: 5,
+               maxLevel: 24
+             }
+           }) == %Analyzer{
+             name: :l,
+             type: :geojson,
+             features: [:norm],
+             properties: %{
+               type: :shape,
+               options: %{
+                 maxCells: 21,
+                 minLevel: 5,
+                 maxLevel: 24
+               }
+             }
+           }
+
+    assert analyzer(:m, :geopoint, [:norm], %{
+             latitude: ["lat", "latitude"],
+             longitude: ["long", "longitude"],
+             options: %{
+               maxCells: 21,
+               minLevel: 5,
+               maxLevel: 24
+             }
+           }) == %Analyzer{
+             name: :m,
+             type: :geopoint,
+             features: [:norm],
+             properties: %{
+               latitude: ["lat", "latitude"],
+               longitude: ["long", "longitude"],
+               options: %{
+                 maxCells: 21,
+                 minLevel: 5,
+                 maxLevel: 24
+               }
+             }
+           }
+  end
+
+  test "should validate analyzer types" do
+    assert_raise ArgumentError, ~r"the name for analyzer must be an atom", fn ->
+      analyzer(123, :text, [])
+    end
+
+    assert_raise ArgumentError, ~r"the type for analyzer must be one of", fn ->
+      analyzer(:abc, :fake, [])
+    end
+
+    assert_raise ArgumentError, ~r"the features provided are invalid, only accepts keys", fn ->
+      analyzer(:abc, :norm, [:fake])
+    end
+
+    assert_raise ArgumentError, ~r"are invalid, only accepts keys", fn ->
+      analyzer(:abc, :text, [], %{fake: "fake_value"})
+    end
   end
 
   test ":migration_cast_version_field option" do
