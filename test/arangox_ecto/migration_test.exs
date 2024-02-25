@@ -365,6 +365,28 @@ defmodule ArangoXEctoTest.MigrationTest do
     end
   end
 
+  test "create a view" do
+    assert view(:user_search) == %View{name: "user_search", type: "arangosearch"}
+    assert view("user_search") == %View{name: "user_search", type: "arangosearch"}
+
+    assert view(:user_search, type: "something else") == %View{
+             name: "user_search",
+             type: "arangosearch"
+           }
+
+    assert view(:user_search, primarySortCompression: "none") == %View{
+             name: "user_search",
+             type: "arangosearch",
+             primarySortCompression: "none"
+           }
+
+    assert view(:user_search, prefix: "foo") == %View{
+             name: "user_search",
+             type: "arangosearch",
+             prefix: "foo"
+           }
+  end
+
   test ":migration_cast_version_field option" do
     {_repo, query, _options} =
       SchemaMigration.versions(TestRepo, [migration_cast_version_field: true], "")
