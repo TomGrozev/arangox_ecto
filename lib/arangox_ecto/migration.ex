@@ -46,6 +46,7 @@ defmodule ArangoXEcto.Migration do
 
   require Logger
 
+  alias ArangoXEcto.View.Link
   alias ArangoXEcto.Migration.Runner
 
   @typedoc "All migration commands"
@@ -79,13 +80,50 @@ defmodule ArangoXEcto.Migration do
     Represents a view module in ArangoDB
     """
 
-    @enforce_keys [:module]
+    @enforce_keys [:name]
     defstruct [
-      :module,
-      :prefix
+      :name,
+      :consolidationIntervalMsec,
+      :consolidationPolicy,
+      :commitIntervalMsec,
+      :writebufferSizeMax,
+      :writebufferIdle,
+      :writebufferActive,
+      :cleanupIntervalStep,
+      :primarySortCompression,
+      :prefix,
+      type: "arangosearch",
+      links: %{},
+      primarySort: [],
+      storedValues: []
     ]
 
     @type t :: %__MODULE__{}
+
+    @type view_option ::
+            :consolidationIntervalMsec
+            | :consolidationPolicy
+            | :commitIntervalMsec
+            | :writebufferSizeMax
+            | :writebufferIdle
+            | :writebufferActive
+            | :cleanupIntervalStep
+            | :primarySortCompression
+            | :prefix
+
+    @doc """
+    Creates a new View struct
+    """
+    @spec new(atom() | String.t(), [view_option()]) :: t()
+    def new(name, opts \\ [])
+    def new(name, opts) when is_atom(name), do: new(Atom.to_string(name), opts)
+
+    def new(name, opts) do
+      keys =
+        Keyword.put(opts, :name, name)
+
+      struct(__MODULE__, keys)
+    end
   end
 
   defmodule Analyzer do
@@ -149,8 +187,12 @@ defmodule ArangoXEcto.Migration do
     Creates a new Analyzer struct
     """
     @spec new(atom() | String.t(), type(), [feature()], map(), prefix: atom()) :: t()
-    def new(name, type, features, properties \\ %{}, opts \\ []) do
-      validate_name!(name)
+    def new(name, type, features, properties \\ %{}, opts \\ [])
+
+    def new(name, type, features, properties, opts) when is_atom(name),
+      do: new(Atom.to_string(name), type, features, properties, opts)
+
+    def new(name, type, features, properties, opts) when is_binary(name) do
       validate_type!(type)
       validate_features!(features)
       validate_properties!(properties, name, type)
@@ -159,16 +201,6 @@ defmodule ArangoXEcto.Migration do
         Keyword.merge(opts, name: name, type: type, features: features, properties: properties)
 
       struct(__MODULE__, keys)
-    end
-
-    @doc false
-    @spec validate_name!(atom()) :: :ok
-    def validate_name!(name) do
-      unless is_atom(name) do
-        raise ArgumentError, "the name for analyzer must be an atom, got: #{inspect(name)}"
-      end
-
-      :ok
     end
 
     @doc false
@@ -524,12 +556,18 @@ defmodule ArangoXEcto.Migration do
 
   defp expand_create(object, command, block) do
     quote do
-      collection = %Collection{} = unquote(object)
-      Runner.start_command({unquote(command), ArangoXEcto.Migration.__prefix__(collection)})
+      object = unquote(object)
+
+      unless object.__struct__ in [Collection, View] do
+        raise Ecto.MigrationError,
+              "subcommands can only be passed when creating a Collection or a View, was passed: `#{object.__struct__}`"
+      end
+
+      Runner.start_command({unquote(command), ArangoXEcto.Migration.__prefix__(object)})
       unquote(block)
       Runner.end_command()
 
-      collection
+      object
     end
   end
 
@@ -574,14 +612,18 @@ defmodule ArangoXEcto.Migration do
     do_create(collection, :create)
   end
 
+  def create(%View{} = view) do
+    do_create(view, :create)
+  end
+
   def create(%Index{} = index) do
     Runner.execute({:create, __prefix__(index)})
     index
   end
 
-  def create(%mod{} = view_or_analyzer) when mod in [View, Analyzer] do
-    Runner.execute({:create, __prefix__(view_or_analyzer)})
-    mod
+  def create(%Analyzer{} = analyzer) do
+    Runner.execute({:create, __prefix__(analyzer)})
+    analyzer
   end
 
   @doc """
@@ -602,8 +644,8 @@ defmodule ArangoXEcto.Migration do
     do_create(collection, :create_if_not_exists)
   end
 
-  defp do_create(collection, command) do
-    Runner.execute({command, __prefix__(collection), []})
+  defp do_create(collection_or_view, command) do
+    Runner.execute({command, __prefix__(collection_or_view), []})
   end
 
   @doc """
@@ -618,10 +660,10 @@ defmodule ArangoXEcto.Migration do
       drop collection("posts")
 
   """
-  def drop(%mod{} = collection_or_index) when mod in [Collection, Index] do
-    Runner.execute({:drop, __prefix__(collection_or_index)})
+  def drop(%mod{} = object) when mod in [Collection, Index, View, Analyzer] do
+    Runner.execute({:drop, __prefix__(object)})
 
-    collection_or_index
+    object
   end
 
   @doc """
@@ -635,10 +677,11 @@ defmodule ArangoXEcto.Migration do
       drop_if_exists collection("posts")
 
   """
-  def drop_if_exists(%mod{} = collection_or_index) when mod in [Collection, Index] do
-    Runner.execute({:drop_if_exists, __prefix__(collection_or_index)})
+  def drop_if_exists(%mod{} = object)
+      when mod in [Collection, Index, View, Analyzer] do
+    Runner.execute({:drop_if_exists, __prefix__(object)})
 
-    collection_or_index
+    object
   end
 
   @doc """
@@ -756,12 +799,7 @@ defmodule ArangoXEcto.Migration do
   @doc """
   Represents a view module
   """
-  @spec view(module(), Keyword.t()) :: View.t()
-  def view(module, opts \\ []) when is_list(opts) do
-    keys = [module: module] |> Keyword.merge(opts)
-
-    struct(View, keys)
-  end
+  defdelegate view(name, opts \\ []), to: View, as: :new
 
   @doc """
   Represents an analyzer module
@@ -879,6 +917,33 @@ defmodule ArangoXEcto.Migration do
     validate_precision_opts!(opts, field)
     validate_type!(type)
     Runner.subcommand({:add_if_not_exists, field, type, opts})
+  end
+
+  @doc """
+  Adds a primary sort to a view.
+  """
+  def add_sort(field, direction \\ :asc) when is_atom(field) and direction in [:asc, :desc] do
+    Runner.subcommand({:add_sort, field, direction})
+  end
+
+  @doc """
+  Adds a stored value to a view.
+  """
+  def add_store(fields, compression \\ :lz4) when compression in [:none, :lz4] do
+    Runner.subcommand({:add_store, fields, compression})
+  end
+
+  @doc """
+  Adds a link to a view.
+
+  Uses a `ArangoXEcto.View.Link` struct to define the link
+  """
+  def add_link(schema_name, link) when is_atom(schema_name),
+    do: add_link(Atom.to_string(schema_name), link)
+
+  def add_link(schema_name, %Link{} = link) when is_binary(schema_name) do
+    validate_link!(link)
+    Runner.subcommand({:add_link, schema_name, link})
   end
 
   @doc """
@@ -1073,6 +1138,14 @@ defmodule ArangoXEcto.Migration do
   ###########
 
   # Validation helpers
+  defp validate_link!(%Link{} = link) do
+    if Link.valid?(link) do
+      :ok
+    else
+      raise Ecto.MigrationError, "the passed link is invalid got: #{inspect(link)}"
+    end
+  end
+
   defp validate_type!(type) when is_atom(type) do
     case Atom.to_string(type) do
       "Elixir." <> _ ->

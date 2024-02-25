@@ -383,33 +383,6 @@ defmodule ArangoXEcto.View do
     end
   end
 
-  @doc """
-  Generates the view definition
-
-  This takes the macros that define the view and converts it into
-  a definition for use on creation.
-  """
-  @spec definition(Module.t()) :: map()
-  def definition(view) when is_atom(view) do
-    if Code.ensure_loaded?(view) and function_exported?(view, :__view__, 1) do
-      opts = Enum.into(view.__view__(:options), %{})
-
-      %{
-        name: view.__view__(:name),
-        type: "arangosearch",
-        links: %{},
-        primarySort: [],
-        storedValues: []
-      }
-      |> add_links(view)
-      |> add_primary_sort(view)
-      |> add_stored_values(view)
-      |> Map.merge(opts)
-    else
-      raise ArgumentError, "#{inspect(view)} is not a valid view schema"
-    end
-  end
-
   @doc false
   def __schema__(links) do
     {primary_keys, query_fields, fields, field_sources} =
@@ -446,29 +419,6 @@ defmodule ArangoXEcto.View do
                                                                          a_field_sources} ->
       {Map.put_new(a_fields, field, schema.__schema__(:type, field)),
        Map.put_new(a_field_sources, field, schema.__schema__(:field_source, field))}
-    end)
-  end
-
-  defp add_links(map, view) do
-    view.__view__(:links)
-    |> Enum.reduce(map, fn {schema, link}, acc ->
-      put_in(acc, [:links, schema.__schema__(:source)], Link.to_map(link))
-    end)
-  end
-
-  defp add_stored_values(map, view) do
-    view.__view__(:stored_values)
-    |> Enum.reduce(map, fn {fields, compression}, acc ->
-      val = %{fields: fields, compression: compression}
-      Map.update!(acc, :storedValues, &[val | &1])
-    end)
-  end
-
-  defp add_primary_sort(map, view) do
-    view.__view__(:primary_sort)
-    |> Enum.reduce(map, fn {field, direction}, acc ->
-      val = %{field: field, direction: direction}
-      Map.update!(acc, :primarySort, &[val | &1])
     end)
   end
 end

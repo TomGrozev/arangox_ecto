@@ -605,6 +605,9 @@ defmodule ArangoXEcto.Migrator do
           %{},
           opts
         )
+
+      error ->
+        error
     end
     |> process_existing(command)
     |> log_execute()
@@ -613,11 +616,11 @@ defmodule ArangoXEcto.Migrator do
   # View
   def execute_command(
         meta,
-        {command, %View{module: module, prefix: prefix}},
+        {command, %View{prefix: prefix} = view, subcommands},
         opts
       )
       when command in @creates do
-    view_definition = ArangoXEcto.View.definition(module)
+    view_definition = generate_view_definition(view, subcommands)
 
     opts = Keyword.put(opts, :prefix, prefix)
 
@@ -635,12 +638,10 @@ defmodule ArangoXEcto.Migrator do
 
   def execute_command(
         meta,
-        {command, %View{module: module, prefix: prefix}},
+        {command, %View{name: name, prefix: prefix}},
         opts
       )
       when command in @drops do
-    name = module.__view__(:name)
-
     opts = Keyword.put(opts, :prefix, prefix)
 
     ArangoXEcto.api_query(
@@ -699,6 +700,23 @@ defmodule ArangoXEcto.Migrator do
   ###########
   # Helpers #
   ###########
+
+  def generate_view_definition(%View{} = view, subcommands) do
+    view =
+      Map.from_struct(view)
+      |> Map.reject(fn {_k, v} -> is_nil(v) end)
+
+    Enum.reduce(subcommands, view, fn
+      {:add_sort, field, direction}, acc ->
+        Map.update!(acc, :primarySort, &[%{field: field, direction: direction} | &1])
+
+      {:add_store, fields, compression}, acc ->
+        Map.update!(acc, :storedValues, &[%{fields: fields, compression: compression} | &1])
+
+      {:add_link, schema_name, link}, acc ->
+        put_in(acc, [:links, schema_name], ArangoXEcto.View.Link.to_map(link))
+    end)
+  end
 
   defp get_index_id_by_name(meta, %Index{collection_name: collection_name, name: name}, opts) do
     ArangoXEcto.api_query(
@@ -769,6 +787,7 @@ defmodule ArangoXEcto.Migrator do
   defp log_execute({:ok, msg}) when is_binary(msg), do: {:info, msg, []}
   defp log_execute({:ok, _}), do: {:info, "completed successfully", []}
   defp log_execute({:error, %Arangox.Error{message: message}}), do: {:error, message, []}
+  defp log_execute({:error, message}), do: {:error, message, []}
   defp log_execute(res), do: res
 
   defp pending_to(versions, migration_source, direction, target) when is_integer(target) do
@@ -944,7 +963,10 @@ defmodule ArangoXEcto.Migrator do
     if module.__migration__()[:disable_ddl_transaction] do
       fun.()
     else
-      {:ok, result} = repo.transaction(fun, log: migrator_log(opts), timeout: :infinity)
+      {_, source} = SchemaMigration.get_repo_and_source(repo, repo.config())
+
+      {:ok, result} =
+        repo.transaction(fun, log: migrator_log(opts), timeout: :infinity, write: [source])
 
       result
     end

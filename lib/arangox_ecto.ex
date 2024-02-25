@@ -394,9 +394,23 @@ defmodule ArangoXEcto do
       end)
     end
 
-    view_def = Migration.view(view, opts)
+    name = view.__view__(:name)
+    options = view.__view__(:options)
+    links = view.__view__(:links)
+    primary_sort = view.__view__(:primary_sort)
+    stored_values = view.__view__(:stored_values)
 
-    case repo.__adapter__().execute_ddl(repo, {:create, view_def}, opts) do
+    view_def = Migration.view(name, Keyword.merge(options, opts))
+
+    subcommands =
+      [add_link: links, add_sort: primary_sort, add_stored: stored_values]
+      |> Enum.reduce([], fn {type, list}, acc ->
+        Enum.reduce(list, acc, fn {arg1, arg2}, acc2 ->
+          [{type, arg1, arg2} | acc2]
+        end)
+      end)
+
+    case repo.__adapter__().execute_ddl(repo, {:create, view_def, subcommands}, opts) do
       {:info, _, _} -> :ok
       {:error, reason} -> {:error, reason}
     end

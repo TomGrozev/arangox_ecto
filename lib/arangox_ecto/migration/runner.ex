@@ -114,22 +114,25 @@ defmodule ArangoXEcto.Migration.Runner do
   def subcommand(subcommand) do
     Agent.get_and_update(runner(), fn
       %{command: nil} = state ->
-        {:error, state}
+        {{:error, "cannot execute command outside of block"}, state}
 
-      %{subcommands: [{embed_opt, name, subcommands, opts} | t]} = state
+      %{command: command, subcommands: [{embed_opt, name, subcommands, opts} | t]} = state
       when embed_opt in [:add_embed, :modify_embed] ->
-        {:ok,
-         put_in(state.subcommands, [{embed_opt, name, [subcommand | subcommands], opts} | t])}
+        validate_type(command, subcommand, state, fn ->
+          put_in(state.subcommands, [{embed_opt, name, [subcommand | subcommands], opts} | t])
+        end)
 
-      state ->
-        {:ok, update_in(state.subcommands, &[subcommand | &1])}
+      %{command: command} = state ->
+        validate_type(command, subcommand, state, fn ->
+          update_in(state.subcommands, &[subcommand | &1])
+        end)
     end)
     |> case do
       :ok ->
         :ok
 
-      :error ->
-        raise Ecto.MigrationError, message: "cannot execute command outside of block"
+      {:error, msg} ->
+        raise Ecto.MigrationError, message: msg
     end
   end
 
@@ -233,6 +236,26 @@ defmodule ArangoXEcto.Migration.Runner do
   # Execute #
   ###########
 
+  defp validate_type(command, subcommand, state, fun) do
+    command =
+      elem(command, 1)
+      |> then(& &1.__struct__)
+
+    subcommand = elem(subcommand, 0)
+
+    case command do
+      View when subcommand in [:add_sort, :add_store, :add_link] ->
+        {:ok, fun.()}
+
+      Collection
+      when subcommand in [:add, :modify, :remove, :rename, :add_embed, :modify_embed] ->
+        {:ok, fun.()}
+
+      _ ->
+        {{:error, "invalid subcommand type `#{subcommand}` for command `#{command}`"}, state}
+    end
+  end
+
   defp execute_in_direction(repo, module, :forward, log, %Command{up: up}),
     do: log_and_execute_command(repo, module, log, up)
 
@@ -290,10 +313,10 @@ defmodule ArangoXEcto.Migration.Runner do
     do: {:drop_if_exists, analyzer}
 
   # View
-  defp reverse({:create, %View{} = view}),
+  defp reverse({:create, %View{} = view, _}),
     do: {:drop, view}
 
-  defp reverse({:create_if_not_exists, %View{} = view}),
+  defp reverse({:create_if_not_exists, %View{} = view, _}),
     do: {:drop_if_exists, view}
 
   defp reverse(_command), do: false
@@ -415,21 +438,21 @@ defmodule ArangoXEcto.Migration.Runner do
     do: "drop analyzer if exists #{quote_name(prefix, name)}"
 
   # View
-  defp command({:create, %View{prefix: prefix, module: module}}),
-    do: "create view #{quote_name(prefix, module)}"
+  defp command({:create, %View{prefix: prefix, name: name}, _}),
+    do: "create view #{quote_name(prefix, name)}"
 
-  defp command({:create_if_not_exists, %View{prefix: prefix, module: module}}),
-    do: "create view if not exists #{quote_name(prefix, module)}"
+  defp command({:create_if_not_exists, %View{prefix: prefix, name: name}, _}),
+    do: "create view if not exists #{quote_name(prefix, name)}"
 
   defp command({:rename, %View{} = current_view, %View{} = new_view}),
     do:
-      "rename view #{quote_name(current_view.prefix, current_view.module)} to #{quote_name(new_view.prefix, new_view.module)}"
+      "rename view #{quote_name(current_view.prefix, current_view.name)} to #{quote_name(new_view.prefix, new_view.name)}"
 
-  defp command({:drop, %View{prefix: prefix, module: module}}),
-    do: "drop view #{quote_name(prefix, module)}"
+  defp command({:drop, %View{prefix: prefix, name: name}}),
+    do: "drop view #{quote_name(prefix, name)}"
 
-  defp command({:drop_if_exists, %View{prefix: prefix, module: module}}),
-    do: "drop view if exists #{quote_name(prefix, module)}"
+  defp command({:drop_if_exists, %View{prefix: prefix, name: name}}),
+    do: "drop view if exists #{quote_name(prefix, name)}"
 
   # Collection
   defp command({:create, %Collection{prefix: prefix, name: name}, _}),
