@@ -120,7 +120,7 @@ defmodule ArangoXEcto.Migration do
 
     def new(name, opts) do
       keys =
-        Keyword.put(opts, :name, name)
+        Keyword.merge(opts, name: name, type: "arangosearch")
 
       struct(__MODULE__, keys)
     end
