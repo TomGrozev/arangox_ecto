@@ -235,7 +235,7 @@ defmodule ArangoXEcto.Adapter do
   def execute_ddl(meta, command, opts) do
     logs = ArangoXEcto.Migrator.execute_command(meta, command, opts)
 
-    {:ok, logs}
+    {:ok, List.wrap(logs)}
   end
 
   @doc false
