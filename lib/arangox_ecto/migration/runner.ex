@@ -244,7 +244,17 @@ defmodule ArangoXEcto.Migration.Runner do
     subcommand = elem(subcommand, 0)
 
     case command do
-      View when subcommand in [:add_sort, :add_store, :add_link] ->
+      View
+      when subcommand in [
+             :add_sort,
+             :add_store,
+             :add_link,
+             :modify_sort,
+             :modify_store,
+             :remove_sort,
+             :remove_store,
+             :remove_link
+           ] ->
         {:ok, fun.()}
 
       Collection
@@ -443,6 +453,9 @@ defmodule ArangoXEcto.Migration.Runner do
 
   defp command({:create_if_not_exists, %View{prefix: prefix, name: name}, _}),
     do: "create view if not exists #{quote_name(prefix, name)}"
+
+  defp command({:alter, %View{prefix: prefix, name: name}, _}),
+    do: "alter view #{quote_name(prefix, name)}"
 
   defp command({:rename, %View{} = current_view, %View{} = new_view}),
     do:

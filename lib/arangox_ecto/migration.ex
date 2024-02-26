@@ -560,7 +560,7 @@ defmodule ArangoXEcto.Migration do
 
       unless object.__struct__ in [Collection, View] do
         raise Ecto.MigrationError,
-              "subcommands can only be passed when creating a Collection or a View, was passed: `#{object.__struct__}`"
+              "subcommands can only be passed when creating a Collection or a View, the following was passed: `#{object.__struct__}`"
       end
 
       Runner.start_command({unquote(command), ArangoXEcto.Migration.__prefix__(object)})
@@ -585,8 +585,14 @@ defmodule ArangoXEcto.Migration do
   """
   defmacro alter(object, do: block) do
     quote do
-      collection = %Collection{} = unquote(object)
-      Runner.start_command({:alter, ArangoXEcto.Migration.__prefix__(collection)})
+      object = unquote(object)
+
+      unless object.__struct__ in [Collection, View] do
+        raise Ecto.MigrationError,
+              "subcommands can only be passed when altering a Collection or a View, the following was passed: `#{object.__struct__}`"
+      end
+
+      Runner.start_command({:alter, ArangoXEcto.Migration.__prefix__(object)})
       unquote(block)
       Runner.end_command()
     end
@@ -930,7 +936,7 @@ defmodule ArangoXEcto.Migration do
   Adds a stored value to a view.
   """
   def add_store(fields, compression \\ :lz4) when compression in [:none, :lz4] do
-    Runner.subcommand({:add_store, fields, compression})
+    Runner.subcommand({:add_store, List.wrap(fields), compression})
   end
 
   @doc """
@@ -1066,6 +1072,181 @@ defmodule ArangoXEcto.Migration do
 
       :ok
     end
+  end
+
+  @doc """
+  Modifies the direction of a primary sort when altering a view.
+
+  This command is not reversible unless the `:from` option is provided.
+
+  See `add_sort/2` for more information on supported types.
+
+  ## Examples
+
+      alter view("user_search") do
+        modify_sort :name, :asc
+      end
+
+      # Self rollback when using the :from option
+      alter view("user_search") do
+        modify_sort :name, :asc, from: :desc
+      end
+
+  ## Options
+
+    * `:from` - specifies the current direction of the field.
+  """
+  def modify_sort(field, direction, opts \\ [])
+      when is_atom(field) and direction in [:asc, :desc] and is_list(opts) do
+    Runner.subcommand({:modify_sort, field, direction, opts})
+  end
+
+  @doc """
+  Modifies the compression of a stored value when altering a view.
+
+  This command is not reversible unless the `:from` option is provided.
+
+  See `add_store/2` for more information on supported types.
+
+  ## Examples
+
+      alter view("user_search") do
+        modify_store :name, :lz4
+      end
+
+      # Self rollback when using the :from option
+      alter view("user_search") do
+        modify_store :name, :lz4, from: :none
+      end
+
+  ## Options
+
+    * `:from` - specifies the current compression of the field.
+  """
+  def modify_store(fields, compression, opts \\ [])
+
+  def modify_store(field, compression, opts) when is_atom(field),
+    do: modify_store([field], compression, opts)
+
+  def modify_store(fields, compression, opts)
+      when is_list(fields) and compression in [:lz4, :none] and is_list(opts) do
+    Runner.subcommand({:modify_store, fields, compression, opts})
+  end
+
+  @doc """
+  Removes a primary sort when altering a view.
+
+  If it doesn't exist it will simply be ignored.
+
+  This command is not reversible as Ecto does not know what type it should add
+  the field back as. See `remove_sort/2` as a reversible alternative.
+
+  ## Examples
+
+      alter view("user_search") do
+        remove_sort :name
+      end
+
+  """
+  def remove_sort(field) when is_atom(field) do
+    Runner.subcommand({:remove_sort, field})
+  end
+
+  @doc """
+  Removes a primary sort in a reversable way when altering a view.
+
+  `direction` is the same as in `add_sort/2`.
+
+  ## Examples
+
+      alter view("user_search") do
+        remove_sort :name, :asc
+      end
+
+  """
+  def remove_sort(field, direction) when is_atom(field) and direction in [:asc, :desc] do
+    Runner.subcommand({:remove_sort, field, direction})
+  end
+
+  @doc """
+  Removes a stored value when altering a view.
+
+  If it doesn't exist it will simply be ignored.
+
+  This command is not reversible as Ecto does not know what type it should add
+  the field back as. See `remove_store/2` as a reversible alternative.
+
+  ## Examples
+
+      alter view("user_search") do
+        remove_store [:name, :email]
+      end
+
+  """
+  def remove_store(fields) when is_list(fields) do
+    Runner.subcommand({:remove_store, fields})
+  end
+
+  @doc """
+  Removes a stored value in a reversable way when altering a view.
+
+  `compression` is the same as in `add_store/2`.
+
+  ## Examples
+
+      alter view("user_search") do
+        remove_store [:name, :email], :lz4
+      end
+
+  """
+  def remove_store(fields, compression) when is_list(fields) and compression in [:lz4, :none] do
+    Runner.subcommand({:remove_store, fields, compression})
+  end
+
+  @doc """
+  Removes a link when altering a view.
+
+  If it doesn't exist it will simply be ignored.
+
+  This command is not reversible as Ecto does not know what type it should add
+  the field back as. See `remove_link/2` as a reversible alternative.
+
+  ## Examples
+
+      alter view("user_search") do
+        remove_link "users"
+      end
+
+  """
+  def remove_link(schema_name) when is_binary(schema_name) or is_atom(schema_name) do
+    Runner.subcommand({:remove_link, "#{schema_name}"})
+  end
+
+  @doc """
+  Removes a link in a reversable way when altering a view.
+
+  `link` is the same as in `add_link/2`.
+
+  ## Examples
+
+      alter view("user_search") do
+        remove_link "users", %Link{
+          includeAllFields: true,
+          fields: %{
+            last_name: %Link{
+              analyzers: [:text_en]
+            }
+          }
+        }
+      end
+
+  """
+  def remove_link(schema_name, link) when is_atom(schema_name),
+    do: remove_link(Atom.to_string(schema_name), link)
+
+  def remove_link(schema_name, %Link{} = link) when is_binary(schema_name) do
+    validate_link!(link)
+    Runner.subcommand({:remove_link, schema_name, link})
   end
 
   @doc """

@@ -5,6 +5,7 @@ defmodule ArangoXEctoTest.MigrationTest do
 
   import ArangoXEcto.Support.FileHelpers
 
+  alias ArangoXEcto.View.Link
   alias ArangoXEcto.Migration.{Analyzer, Collection, Index, View}
   alias ArangoXEcto.TestRepo
   alias ArangoXEcto.Migration.{Runner, SchemaMigration}
@@ -596,6 +597,120 @@ defmodule ArangoXEctoTest.MigrationTest do
                last_command()
 
       assert result == collection(:new_users)
+    end
+
+    test "creates a view" do
+      result =
+        create(view = view(:user_search)) do
+          add_sort(:created_at, :desc)
+          add_sort(:name)
+
+          add_store([:email], :lz4)
+          add_store([:first_name, :last_name], :none)
+
+          add_link("new_test", %Link{
+            includeAllFields: true,
+            fields: %{
+              first_name: %Link{
+                analyzers: [:text_en]
+              }
+            }
+          })
+        end
+
+      flush()
+
+      assert last_command() ==
+               {:create, view,
+                [
+                  {:add_sort, :created_at, :desc},
+                  {:add_sort, :name, :asc},
+                  {:add_store, [:email], :lz4},
+                  {:add_store, [:first_name, :last_name], :none},
+                  {:add_link, "new_test",
+                   %ArangoXEcto.View.Link{
+                     fields: %{
+                       first_name: %ArangoXEcto.View.Link{
+                         analyzers: [:text_en]
+                       }
+                     },
+                     includeAllFields: true
+                   }}
+                ]}
+
+      assert result == view(:user_search)
+    end
+
+    test "create view without schema" do
+      create view = view("user_search")
+      flush()
+
+      assert last_command() ==
+               {:create, view, []}
+    end
+
+    test "alters a view" do
+      alter view(:user_search) do
+        add_sort(:last_name, :asc)
+        add_store(:last_name, :lz4)
+
+        add_link("new_test", %Link{
+          includeAllFields: true,
+          fields: %{
+            last_name: %Link{
+              analyzers: [:text_en]
+            }
+          }
+        })
+
+        modify_sort(:last_name, :desc)
+        modify_sort(:first_name, :desc, from: :asc)
+        modify_store(:first_name, :none)
+        modify_store(:last_name, :none, from: :lz4)
+
+        remove_sort(:name)
+        remove_store([:first_name, :last_name], :none)
+        remove_link("new_test")
+      end
+
+      flush()
+
+      assert last_command() ==
+               {:alter, %View{name: "user_search"},
+                [
+                  {:add_sort, :last_name, :asc},
+                  {:add_store, [:last_name], :lz4},
+                  {:add_link, "new_test",
+                   %ArangoXEcto.View.Link{
+                     fields: %{
+                       last_name: %ArangoXEcto.View.Link{
+                         analyzers: [:text_en]
+                       }
+                     },
+                     includeAllFields: true
+                   }},
+                  {:modify_sort, :last_name, :desc, []},
+                  {:modify_sort, :first_name, :desc, [from: :asc]},
+                  {:modify_store, [:first_name], :none, []},
+                  {:modify_store, [:last_name], :none, [from: :lz4]},
+                  {:remove_sort, :name},
+                  {:remove_store, [:first_name, :last_name], :none},
+                  {:remove_link, "new_test"}
+                ]}
+    end
+
+    test "drops a view" do
+      result = drop view(:user_search)
+      flush()
+      assert {:drop, %View{}} = last_command()
+      assert result == view(:user_search)
+    end
+
+    test "drops a view if view exists" do
+      result = drop_if_exists view(:user_search)
+      flush()
+      assert {:drop_if_exists, %View{}} = last_command()
+      assert result == view(:user_search)
     end
 
     # prefix
