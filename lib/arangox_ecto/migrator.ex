@@ -638,6 +638,55 @@ defmodule ArangoXEcto.Migrator do
 
   def execute_command(
         meta,
+        {:alter, %View{name: name, prefix: prefix} = view, subcommands},
+        opts
+      ) do
+    view_definition = generate_view_definition(view, subcommands)
+
+    opts = Keyword.put(opts, :prefix, prefix)
+
+    ArangoXEcto.api_query(
+      meta,
+      :patch,
+      ArangoXEcto.__build_connection_url__(
+        meta,
+        "view/#{name}/properties",
+        opts
+      ),
+      view_definition,
+      %{},
+      opts
+    )
+    |> log_execute()
+  end
+
+  def execute_command(
+        meta,
+        {:rename, %View{name: current_name, prefix: prefix},
+         %View{name: new_name, prefix: prefix}},
+        opts
+      ) do
+    args = %{name: new_name}
+
+    opts = Keyword.put(opts, :prefix, prefix)
+
+    ArangoXEcto.api_query(
+      meta,
+      :put,
+      ArangoXEcto.__build_connection_url__(
+        meta,
+        "view/#{current_name}/rename",
+        opts
+      ),
+      args,
+      %{},
+      opts
+    )
+    |> log_execute()
+  end
+
+  def execute_command(
+        meta,
         {command, %View{name: name, prefix: prefix}},
         opts
       )

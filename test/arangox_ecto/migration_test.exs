@@ -3,20 +3,10 @@ defmodule ArangoXEctoTest.MigrationTest do
 
   use ArangoXEcto.Migration
 
-  import ArangoXEcto.Support.FileHelpers
-
   alias ArangoXEcto.View.Link
   alias ArangoXEcto.Migration.{Analyzer, Collection, Index, View}
   alias ArangoXEcto.TestRepo
   alias ArangoXEcto.Migration.{Runner, SchemaMigration}
-  #
-  # @test_collections [
-  #   :something
-  # ]
-  #
-  # @test_views [
-  #   :user_search
-  # ]
 
   setup meta do
     config = Application.get_env(:arangox_ecto, TestRepo, [])
@@ -111,7 +101,7 @@ defmodule ArangoXEctoTest.MigrationTest do
 
   test "creates an analyzer" do
     assert analyzer(:a, :identity, [:norm]) == %Analyzer{
-             name: :a,
+             name: "a",
              type: :identity,
              features: [:norm],
              properties: %{}
@@ -120,7 +110,7 @@ defmodule ArangoXEctoTest.MigrationTest do
     assert analyzer(:b, :delimiter, [:frequency, :position], %{
              delimiter: ","
            }) == %Analyzer{
-             name: :b,
+             name: "b",
              type: :delimiter,
              features: [:frequency, :position],
              properties: %{
@@ -131,7 +121,7 @@ defmodule ArangoXEctoTest.MigrationTest do
     assert analyzer(:c, :stem, [:frequency, :norm, :position], %{
              locale: "en"
            }) == %Analyzer{
-             name: :c,
+             name: "c",
              type: :stem,
              features: [:frequency, :norm, :position],
              properties: %{
@@ -144,7 +134,7 @@ defmodule ArangoXEctoTest.MigrationTest do
              accent: false,
              case: :lower
            }) == %Analyzer{
-             name: :d,
+             name: "d",
              type: :norm,
              features: [:frequency, :position],
              properties: %{
@@ -162,7 +152,7 @@ defmodule ArangoXEctoTest.MigrationTest do
              endMarker: "b",
              streamType: :binary
            }) == %Analyzer{
-             name: :e,
+             name: "e",
              type: :ngram,
              features: [],
              properties: %{
@@ -185,7 +175,7 @@ defmodule ArangoXEctoTest.MigrationTest do
              },
              stopwords: ["abc"]
            }) == %Analyzer{
-             name: :f,
+             name: "f",
              type: :text,
              features: [:frequency, :norm],
              properties: %{
@@ -203,7 +193,7 @@ defmodule ArangoXEctoTest.MigrationTest do
     assert analyzer(:g, :collation, [:frequency], %{
              locale: "en"
            }) == %Analyzer{
-             name: :g,
+             name: "g",
              type: :collation,
              features: [:frequency],
              properties: %{
@@ -219,7 +209,7 @@ defmodule ArangoXEctoTest.MigrationTest do
              memoryLimit: 2_097_152,
              returnType: :string
            }) == %Analyzer{
-             name: :h,
+             name: "h",
              type: :aql,
              features: [:norm],
              properties: %{
@@ -247,13 +237,13 @@ defmodule ArangoXEctoTest.MigrationTest do
                })
              ]
            }) == %Analyzer{
-             name: :i,
+             name: "i",
              type: :pipeline,
              features: [:frequency],
              properties: %{
                pipeline: [
                  %Analyzer{
-                   name: :x,
+                   name: "x",
                    type: :norm,
                    features: [],
                    properties: %{
@@ -263,7 +253,7 @@ defmodule ArangoXEctoTest.MigrationTest do
                    }
                  },
                  %Analyzer{
-                   name: :y,
+                   name: "y",
                    type: :text,
                    features: [],
                    properties: %{
@@ -281,7 +271,7 @@ defmodule ArangoXEctoTest.MigrationTest do
              stopwords: ["xyz"],
              hex: false
            }) == %Analyzer{
-             name: :j,
+             name: "j",
              type: :stopwords,
              features: [],
              properties: %{
@@ -294,7 +284,7 @@ defmodule ArangoXEctoTest.MigrationTest do
              break: :all,
              case: :none
            }) == %Analyzer{
-             name: :k,
+             name: "k",
              type: :segmentation,
              features: [],
              properties: %{
@@ -311,7 +301,7 @@ defmodule ArangoXEctoTest.MigrationTest do
                maxLevel: 24
              }
            }) == %Analyzer{
-             name: :l,
+             name: "l",
              type: :geojson,
              features: [:norm],
              properties: %{
@@ -333,7 +323,7 @@ defmodule ArangoXEctoTest.MigrationTest do
                maxLevel: 24
              }
            }) == %Analyzer{
-             name: :m,
+             name: "m",
              type: :geopoint,
              features: [:norm],
              properties: %{
@@ -349,7 +339,7 @@ defmodule ArangoXEctoTest.MigrationTest do
   end
 
   test "should validate analyzer types" do
-    assert_raise ArgumentError, ~r"the name for analyzer must be an atom", fn ->
+    assert_raise FunctionClauseError, fn ->
       analyzer(123, :text, [])
     end
 
@@ -651,9 +641,6 @@ defmodule ArangoXEctoTest.MigrationTest do
 
     test "alters a view" do
       alter view(:user_search) do
-        add_sort(:last_name, :asc)
-        add_store(:last_name, :lz4)
-
         add_link("new_test", %Link{
           includeAllFields: true,
           fields: %{
@@ -663,13 +650,6 @@ defmodule ArangoXEctoTest.MigrationTest do
           }
         })
 
-        modify_sort(:last_name, :desc)
-        modify_sort(:first_name, :desc, from: :asc)
-        modify_store(:first_name, :none)
-        modify_store(:last_name, :none, from: :lz4)
-
-        remove_sort(:name)
-        remove_store([:first_name, :last_name], :none)
         remove_link("new_test")
       end
 
@@ -678,8 +658,6 @@ defmodule ArangoXEctoTest.MigrationTest do
       assert last_command() ==
                {:alter, %View{name: "user_search"},
                 [
-                  {:add_sort, :last_name, :asc},
-                  {:add_store, [:last_name], :lz4},
                   {:add_link, "new_test",
                    %ArangoXEcto.View.Link{
                      fields: %{
@@ -689,12 +667,6 @@ defmodule ArangoXEctoTest.MigrationTest do
                      },
                      includeAllFields: true
                    }},
-                  {:modify_sort, :last_name, :desc, []},
-                  {:modify_sort, :first_name, :desc, [from: :asc]},
-                  {:modify_store, [:first_name], :none, []},
-                  {:modify_store, [:last_name], :none, [from: :lz4]},
-                  {:remove_sort, :name},
-                  {:remove_store, [:first_name, :last_name], :none},
                   {:remove_link, "new_test"}
                 ]}
     end
@@ -723,6 +695,14 @@ defmodule ArangoXEctoTest.MigrationTest do
       assert collection.prefix == "foo"
     end
 
+    test "creates a view with prefix from migration" do
+      create(view(:user_search, prefix: "foo"))
+      flush()
+
+      {_, view, _} = last_command()
+      assert view.prefix == "foo"
+    end
+
     @tag prefix: "foo"
     test "creates a collection with prefix from manager" do
       create(collection(:users))
@@ -732,6 +712,15 @@ defmodule ArangoXEctoTest.MigrationTest do
       assert collection.prefix == "foo"
     end
 
+    @tag prefix: "foo"
+    test "creates a view with prefix from manager" do
+      create(view(:user_search))
+      flush()
+
+      {_, view, _} = last_command()
+      assert view.prefix == "foo"
+    end
+
     @tag prefix: "foo", repo_config: [migration_default_prefix: "baz"]
     test "creates a collection with prefix from manager overriding the default prefix configuration" do
       create(collection(:users))
@@ -739,6 +728,15 @@ defmodule ArangoXEctoTest.MigrationTest do
 
       {_, collection, _} = last_command()
       assert collection.prefix == "foo"
+    end
+
+    @tag prefix: "foo", repo_config: [migration_default_prefix: "baz"]
+    test "creates a view with prefix from manager overriding the default prefix configuration" do
+      create(view(:user_search))
+      flush()
+
+      {_, view, _} = last_command()
+      assert view.prefix == "foo"
     end
 
     @tag repo_config: [migration_default_prefix: "baz"]
@@ -751,12 +749,30 @@ defmodule ArangoXEctoTest.MigrationTest do
     end
 
     @tag repo_config: [migration_default_prefix: "baz"]
+    test "creates a view with prefix from migration overriding the default prefix configuration" do
+      create(view(:user_search, prefix: "foo"))
+      flush()
+
+      {_, view, _} = last_command()
+      assert view.prefix == "foo"
+    end
+
+    @tag repo_config: [migration_default_prefix: "baz"]
     test "create a collection with prefix from configuration" do
       create(collection(:users))
       flush()
 
       {_, collection, _} = last_command()
       assert collection.prefix == "baz"
+    end
+
+    @tag repo_config: [migration_default_prefix: "baz"]
+    test "create a view with prefix from configuration" do
+      create(view(:user_search))
+      flush()
+
+      {_, view, _} = last_command()
+      assert view.prefix == "baz"
     end
 
     @tag prefix: :foo
@@ -768,6 +784,15 @@ defmodule ArangoXEctoTest.MigrationTest do
       assert collection.prefix == "foo"
     end
 
+    @tag prefix: :foo
+    test "creates a view with prefix from manager matching atom prefix" do
+      create(view(:user_search, prefix: "foo"))
+      flush()
+
+      {_, view, _} = last_command()
+      assert view.prefix == "foo"
+    end
+
     @tag prefix: "foo"
     test "creates a collection with prefix from manager matching string prefix" do
       create(collection(:users, prefix: :foo))
@@ -777,12 +802,31 @@ defmodule ArangoXEctoTest.MigrationTest do
       assert collection.prefix == :foo
     end
 
+    @tag prefix: "foo"
+    test "creates a view with prefix from manager matching string prefix" do
+      create(view(:user_search, prefix: :foo))
+      flush()
+
+      {_, view, _} = last_command()
+      assert view.prefix == :foo
+    end
+
     @tag prefix: "bar"
-    test "raise error when prefixes don't match" do
+    test "raise error when collection prefixes don't match" do
       assert_raise Ecto.MigrationError,
                    "the :prefix option `foo` does not match the migrator prefix `bar`",
                    fn ->
                      create(collection(:users, prefix: "foo"))
+                     flush()
+                   end
+    end
+
+    @tag prefix: "bar"
+    test "raise error when view prefixes don't match" do
+      assert_raise Ecto.MigrationError,
+                   "the :prefix option `foo` does not match the migrator prefix `bar`",
+                   fn ->
+                     create(view(:user_search, prefix: "foo"))
                      flush()
                    end
     end
@@ -794,6 +838,13 @@ defmodule ArangoXEctoTest.MigrationTest do
       assert collection.prefix == "foo"
     end
 
+    test "drops a view with prefix from migration" do
+      drop(view(:user_search, prefix: "foo"))
+      flush()
+      {:drop, view} = last_command()
+      assert view.prefix == "foo"
+    end
+
     @tag prefix: "foo"
     test "drops a collection with prefix from manager" do
       drop(collection(:users))
@@ -802,12 +853,28 @@ defmodule ArangoXEctoTest.MigrationTest do
       assert collection.prefix == "foo"
     end
 
+    @tag prefix: "foo"
+    test "drops a view with prefix from manager" do
+      drop(view(:user_search))
+      flush()
+      {:drop, view} = last_command()
+      assert view.prefix == "foo"
+    end
+
     @tag repo_config: [migration_default_prefix: "baz"]
     test "drops a collection with prefix from configuration" do
       drop(collection(:users))
       flush()
       {:drop, collection} = last_command()
       assert collection.prefix == "baz"
+    end
+
+    @tag repo_config: [migration_default_prefix: "baz"]
+    test "drops a view with prefix from configuration" do
+      drop(view(:user_search))
+      flush()
+      {:drop, view} = last_command()
+      assert view.prefix == "baz"
     end
 
     test "rename field on collection with index prefixed from migration" do
@@ -943,6 +1010,29 @@ defmodule ArangoXEctoTest.MigrationTest do
       assert last_command() == {:drop, collection}
     end
 
+    test "creates a view" do
+      create view = view(:user_search) do
+        add_sort(:created_at, :desc)
+        add_sort(:name)
+
+        add_store([:email], :lz4)
+        add_store([:first_name, :last_name], :none)
+
+        add_link("new_test", %Link{
+          includeAllFields: true,
+          fields: %{
+            first_name: %Link{
+              analyzers: [:text_en]
+            }
+          }
+        })
+      end
+
+      flush()
+
+      assert last_command() == {:drop, view}
+    end
+
     test "creates a collection if not exists" do
       create_if_not_exists collection = collection(:users) do
         add :first_name, :string
@@ -954,11 +1044,41 @@ defmodule ArangoXEctoTest.MigrationTest do
       assert last_command() == {:drop_if_exists, collection}
     end
 
+    test "creates a view if not exists" do
+      create_if_not_exists view = view(:user_search) do
+        add_sort(:created_at, :desc)
+        add_sort(:name)
+
+        add_store([:email], :lz4)
+        add_store([:first_name, :last_name], :none)
+
+        add_link("new_test", %Link{
+          includeAllFields: true,
+          fields: %{
+            first_name: %Link{
+              analyzers: [:text_en]
+            }
+          }
+        })
+      end
+
+      flush()
+
+      assert last_command() == {:drop_if_exists, view}
+    end
+
     test "creates an empty collection" do
       create collection = collection(:users)
       flush()
 
       assert last_command() == {:drop, collection}
+    end
+
+    test "creates an empty view" do
+      create view = view(:user_search)
+      flush()
+
+      assert last_command() == {:drop, view}
     end
 
     test "alters a collection" do
@@ -993,6 +1113,59 @@ defmodule ArangoXEctoTest.MigrationTest do
         alter collection(:users) do
           add :summary, :string
           remove :summary
+        end
+
+        flush()
+      end
+    end
+
+    test "alters a view" do
+      alter view(:user_search) do
+        add_link("new_test", %Link{
+          includeAllFields: true,
+          fields: %{
+            last_name: %Link{
+              analyzers: [:text_en]
+            }
+          }
+        })
+
+        remove_link("new_test", %Link{
+          includeAllFields: true,
+          fields: %{
+            last_name: %Link{
+              analyzers: [:text_en]
+            }
+          }
+        })
+      end
+
+      flush()
+
+      assert last_command() ==
+               {:alter, %View{name: "user_search"},
+                [
+                  {:add_link, "new_test",
+                   %ArangoXEcto.View.Link{
+                     fields: %{
+                       last_name: %ArangoXEcto.View.Link{
+                         analyzers: [:text_en]
+                       }
+                     },
+                     includeAllFields: true
+                   }},
+                  {:remove_link, "new_test",
+                   %ArangoXEcto.View.Link{
+                     fields: %{
+                       last_name: %ArangoXEcto.View.Link{analyzers: [:text_en]}
+                     },
+                     includeAllFields: true
+                   }}
+                ]}
+
+      assert_raise Ecto.MigrationError, ~r/cannot reverse migration command/, fn ->
+        alter view(:user_search) do
+          remove_link("new_test")
         end
 
         flush()
@@ -1039,6 +1212,13 @@ defmodule ArangoXEctoTest.MigrationTest do
       end
     end
 
+    test "drops a view" do
+      assert_raise Ecto.MigrationError, ~r/cannot reverse migration command/, fn ->
+        drop view(:user_search)
+        flush()
+      end
+    end
+
     test "creates an index" do
       create index(:users, [:first_name])
       flush()
@@ -1065,256 +1245,20 @@ defmodule ArangoXEctoTest.MigrationTest do
                last_command()
     end
 
+    test "renames a view" do
+      rename view(:user_search), to: view(:new_user_search)
+      flush()
+
+      assert {:rename, %View{name: "new_user_search"}, %View{name: "user_search"}} =
+               last_command()
+    end
+
     test "reverses a command" do
       execute "RETURN 1", "RETURN 2"
       flush()
       assert "RETURN 2" = last_command()
     end
   end
-
-  # describe "collection/3" do
-  #   test "creates a document collection" do
-  #     correct = %Migration.Collection{name: "something", type: 2}
-  #
-  #     assert ^correct = Migration.collection("something", :document)
-  #   end
-  #
-  #   test "creates a document collection by default" do
-  #     correct = %Migration.Collection{name: "something", type: 2}
-  #
-  #     assert ^correct = Migration.collection("something")
-  #   end
-  #
-  #   test "creates an edge collection" do
-  #     correct = %Migration.Collection{name: "something", type: 3}
-  #
-  #     assert ^correct = Migration.collection("something", :edge)
-  #   end
-  #
-  #   test "accepts collection options" do
-  #     correct = %Migration.Collection{
-  #       name: "something",
-  #       type: 2,
-  #       keyOptions: %{type: :uuid},
-  #       waitForSync: true
-  #     }
-  #
-  #     assert ^correct =
-  #              Migration.collection("something", :document,
-  #                keyOptions: %{type: :uuid},
-  #                waitForSync: true
-  #              )
-  #   end
-  # end
-  #
-  # describe "edge/2" do
-  #   test "creates an edge collection" do
-  #     correct = %Migration.Collection{name: "something", type: 3}
-  #
-  #     assert ^correct = Migration.edge("something")
-  #   end
-  #
-  #   test "accepts collection options" do
-  #     correct = %Migration.Collection{
-  #       name: "something",
-  #       type: 3,
-  #       keyOptions: %{type: :uuid},
-  #       waitForSync: true
-  #     }
-  #
-  #     assert ^correct =
-  #              Migration.collection("something", :edge,
-  #                keyOptions: %{type: :uuid},
-  #                waitForSync: true
-  #              )
-  #   end
-  # end
-  #
-  # describe "index/3" do
-  #   test "creates an index with atom field" do
-  #     correct = %Migration.Index{collection_name: "something", fields: [:email]}
-  #
-  #     assert ^correct = Migration.index("something", [:email])
-  #   end
-  #
-  #   test "creates an index with string field" do
-  #     correct = %Migration.Index{collection_name: "something", fields: ["email"]}
-  #
-  #     assert ^correct = Migration.index("something", ["email"])
-  #   end
-  #
-  #   test "creates an index with atom fields" do
-  #     correct = %Migration.Index{collection_name: "something", fields: [:email, :username]}
-  #
-  #     assert ^correct = Migration.index("something", [:email, :username])
-  #   end
-  #
-  #   test "creates an index with string fields" do
-  #     correct = %Migration.Index{collection_name: "something", fields: ["email", "username"]}
-  #
-  #     assert ^correct = Migration.index("something", ["email", "username"])
-  #   end
-  #
-  #   test "creates an index with atom and string fields" do
-  #     correct = %Migration.Index{collection_name: "something", fields: [:email, "username"]}
-  #
-  #     assert ^correct = Migration.index("something", [:email, "username"])
-  #   end
-  #
-  #   test "creates an index with options" do
-  #     correct = %Migration.Index{collection_name: "something", fields: [:email], unique: true}
-  #
-  #     assert ^correct = Migration.index("something", [:email], unique: true)
-  #   end
-  # end
-  #
-  # describe "create/1" do
-  #   test "creates a view", %{conn: conn} do
-  #     assert :ok = Migration.create(UsersView, repo: conn)
-  #     assert {:error, "409 - duplicate name"} = Migration.create(UsersView, repo: conn)
-  #
-  #     assert {:ok, %Arangox.Response{body: %{"type" => "arangosearch"}}} =
-  #              get_view_info(conn, UsersView.__view__(:name))
-  #   end
-  #
-  #   test "creates analyzers", %{conn: conn} do
-  #     assert :ok = Migration.create(Analyzers, repo: conn)
-  #
-  #     names =
-  #       Analyzers.__analyzers__()
-  #       |> Enum.map(&Atom.to_string(&1.name))
-  #
-  #     assert MapSet.equal?(MapSet.new(names), MapSet.new(get_analyzers(conn)))
-  #   end
-  #
-  #   test "creates a document collection", %{conn: conn} do
-  #     collection = Migration.collection("something")
-  #
-  #     assert :ok = Migration.create(collection, repo: conn)
-  #
-  #     assert {:ok, %Arangox.Response{body: %{"type" => 2}}} =
-  #              get_collection_info(conn, "something")
-  #   end
-  #
-  #   test "creates an edge collection", %{conn: conn} do
-  #     collection = Migration.edge("something")
-  #
-  #     assert :ok = Migration.create(collection, repo: conn)
-  #
-  #     assert {:ok, %Arangox.Response{body: %{"type" => 3}}} =
-  #              get_collection_info(conn, "something")
-  #   end
-  #
-  #   test "errors on create existing collection", %{conn: conn} do
-  #     collection = Migration.collection("something")
-  #
-  #     assert :ok = Migration.create(collection, repo: conn)
-  #
-  #     assert {:error, "409 - duplicate name"} = Migration.create(collection, repo: conn)
-  #   end
-  #
-  #   test "creates a document collection with uuid key", %{conn: conn} do
-  #     collection = Migration.collection("something", :document, keyOptions: %{type: :uuid})
-  #
-  #     assert :ok = Migration.create(collection, repo: conn)
-  #
-  #     assert {:ok, %Arangox.Response{body: %{"type" => 2, "keyOptions" => %{"type" => "uuid"}}}} =
-  #              get_collection_info(conn, "something")
-  #   end
-  #
-  #   test "creates a edge collection with waitForSync", %{conn: conn} do
-  #     collection = Migration.collection("something", :edge, waitForSync: true)
-  #
-  #     assert :ok = Migration.create(collection, repo: conn)
-  #
-  #     assert {:ok, %Arangox.Response{body: %{"type" => 3, "waitForSync" => true}}} =
-  #              get_collection_info(conn, "something")
-  #   end
-  #
-  #   test "creates an index", %{conn: conn} do
-  #     collection = Migration.collection("something")
-  #     index = Migration.index("something", [:email])
-  #
-  #     assert :ok = Migration.create(collection, repo: conn)
-  #     assert :ok = Migration.create(index, repo: conn)
-  #
-  #     assert {:ok, %Arangox.Response{body: %{"indexes" => [_, %{"fields" => ["email"]}]}}} =
-  #              get_index_info(conn, "something")
-  #   end
-  #
-  #   test "creates a unique index", %{conn: conn} do
-  #     collection = Migration.collection("something")
-  #     index = Migration.index("something", [:email], unique: true)
-  #
-  #     assert :ok = Migration.create(collection, repo: conn)
-  #     assert :ok = Migration.create(index, repo: conn)
-  #
-  #     assert {:ok,
-  #             %Arangox.Response{
-  #               body: %{"indexes" => [_, %{"fields" => ["email"], "unique" => true}]}
-  #             }} = get_index_info(conn, "something")
-  #   end
-  #
-  #   test "creates a geojson index", %{conn: conn} do
-  #     collection = Migration.collection("something")
-  #     index = Migration.index("something", [:email], type: :geo, geoJson: true)
-  #
-  #     assert :ok = Migration.create(collection, repo: conn)
-  #     assert :ok = Migration.create(index, repo: conn)
-  #
-  #     assert {:ok,
-  #             %Arangox.Response{
-  #               body: %{
-  #                 "indexes" => [_, %{"fields" => ["email"], "type" => "geo", "geoJson" => true}]
-  #               }
-  #             }} = get_index_info(conn, "something")
-  #   end
-  # end
-  #
-  # describe "drop/1" do
-  #   test "error on drop non existant collection", %{conn: conn} do
-  #     assert {:error, "404 - collection or view not found"} =
-  #              Migration.drop(Migration.collection("something"), conn)
-  #   end
-  #
-  #   test "drops a document collection", %{conn: conn} do
-  #     collection = Migration.collection("something")
-  #
-  #     assert :ok = Migration.create(collection, repo: conn)
-  #
-  #     assert :ok = Migration.drop(collection, conn)
-  #   end
-  #
-  #   test "drops an edge collection", %{conn: conn} do
-  #     collection = Migration.edge("something")
-  #
-  #     assert :ok = Migration.create(collection, repo: conn)
-  #
-  #     assert :ok = Migration.drop(collection, conn)
-  #   end
-  # end
-  #
-  # defp get_view_info(conn, name),
-  #   do: Arangox.get(conn, "/_api/view/#{name}/properties")
-  #
-  # defp get_collection_info(conn, name),
-  #   do: Arangox.get(conn, "/_api/collection/#{name}/properties")
-  #
-  # defp get_index_info(conn, collection_name),
-  #   do: Arangox.get(conn, "/_api/index?collection=#{collection_name}")
-  #
-  # defp get_analyzers(conn) do
-  #   analyzer_res =
-  #     case Arangox.get(conn, "/_api/analyzer") do
-  #       {:ok, %Arangox.Response{body: %{"error" => false, "result" => result}}} -> result
-  #       {:error, _} -> []
-  #     end
-  #
-  #   Enum.filter(analyzer_res, fn %{"name" => name} ->
-  #     String.starts_with?(name, "arangox_ecto_test::")
-  #   end)
-  #   |> Enum.map(fn %{"name" => name} -> String.slice(name, 19..-1) end)
-  # end
 
   defp last_command(), do: Process.get(:last_command)
 end

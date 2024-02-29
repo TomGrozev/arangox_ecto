@@ -953,12 +953,15 @@ defmodule ArangoXEcto.Migration do
   end
 
   @doc """
-  Renames a collection or a field
+  Renames a collection, view or a collection field
 
   ## Examples
 
       # rename a collection
       rename collection("users"), to: collection("new_users")
+
+      # rename a view
+      rename view("user_search"), to: view("new_user_search")
 
       alter collection("users") do
         rename :name, to: :first_name
@@ -968,6 +971,11 @@ defmodule ArangoXEcto.Migration do
   def rename(%Collection{} = collection_current, to: %Collection{} = collection_new) do
     Runner.execute({:rename, __prefix__(collection_current), __prefix__(collection_new)})
     collection_new
+  end
+
+  def rename(%View{} = view_current, to: %View{} = view_new) do
+    Runner.execute({:rename, __prefix__(view_current), __prefix__(view_new)})
+    view_new
   end
 
   def rename(current_field, to: new_field) when is_atom(current_field) and is_atom(new_field) do
@@ -1072,135 +1080,6 @@ defmodule ArangoXEcto.Migration do
 
       :ok
     end
-  end
-
-  @doc """
-  Modifies the direction of a primary sort when altering a view.
-
-  This command is not reversible unless the `:from` option is provided.
-
-  See `add_sort/2` for more information on supported types.
-
-  ## Examples
-
-      alter view("user_search") do
-        modify_sort :name, :asc
-      end
-
-      # Self rollback when using the :from option
-      alter view("user_search") do
-        modify_sort :name, :asc, from: :desc
-      end
-
-  ## Options
-
-    * `:from` - specifies the current direction of the field.
-  """
-  def modify_sort(field, direction, opts \\ [])
-      when is_atom(field) and direction in [:asc, :desc] and is_list(opts) do
-    Runner.subcommand({:modify_sort, field, direction, opts})
-  end
-
-  @doc """
-  Modifies the compression of a stored value when altering a view.
-
-  This command is not reversible unless the `:from` option is provided.
-
-  See `add_store/2` for more information on supported types.
-
-  ## Examples
-
-      alter view("user_search") do
-        modify_store :name, :lz4
-      end
-
-      # Self rollback when using the :from option
-      alter view("user_search") do
-        modify_store :name, :lz4, from: :none
-      end
-
-  ## Options
-
-    * `:from` - specifies the current compression of the field.
-  """
-  def modify_store(fields, compression, opts \\ [])
-
-  def modify_store(field, compression, opts) when is_atom(field),
-    do: modify_store([field], compression, opts)
-
-  def modify_store(fields, compression, opts)
-      when is_list(fields) and compression in [:lz4, :none] and is_list(opts) do
-    Runner.subcommand({:modify_store, fields, compression, opts})
-  end
-
-  @doc """
-  Removes a primary sort when altering a view.
-
-  If it doesn't exist it will simply be ignored.
-
-  This command is not reversible as Ecto does not know what type it should add
-  the field back as. See `remove_sort/2` as a reversible alternative.
-
-  ## Examples
-
-      alter view("user_search") do
-        remove_sort :name
-      end
-
-  """
-  def remove_sort(field) when is_atom(field) do
-    Runner.subcommand({:remove_sort, field})
-  end
-
-  @doc """
-  Removes a primary sort in a reversable way when altering a view.
-
-  `direction` is the same as in `add_sort/2`.
-
-  ## Examples
-
-      alter view("user_search") do
-        remove_sort :name, :asc
-      end
-
-  """
-  def remove_sort(field, direction) when is_atom(field) and direction in [:asc, :desc] do
-    Runner.subcommand({:remove_sort, field, direction})
-  end
-
-  @doc """
-  Removes a stored value when altering a view.
-
-  If it doesn't exist it will simply be ignored.
-
-  This command is not reversible as Ecto does not know what type it should add
-  the field back as. See `remove_store/2` as a reversible alternative.
-
-  ## Examples
-
-      alter view("user_search") do
-        remove_store [:name, :email]
-      end
-
-  """
-  def remove_store(fields) when is_list(fields) do
-    Runner.subcommand({:remove_store, fields})
-  end
-
-  @doc """
-  Removes a stored value in a reversable way when altering a view.
-
-  `compression` is the same as in `add_store/2`.
-
-  ## Examples
-
-      alter view("user_search") do
-        remove_store [:name, :email], :lz4
-      end
-
-  """
-  def remove_store(fields, compression) when is_list(fields) and compression in [:lz4, :none] do
-    Runner.subcommand({:remove_store, fields, compression})
   end
 
   @doc """

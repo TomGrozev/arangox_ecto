@@ -236,33 +236,46 @@ defmodule ArangoXEcto.Migration.Runner do
   # Execute #
   ###########
 
+  @allowed_view_commands [
+    :add_sort,
+    :add_store,
+    :add_link,
+    :remove_link
+  ]
+  @allowed_collection_commands [
+    :add,
+    :add_if_not_exists,
+    :modify,
+    :remove,
+    :remove_if_exists,
+    :rename,
+    :add_embed,
+    :modify_embed
+  ]
   defp validate_type(command, subcommand, state, fun) do
-    command =
-      elem(command, 1)
-      |> then(& &1.__struct__)
+    elems = {elem(command, 0), elem(command, 1).__struct__}
 
     subcommand = elem(subcommand, 0)
 
-    case command do
-      View
+    case elems do
+      {:alter, View}
       when subcommand in [
-             :add_sort,
-             :add_store,
              :add_link,
-             :modify_sort,
-             :modify_store,
-             :remove_sort,
-             :remove_store,
              :remove_link
            ] ->
         {:ok, fun.()}
 
-      Collection
-      when subcommand in [:add, :modify, :remove, :rename, :add_embed, :modify_embed] ->
+      {_, View}
+      when subcommand in @allowed_view_commands ->
+        {:ok, fun.()}
+
+      {_, Collection}
+      when subcommand in @allowed_collection_commands ->
         {:ok, fun.()}
 
       _ ->
-        {{:error, "invalid subcommand type `#{subcommand}` for command `#{command}`"}, state}
+        {{:error, "invalid subcommand type `#{subcommand}` for command `#{inspect(command)}`"},
+         state}
     end
   end
 
@@ -329,6 +342,15 @@ defmodule ArangoXEcto.Migration.Runner do
   defp reverse({:create_if_not_exists, %View{} = view, _}),
     do: {:drop_if_exists, view}
 
+  defp reverse({:rename, %View{} = view_current, %View{} = view_new}),
+    do: {:rename, view_new, view_current}
+
+  defp reverse({:alter, %View{} = view, changes}) do
+    if reversed = view_reverse(changes, []) do
+      {:alter, view, reversed}
+    end
+  end
+
   defp reverse(_command), do: false
 
   defp collection_reverse([{:remove, name, type, opts} | t], acc) do
@@ -367,6 +389,42 @@ defmodule ArangoXEcto.Migration.Runner do
   defp collection_reverse([_ | _], _acc), do: false
 
   defp collection_reverse([], acc), do: acc
+
+  defp view_reverse([{:remove_link, schema_name, link} | t], acc) do
+    view_reverse(t, [{:add_link, schema_name, link} | acc])
+  end
+
+  defp view_reverse([{:remove_sort, field, direction} | t], acc) do
+    view_reverse(t, [{:add_sort, field, direction} | acc])
+  end
+
+  defp view_reverse([{:remove_store, fields, compression} | t], acc) do
+    view_reverse(t, [{:add_sort, fields, compression} | acc])
+  end
+
+  defp view_reverse([{:modify_sort, field, direction, [from: from_direction]} | t], acc) do
+    view_reverse(t, [{:modify_sort, field, from_direction, [from: direction]} | acc])
+  end
+
+  defp view_reverse([{:modify_store, fields, compression, [from: from_compression]} | t], acc) do
+    view_reverse(t, [{:modify_store, fields, from_compression, [from: compression]} | acc])
+  end
+
+  defp view_reverse([{:add_link, schema_name, link} | t], acc) do
+    view_reverse(t, [{:remove_link, schema_name, link} | acc])
+  end
+
+  defp view_reverse([{:add_sort, field, direction} | t], acc) do
+    view_reverse(t, [{:remove_sort, field, direction} | acc])
+  end
+
+  defp view_reverse([{:add_store, fields, compression} | t], acc) do
+    view_reverse(t, [{:remove_store, fields, compression} | acc])
+  end
+
+  defp view_reverse([_ | _], _acc), do: false
+
+  defp view_reverse([], acc), do: acc
 
   ###########
   # Helpers #

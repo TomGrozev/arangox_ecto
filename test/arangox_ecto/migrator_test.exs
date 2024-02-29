@@ -6,6 +6,7 @@ defmodule ArangoXEcto.MigratorTest do
   import ArangoXEcto.Support.FileHelpers
 
   alias ArangoXEcto.TestRepo
+  alias ArangoXEcto.View.Link
 
   defmodule Migration do
     use ArangoXEcto.Migration
@@ -27,7 +28,23 @@ defmodule ArangoXEcto.MigratorTest do
         add :first_name, :string
       end
 
+      create view(:user_search) do
+        add_sort(:created_at, :desc)
+        add_store([:email], :lz4)
+
+        add_link("new_test", %Link{
+          includeAllFields: true,
+          fields: %{
+            first_name: %Link{
+              analyzers: [:text_en]
+            }
+          }
+        })
+      end
+
       create index(:users, [:title])
+
+      create analyzer(:a, :identity, [:norm])
     end
   end
 
@@ -39,7 +56,23 @@ defmodule ArangoXEcto.MigratorTest do
         add :name, :string
       end
 
+      create view(:comment_search, prefix: "foo") do
+        add_sort(:created_at, :desc)
+        add_store([:email], :lz4)
+
+        add_link("new_test", %Link{
+          includeAllFields: true,
+          fields: %{
+            first_name: %Link{
+              analyzers: [:text_en]
+            }
+          }
+        })
+      end
+
       create index(:users, [:title], prefix: "foo")
+
+      create analyzer(:a, :identity, [:norm], %{}, prefix: "foo")
     end
   end
 
@@ -49,6 +82,19 @@ defmodule ArangoXEcto.MigratorTest do
     def up do
       alter collection(:users) do
         add :first_name, :string
+      end
+
+      alter view(:user_search) do
+        remove_link("new_test")
+
+        add_link("new_test", %Link{
+          includeAllFields: true,
+          fields: %{
+            first_name: %Link{
+              analyzers: [:text_en]
+            }
+          }
+        })
       end
     end
 
@@ -266,7 +312,9 @@ defmodule ArangoXEcto.MigratorTest do
 
     assert output =~ "== Running 10 ArangoXEcto.MigratorTest.ChangeMigration.change/0 forward"
     assert output =~ "create collection users"
+    assert output =~ "create view user_search"
     assert output =~ "create index idx_users_title"
+    assert output =~ "create analyzer a"
     assert output =~ ~r"== Migrated 10 in \d.\ds"
 
     output =
@@ -276,7 +324,9 @@ defmodule ArangoXEcto.MigratorTest do
 
     assert output =~ "== Running 10 ArangoXEcto.MigratorTest.ChangeMigration.change/0 backward"
     assert output =~ "drop collection users"
+    assert output =~ "drop view user_search"
     assert output =~ "drop index idx_users_title"
+    assert output =~ "drop analyzer a"
     assert output =~ ~r"== Migrated 10 in \d.\ds"
 
     output =
@@ -288,7 +338,9 @@ defmodule ArangoXEcto.MigratorTest do
              "== Running 11 ArangoXEcto.MigratorTest.ChangeMigrationPrefix.change/0 forward"
 
     assert output =~ "create collection foo.comments"
+    assert output =~ "create view foo.comment_search"
     assert output =~ "create index foo.idx_users_title"
+    assert output =~ "create analyzer foo.a"
     assert output =~ ~r"== Migrated 11 in \d.\ds"
 
     output =
@@ -300,7 +352,9 @@ defmodule ArangoXEcto.MigratorTest do
              "== Running 11 ArangoXEcto.MigratorTest.ChangeMigrationPrefix.change/0 backward"
 
     assert output =~ "drop collection foo.comments"
+    assert output =~ "drop view foo.comment_search"
     assert output =~ "drop index foo.idx_users_title"
+    assert output =~ "drop analyzer foo.a"
     assert output =~ ~r"== Migrated 11 in \d.\ds"
 
     output =
@@ -310,6 +364,7 @@ defmodule ArangoXEcto.MigratorTest do
 
     assert output =~ "== Running 12 ArangoXEcto.MigratorTest.UpDownMigration.up/0 forward"
     assert output =~ "alter collection users"
+    assert output =~ "alter view user_search"
     assert output =~ ~r"== Migrated 12 in \d.\ds"
 
     output =
