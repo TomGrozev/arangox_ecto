@@ -1,4 +1,4 @@
-defmodule ArangoXEctoTest.MigrationTest do
+defmodule ArangoXEcto.MigrationTest do
   use ExUnit.Case, async: true
 
   use ArangoXEcto.Migration

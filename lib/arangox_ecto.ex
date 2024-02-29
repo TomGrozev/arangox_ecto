@@ -403,7 +403,7 @@ defmodule ArangoXEcto do
     view_def = Migration.view(name, Keyword.merge(options, opts))
 
     subcommands =
-      [add_link: links, add_sort: primary_sort, add_stored: stored_values]
+      [add_link: links, add_sort: primary_sort, add_store: stored_values]
       |> Enum.reduce([], fn {type, list}, acc ->
         Enum.reduce(list, acc, fn {arg1, arg2}, acc2 ->
           [{type, arg1, arg2} | acc2]

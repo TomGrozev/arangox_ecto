@@ -3,7 +3,7 @@ defmodule ArangoXEctoTest.Integration.RepoTest do
 
   import Ecto.Query
 
-  alias ArangoXEctoTest.{Repo, StaticRepo}
+  alias ArangoXEctoTest.{Repo, DynamicRepo}
   alias ArangoXEctoTest.Integration.{Comment, Post, User}
 
   @test_collections [
@@ -95,7 +95,7 @@ defmodule ArangoXEctoTest.Integration.RepoTest do
       assert [] = Repo.all(from(a in "abc", select: a.id))
 
       assert_raise Arangox.Error, ~r/collection or view not found/, fn ->
-        StaticRepo.all(from(a in "abc", select: a.id))
+        DynamicRepo.all(from(a in "abc", select: a.id))
       end
     end
 

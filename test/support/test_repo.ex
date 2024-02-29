@@ -126,4 +126,10 @@ defmodule ArangoXEcto.TestRepo do
   end
 end
 
+defmodule ArangoXEcto.MigrationTestRepo do
+  use Ecto.Repo, otp_app: :arangox_ecto, adapter: ArangoXEcto.TestAdapter
+end
+
 ArangoXEcto.TestRepo.start_link()
+ArangoXEcto.TestRepo.start_link(name: :tenant_db)
+ArangoXEcto.MigrationTestRepo.start_link()

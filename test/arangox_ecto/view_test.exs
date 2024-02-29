@@ -1,11 +1,11 @@
 defmodule ArangoXEctoTest.ViewTest do
   use ExUnit.Case
-  @moduletag :supported
+  @moduletag :integration
 
   import Ecto.Query
   import ArangoXEcto.Query, only: [search: 2, search: 3]
 
-  alias ArangoXEctoTest.{Repo, StaticRepo}
+  alias ArangoXEctoTest.{Repo, DynamicRepo}
   alias ArangoXEctoTest.Integration.{User, UsersView}
 
   @test_collections [
@@ -45,7 +45,7 @@ defmodule ArangoXEctoTest.ViewTest do
   describe "searching using a view" do
     test "does not allow querying of non-existent view in static mode" do
       assert_raise RuntimeError, ~r/does not exist. Maybe a migration is missing/, fn ->
-        StaticRepo.all(UsersView)
+        DynamicRepo.all(UsersView)
       end
     end
 
