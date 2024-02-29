@@ -12,7 +12,7 @@ defmodule ArangoXEctoTest.QueryTest do
     query = Planner.ensure_select(query, operation == :all)
     {query, _params, _key} = Planner.plan(query, operation, adapter)
     {query, _select} = Planner.normalize(query, operation, adapter, counter)
-    {_cache, prepared} = adapter.prepare(operation, query)
+    {_cache, {_id, prepared}} = adapter.prepare(operation, query)
     prepared
   end
 
@@ -156,12 +156,11 @@ defmodule ArangoXEctoTest.QueryTest do
     end
 
     test "with type casting" do
-      assert {_, "FOR p0 IN `posts` RETURN [ TO_NUMBER(p0.`_key`) ]"} =
-               aql(
-                 from(p in Post,
-                   select: type(p.id, :integer)
-                 )
+      assert aql(
+               from(p in Post,
+                 select: type(p.id, :integer)
                )
+             ) =~ "FOR p0 IN `posts` RETURN [ TO_NUMBER(p0.`_key`) ]"
     end
   end
 
