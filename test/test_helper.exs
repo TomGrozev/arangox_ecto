@@ -1,12 +1,12 @@
 Code.require_file("./support/test_repo.ex", __DIR__)
 Code.require_file("./support/file_helpers.exs", __DIR__)
 
-ExUnit.start()
+alias ArangoXEcto.Integration.{TestRepo, DynamicRepo}
 
-alias ArangoXEctoTest.{Repo, DynamicRepo}
-
-Application.put_env(:arangox_ecto, Repo,
-  adapter: ArangoXEcto,
+Application.put_env(:arangox_ecto, TestRepo,
+  pool: ArangoXEcto.Sandbox,
+  show_sensitive_data_on_connection_error: true,
+  log: false,
   database: "arangox_ecto_test",
   endpoints: System.get_env("DB_ENDPOINT"),
   username: System.get_env("DB_USER"),
@@ -14,32 +14,42 @@ Application.put_env(:arangox_ecto, Repo,
 )
 
 Application.put_env(:arangox_ecto, DynamicRepo,
-  adapter: ArangoXEcto,
+  pool: ArangoXEcto.Sandbox,
+  show_sensitive_data_on_connection_error: true,
+  log: false,
   static: false,
-  database: "arangox_ecto_test",
+  database: "arangox_ecto_dynamic_test",
   endpoints: System.get_env("DB_ENDPOINT"),
   username: System.get_env("DB_USER"),
   password: System.get_env("DB_PASSWORD")
 )
 
 Code.require_file("./support/schemas.exs", __DIR__)
+Code.require_file("./support/migration.exs", __DIR__)
 
-{:ok, _} = ArangoXEcto.Adapter.ensure_all_started(Repo, :temporary)
-{:ok, _} = ArangoXEcto.Adapter.ensure_all_started(DynamicRepo, :temporary)
+defmodule ArangoXEcto.Integration.Case do
+  use ExUnit.CaseTemplate
 
-case Repo.__adapter__().storage_up(Repo.config()) do
-  :ok -> :ok
-  {:error, :already_up} -> :ok
-  {:error, term} -> raise inspect(term)
+  setup do
+    :ok = ArangoXEcto.Sandbox.checkout(TestRepo)
+  end
 end
 
-case DynamicRepo.__adapter__().storage_up(DynamicRepo.config()) do
-  :ok -> :ok
-  {:error, :already_up} -> :ok
-  {:error, term} -> raise inspect(term)
-end
+{:ok, _} = ArangoXEcto.Adapter.ensure_all_started(TestRepo.config(), :temporary)
+{:ok, _} = ArangoXEcto.Adapter.ensure_all_started(DynamicRepo.config(), :temporary)
 
-{:ok, _pid} = Repo.start_link()
+# Load up the repository, start it, and run migrations
+_ = ArangoXEcto.Adapter.storage_down(TestRepo.config())
+_ = ArangoXEcto.Adapter.storage_down(DynamicRepo.config())
+
+:ok = ArangoXEcto.Adapter.storage_up(TestRepo.config())
+:ok = ArangoXEcto.Adapter.storage_up(DynamicRepo.config())
+
+{:ok, _pid} = TestRepo.start_link()
 {:ok, _pid} = DynamicRepo.start_link()
 
+:ok = ArangoXEcto.Migrator.up(TestRepo, 0, ArangoXEcto.Integration.Migration, log: false)
+ArangoXEcto.Sandbox.mode(TestRepo, :manual)
 Process.flag(:trap_exit, true)
+
+ExUnit.start()

@@ -100,19 +100,13 @@ defmodule ArangoXEcto.TestAdapter do
   end
 end
 
-defmodule ArangoXEctoTest.Repo do
+defmodule ArangoXEcto.Integration.TestRepo do
   use Ecto.Repo,
     otp_app: :arangox_ecto,
     adapter: ArangoXEcto.Adapter
 end
 
-defmodule ArangoXEctoTest.DynamicRepo do
-  use Ecto.Repo,
-    otp_app: :arangox_ecto,
-    adapter: ArangoXEcto.Adapter
-end
-
-defmodule ArangoXEctoTest.ArangoRepo do
+defmodule ArangoXEcto.Integration.DynamicRepo do
   use Ecto.Repo,
     otp_app: :arangox_ecto,
     adapter: ArangoXEcto.Adapter
