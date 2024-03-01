@@ -66,6 +66,10 @@ defmodule ArangoXEcto.Migration.JsonSchema do
     %{type: "boolean"}
   end
 
+  defp command_to_schema({_name, :map, _command_opts}, _opts) do
+    %{type: "object"}
+  end
+
   defp command_to_schema({_name, {:array, type}, command_opts}, _opts) do
     %{type: "array", items: %{type: type}}
     |> maybe_add_opt(command_opts, :minItems, :min_items)
@@ -93,7 +97,7 @@ defmodule ArangoXEcto.Migration.JsonSchema do
   end
 
   defp command_to_schema({_name, numeric, command_opts}, _opts)
-       when numeric in [:integer, :number] do
+       when numeric in [:integer, :number, :decimal, :float] do
     %{type: Atom.to_string(numeric)}
     |> maybe_add_opt(command_opts, :minimum)
     |> maybe_add_opt(command_opts, :exclusiveMinimum, :exclusive_minimum)
@@ -103,10 +107,27 @@ defmodule ArangoXEcto.Migration.JsonSchema do
     |> maybe_add_opt(command_opts, :"$comment", :comment)
   end
 
+  defp command_to_schema({name, :date, command_opts}, opts) do
+    command_to_schema(
+      {name, :string, Keyword.put(command_opts, :format, "date")},
+      opts
+    )
+  end
+
   defp command_to_schema({name, datetime, command_opts}, opts)
        when datetime in [:datetime, :utc_datetime, :utc_datetime_usec] do
     command_to_schema(
       {name, :string, Keyword.put(command_opts, :format, "date-time")},
+      opts
+    )
+  end
+
+  defp command_to_schema({name, :uuid, command_opts}, opts) do
+    pattern =
+      " ^[0-9a-fA-F]{8}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{12}$ "
+
+    command_to_schema(
+      {name, :string, Keyword.put(command_opts, :pattern, pattern)},
       opts
     )
   end
@@ -172,6 +193,7 @@ defmodule ArangoXEcto.Migration.JsonSchema do
     :exclusive_maximum
   ]
 
+  defp validate_opt!(:comment, value) when is_binary(value), do: true
   defp validate_opt!(:pattern, value) when is_binary(value), do: true
   defp validate_opt!(:format, value) when is_binary(value), do: true
 
