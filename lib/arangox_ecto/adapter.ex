@@ -21,6 +21,16 @@ defmodule ArangoXEcto.Adapter do
 
   require Logger
 
+  @pool_opts [
+    :timeout,
+    :pool,
+    :pool_size,
+    :queue_target,
+    :queue_interval,
+    :ownership_timeout,
+    :repo
+  ]
+
   @doc """
   Initialise adapter with `config`
   """
@@ -56,7 +66,7 @@ defmodule ArangoXEcto.Adapter do
     telemetry = {config[:repo], log, telemetry_prefix ++ [:query]}
 
     config = adapter_config(config)
-    opts = Keyword.take(config, [:repo])
+    opts = Keyword.take(config, @pool_opts)
     meta = %{telemetry: telemetry, stacktrace: stacktrace, opts: opts}
     child = Arangox.child_spec(config)
 
