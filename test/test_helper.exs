@@ -28,10 +28,14 @@ Code.require_file("./support/schemas.exs", __DIR__)
 Code.require_file("./support/migration.exs", __DIR__)
 
 defmodule ArangoXEcto.Integration.Case do
-  use ExUnit.CaseTemplate
+  defmacro __using__(opts \\ []) do
+    quote do
+      use ExUnit.Case, unquote(opts)
 
-  setup do
-    :ok = ArangoXEcto.Sandbox.checkout(TestRepo)
+      setup do
+        :ok = ArangoXEcto.Sandbox.checkout(TestRepo, unquote(opts))
+      end
+    end
   end
 end
 
