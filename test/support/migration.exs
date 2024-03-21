@@ -1,6 +1,8 @@
 defmodule ArangoXEcto.Integration.Migration do
   use ArangoXEcto.Migration
 
+  alias ArangoXEcto.View.Link
+
   def change do
     create collection(:users) do
       add :first_name, :string, comment: "first_name column"
@@ -12,6 +14,22 @@ defmodule ArangoXEcto.Integration.Migration do
       timestamps()
     end
 
+    create view(:user_search, commitIntervalMsec: 1, consolidationIntervalMsec: 1) do
+      add_sort(:created_at, :desc)
+      add_sort(:first_name)
+
+      add_store([:first_name, :last_name], :none)
+
+      add_link("users", %Link{
+        includeAllFields: true,
+        fields: %{
+          last_name: %Link{
+            analyzers: [:identity, :text_en]
+          }
+        }
+      })
+    end
+
     create collection(:posts) do
       add :title, :string, max_length: 100
       add :counter, :integer
@@ -21,7 +39,6 @@ defmodule ArangoXEcto.Integration.Migration do
       add :public, :boolean
       add :cost, :decimal
       add :visits, :integer
-      add :wrapped_visits, :integer
       add :intensity, :float
       add :posted, :date
       add :read_only, :string
@@ -29,7 +46,9 @@ defmodule ArangoXEcto.Integration.Migration do
       timestamps(null: true)
     end
 
-    create edge(:posts_users)
+    create edge(:posts_users) do
+      add :type, :string
+    end
 
     # Add a unique index on uuid. We use this
     # to verify the behaviour that the index
