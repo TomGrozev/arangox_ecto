@@ -2,90 +2,15 @@ defmodule ArangoXEctoTest do
   @moduledoc false
 
   use ExUnit.Case
-  @moduletag :supported
 
   alias ArangoXEctoTest.Integration.{Class, Post, User, UserPosts, UserPostsOptions}
   alias ArangoXEctoTest.Repo
 
   import Ecto.Query
 
-  @test_collections [
-    users: 2,
-    test_edge: 3,
-    posts: 2,
-    post_user: 3,
-    user_user: 3,
-    magics: 2
-  ]
-
-  # Deletes existing collections and creates testing collections
-  setup_all do
-    %{pid: conn} = Ecto.Adapter.lookup_meta(Repo)
-
-    # Get all collection names
-    collection_res =
-      case Arangox.get(conn, "/_api/collection") do
-        {:ok, %Arangox.Response{body: %{"error" => false, "result" => result}}} -> result
-        {:error, _} -> []
-      end
-
-    # Get all view names
-    view_res =
-      case Arangox.get(conn, "/_api/view") do
-        {:ok, %Arangox.Response{body: %{"error" => false, "result" => result}}} -> result
-        {:error, _} -> []
-      end
-
-    collection_names =
-      Enum.map(collection_res, fn %{"name" => name} -> name end)
-      |> Enum.filter(&(!String.starts_with?(&1, "_")))
-
-    view_names = Enum.map(view_res, fn %{"id" => id} -> id end)
-
-    # Delete all collections
-    for collection <- collection_names do
-      Arangox.delete(conn, "/_api/collection/#{collection}")
-    end
-
-    # Delete all views
-    for view <- view_names do
-      Arangox.delete(conn, "/_api/view/#{view}")
-    end
-
-    # Create test collections
-    for {collection, type} <- @test_collections do
-      Arangox.post(conn, "/_api/collection", %{name: collection, type: type})
-    end
-
-    [conn: conn]
-  end
-
-  # Empties each collection before every test
-  setup %{conn: conn} = context do
-    for {collection, _type} <- @test_collections do
-      Arangox.put(conn, "/_api/collection/#{collection}/truncate")
-    end
-
-    # Get all analyzer names
-    analyzer_res =
-      case Arangox.get(conn, "/_api/analyzer") do
-        {:ok, %Arangox.Response{body: %{"error" => false, "result" => result}}} -> result
-        {:error, _} -> []
-      end
-
-    analyzer_names =
-      Enum.map(analyzer_res, fn %{"name" => name} -> name end)
-      |> Enum.filter(&String.starts_with?(&1, "arangox_ecto_test::"))
-
-    # Delete all analyzers
-    for analyzer <- analyzer_names do
-      Arangox.delete(conn, "/_api/analyzer/#{analyzer}?force=true")
-    end
-
-    context
-  end
-
   describe "aql_query/4 and aql_query!/4" do
+    @describetag :integration
+
     test "invalid AQL query" do
       query = "FOsdfsdfgdfs abc"
 
@@ -120,6 +45,23 @@ defmodule ArangoXEctoTest do
       """
 
       assert {:ok,
+              {1,
+               [
+                 %{
+                   "_id" => _,
+                   "_key" => _,
+                   "_rev" => _,
+                   "first_name" => ^fname,
+                   "last_name" => ^lname
+                 }
+               ]}} =
+               ArangoXEcto.aql_query(Repo, query, [
+                 {:"@collection_name", collection_name},
+                 fname: fname,
+                 lname: lname
+               ])
+
+      assert {1,
               [
                 %{
                   "_id" => _,
@@ -129,21 +71,6 @@ defmodule ArangoXEctoTest do
                   "last_name" => ^lname
                 }
               ]} =
-               ArangoXEcto.aql_query(Repo, query, [
-                 {:"@collection_name", collection_name},
-                 fname: fname,
-                 lname: lname
-               ])
-
-      assert [
-               %{
-                 "_id" => _,
-                 "_key" => _,
-                 "_rev" => _,
-                 "first_name" => ^fname,
-                 "last_name" => ^lname
-               }
-             ] =
                ArangoXEcto.aql_query!(Repo, query, [
                  {:"@collection_name", collection_name},
                  fname: fname,
@@ -159,7 +86,7 @@ defmodule ArangoXEctoTest do
       INSERT {first_name: @fname} into @@collection_name
       """
 
-      assert {:ok, []} =
+      assert {:ok, {0, []}} =
                ArangoXEcto.aql_query(
                  Repo,
                  query,
@@ -174,14 +101,16 @@ defmodule ArangoXEctoTest do
 
   describe "api_query/3" do
     test "invalid function passed" do
-      assert_raise ArgumentError, ~r/Invalid function passed to `Arangox` module/, fn ->
-        ArangoXEcto.api_query(Repo, :non_existent, ["/_api/collections"])
-      end
+      assert_raise ArgumentError,
+                   "Invalid function [non_existent] passed to `Arangox` module",
+                   fn ->
+                     ArangoXEcto.api_query(Repo, :non_existent, ["/_api/collections"])
+                   end
     end
 
     test "valid function but not allowed" do
       assert_raise ArgumentError, ~r/Invalid function passed to `Arangox` module/, fn ->
-        ArangoXEcto.api_query(Repo, :start_link)
+        ArangoXEcto.api_query(Repo, :start_link, "")
       end
     end
 
@@ -211,7 +140,7 @@ defmodule ArangoXEctoTest do
       from = id_from_user(user1)
       to = id_from_user(user2)
 
-      edge = ArangoXEcto.create_edge(Repo, user1, user2, collection_name: "friends")
+      edge = ArangoXEcto.create_edge(DynamicRepo, user1, user2, collection_name: "friends")
 
       assert %{_from: ^from, _to: ^to} = edge
     end
@@ -279,10 +208,13 @@ defmodule ArangoXEctoTest do
 
     test "automatically creates analyzers in dynamic mode" do
       assert {:error, %Arangox.Error{status: 400, error_num: 10}} =
-               ArangoXEcto.create_view(Repo, ArangoXEctoTest.Integration.FailedAnalyzerTestView)
+               ArangoXEcto.create_view(
+                 DynamicRepo,
+                 ArangoXEctoTest.Integration.FailedAnalyzerTestView
+               )
 
       assert {:ok, %Arangox.Response{status: 201}} =
-               ArangoXEcto.create_view(Repo, ArangoXEctoTest.Integration.AnalyzerTestView)
+               ArangoXEcto.create_view(DynamicRepo, ArangoXEctoTest.Integration.AnalyzerTestView)
     end
   end
 
@@ -460,9 +392,9 @@ defmodule ArangoXEctoTest do
       user = %User{first_name: "John", last_name: "Smith"} |> Repo.insert!()
       post = %Post{title: "test"} |> Repo.insert!()
 
-      ArangoXEcto.create_edge(Repo, user, post, edge: UserPosts, fields: %{type: "wrote"})
+      ArangoXEcto.create_edge(DynamicRepo, user, post, edge: UserPosts, fields: %{type: "wrote"})
 
-      ArangoXEcto.delete_all_edges(Repo, user, post, edge: UserPosts)
+      ArangoXEcto.delete_all_edges(DynamicRepo, user, post, edge: UserPosts)
 
       assert Repo.one(from(e in UserPosts, select: count(e.id))) || 0 == 0
     end
@@ -709,37 +641,37 @@ defmodule ArangoXEctoTest do
 
   describe "is_edge?/1" do
     test "valid edge schema" do
-      assert ArangoXEcto.is_edge?(UserPosts)
+      assert ArangoXEcto.edge?(UserPosts)
     end
 
     test "valid document schema" do
-      refute ArangoXEcto.is_edge?(User)
+      refute ArangoXEcto.edge?(User)
     end
 
     test "not an ecto schema" do
-      refute ArangoXEcto.is_edge?(Ecto)
+      refute ArangoXEcto.edge?(Ecto)
     end
 
     test "not a module" do
-      refute ArangoXEcto.is_edge?(123)
+      refute ArangoXEcto.edge?(123)
     end
   end
 
   describe "is_document?/1" do
     test "valid document schema" do
-      assert ArangoXEcto.is_document?(User)
+      assert ArangoXEcto.document?(User)
     end
 
     test "valid edge schema" do
-      refute ArangoXEcto.is_document?(UserPosts)
+      refute ArangoXEcto.document?(UserPosts)
     end
 
     test "not an ecto schema" do
-      refute ArangoXEcto.is_document?(Ecto)
+      refute ArangoXEcto.document?(Ecto)
     end
 
     test "not a module" do
-      refute ArangoXEcto.is_document?(123)
+      refute ArangoXEcto.document?(123)
     end
   end
 

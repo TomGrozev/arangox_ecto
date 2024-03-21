@@ -3,8 +3,8 @@ defmodule ArangoXEctoTest.Integration.RepoTest do
 
   import Ecto.Query
 
-  alias ArangoXEctoTest.{Repo, DynamicRepo}
-  alias ArangoXEctoTest.Integration.{Comment, Post, User}
+  alias ArangoXEcto.Integration.{TestRepo, DynamicRepo}
+  alias ArangoXEcto.Integration.{Comment, Post, User}
 
   @test_collections [
     users: 2,
@@ -54,6 +54,22 @@ defmodule ArangoXEctoTest.Integration.RepoTest do
 
   test "if the repo is already started" do
     assert {:error, {:already_started, _}} = Repo.start_link()
+  end
+
+  describe "types" do
+    test "valid geojson struct" do
+      location = %Geo.Point{coordinates: {100.0, 0.0}, srid: nil}
+
+      {:ok, %User{location: loaded_location}} =
+        %User{location: location}
+        |> TestRepo.insert()
+
+      assert loaded_location == location
+    end
+
+    test "custom type is loaded and dumped correctly" do
+      assert {:ok, %User{gender: :other}} = TestRepo.insert(%User{gender: :other})
+    end
   end
 
   describe "Repo.all/2" do
