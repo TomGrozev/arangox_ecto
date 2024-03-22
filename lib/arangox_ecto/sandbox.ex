@@ -263,6 +263,7 @@ defmodule ArangoXEcto.Sandbox do
   """
   defmodule Connection do
     @moduledoc false
+    alias ArangoXEcto.Adapter
 
     if Code.ensure_loaded?(DBConnection) do
       @behaviour DBConnection
@@ -286,6 +287,12 @@ defmodule ArangoXEcto.Sandbox do
       case conn_mod.handle_begin(opts, state) do
         {:ok, value, state} ->
           {:ok, value, {conn_mod, state, true}}
+
+        {:transaction, value} ->
+          {:ok, value, {conn_mod, state, true}}
+
+        {:error, state} ->
+          {:error, "unknown error", {conn_mod, state, false}}
 
         {kind, err, state} ->
           {kind, err, {conn_mod, state, false}}
@@ -334,6 +341,7 @@ defmodule ArangoXEcto.Sandbox do
     defp proxy(fun, {conn_mod, state, in_transaction?}, args) do
       result = apply(conn_mod, fun, args ++ [state])
       pos = :erlang.tuple_size(result)
+
       :erlang.setelement(pos, result, {conn_mod, :erlang.element(pos, result), in_transaction?})
     end
   end
@@ -440,7 +448,7 @@ defmodule ArangoXEcto.Sandbox do
       be bumped whenever necessary.
   """
   @spec checkout(Ecto.Repo.t(), Keyword.t()) :: :ok | {:already, :owner | :allowed}
-  def(checkout(repo, opts \\ []) when is_atom(repo) or is_pid(repo)) do
+  def checkout(repo, opts \\ []) when is_atom(repo) or is_pid(repo) do
     %{pid: pool, opts: pool_opts} = lookup_meta!(repo)
 
     pool_opts =
@@ -554,10 +562,10 @@ defmodule ArangoXEcto.Sandbox do
         raise """
         ArangoXEcto sandbox transaction was already committed/rolled back.
 
-        The sandbox works by running each test in a transaction and closing the\
-        transaction afterwards. However, the transaction has already terminated.\
-        Your test code is likely committing or rolling back transactions manually,\
-        either by invoking procedures or running custom SQL commands.
+        The sandbox works by running each test in a transaction and closing the \
+        transaction afterwards. However, the transaction has already terminated. \
+        Your test code is likely committing or rolling back transactions manually, \
+        either by invoking procedures or running custom AQL commands.
 
         One option is to manually checkout a connection without a sandbox:
 

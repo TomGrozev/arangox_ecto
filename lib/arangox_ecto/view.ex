@@ -332,7 +332,7 @@ defmodule ArangoXEcto.View do
       Module.put_attribute(
         __MODULE__,
         :view_links,
-        {unquote(schema), unquote(link)}
+        {schema, link}
       )
     end
   end

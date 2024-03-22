@@ -763,6 +763,13 @@ defmodule ArangoXEcto.Migrator do
         Map.update!(acc, :storedValues, &[%{fields: fields, compression: compression} | &1])
 
       {:add_link, schema_name, link}, acc ->
+        schema_name =
+          if is_atom(schema_name) and function_exported?(schema_name, :__schema__, 1) do
+            schema_name.__schema__(:source)
+          else
+            schema_name
+          end
+
         put_in(acc, [:links, schema_name], ArangoXEcto.View.Link.to_map(link))
     end)
   end

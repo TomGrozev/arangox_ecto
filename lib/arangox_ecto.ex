@@ -9,6 +9,7 @@ defmodule ArangoXEcto do
 
   import Ecto.Query, only: [from: 2]
 
+  alias Ecto.Adapter
   alias ArangoXEcto.Adapter
   alias ArangoXEcto.Edge
   alias ArangoXEcto.Migration
@@ -71,13 +72,11 @@ defmodule ArangoXEcto do
       )
 
   def aql_query(
-        %{pid: pool, telemetry: telemetry, opts: default_opts},
+        %{telemetry: telemetry, opts: default_opts} = adapter_meta,
         query,
         vars,
         opts
       ) do
-    conn = Adapter.get_conn_or_pool(pool)
-
     is_write_operation = String.match?(query, ~r/(update|remove) .+/i)
 
     {query, vars} = process_vars(query, vars)
@@ -85,8 +84,9 @@ defmodule ArangoXEcto do
     opts = Adapter.with_log(telemetry, vars, opts ++ default_opts)
 
     try do
-      Arangox.transaction(
-        conn,
+      ArangoXEcto.Behaviour.Transaction.transaction(
+        adapter_meta,
+        opts,
         fn cursor ->
           stream = Arangox.cursor(cursor, query, vars, opts)
 
@@ -95,16 +95,21 @@ defmodule ArangoXEcto do
             {0, []},
             fn resp, {_len, acc} ->
               len =
-                case is_write_operation do
-                  true -> resp.body["extra"]["stats"]["writesExecuted"]
-                  false -> resp.body["extra"]["stats"]["scannedFull"]
+                cond do
+                  is_write_operation ->
+                    resp.body["extra"]["stats"]["writesExecuted"]
+
+                  resp.body["extra"]["stats"]["scannedIndex"] > 0 ->
+                    resp.body["extra"]["stats"]["scannedIndex"]
+
+                  true ->
+                    resp.body["extra"]["stats"]["scannedFull"]
                 end
 
               {len, acc ++ resp.body["result"]}
             end
           )
-        end,
-        opts
+        end
       )
     rescue
       e -> {:error, e}
@@ -411,7 +416,7 @@ defmodule ArangoXEcto do
       end)
 
     case repo.__adapter__().execute_ddl(repo, {:create, view_def, subcommands}, opts) do
-      {:info, _, _} -> :ok
+      {:ok, [{:info, _, _}]} -> :ok
       {:error, reason} -> {:error, reason}
     end
   end

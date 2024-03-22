@@ -136,6 +136,9 @@ defmodule ArangoXEcto.Behaviour.Queryable do
       {:error, %Arangox.Error{status: 404, error_num: 1203}} when not is_static ->
         {:ok, {0, []}}
 
+      {:error, :rollback} ->
+        {:ok, {0, []}}
+
       any ->
         any
     end

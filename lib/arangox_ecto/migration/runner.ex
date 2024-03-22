@@ -462,7 +462,10 @@ defmodule ArangoXEcto.Migration.Runner do
   defp log_and_execute_command(repo, %{level: level, log_migrations: log_migrations}, command) do
     log(level, command(command))
 
-    {:ok, logs} = repo.__adapter__().execute_ddl(repo, command, log: log_migrations)
+    {:ok, logs} =
+      repo.__adapter__().execute_ddl(repo, command,
+        log: if(level, do: log_migrations, else: false)
+      )
 
     Enum.each(logs, fn {res_level, message, metadata} ->
       log_result(res_level, level, message, metadata)

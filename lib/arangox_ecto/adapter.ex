@@ -304,7 +304,11 @@ defmodule ArangoXEcto.Adapter do
       previous_conn = put_conn(pool, conn)
 
       try do
-        callback.()
+        if Keyword.get(Function.info(callback), :arity) == 1 do
+          callback.(conn)
+        else
+          callback.()
+        end
       after
         reset_conn(pool, previous_conn)
       end
