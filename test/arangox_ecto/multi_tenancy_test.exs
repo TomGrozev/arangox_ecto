@@ -1,115 +1,68 @@
 defmodule ArangoXEctoTest.MultiTenancyTest do
-  use ExUnit.Case
-  @moduletag :supported
+  use ArangoXEcto.Integration.Case, write: ["users"], sandbox: false
 
-  alias ArangoXEctoTest.Integration.User
-  alias ArangoXEctoTest.Repo
+  alias ArangoXEcto.Integration.User
+  alias ArangoXEcto.Integration.TestRepo
 
-  @databases [
-    "arangox_ecto_test",
-    "tenant1_arangox_ecto_test"
-  ]
+  setup do
+    TestRepo.delete_all(User)
+    TestRepo.delete_all(User, prefix: "tenant1")
 
-  @test_collections [
-    "users"
-  ]
-
-  setup_all do
-    {:ok, conn} =
-      Repo.config()
-      |> Keyword.put(:database, "_system")
-      |> Arangox.start_link()
-
-    # Delete DBs
-    for db <- @databases do
-      Arangox.delete(conn, "/_api/database/#{db}")
-    end
-
-    # Create DBs
-    for db <- @databases do
-      Arangox.post(conn, "/_api/database", %{name: db})
-    end
-
-    [conn: conn]
-  end
-
-  # Empties each collection before every test
-  setup context do
-    for db <- @databases do
-      {:ok, conn} =
-        Repo.config()
-        |> Keyword.put(:database, db)
-        |> Arangox.start_link()
-
-      for collection <- @test_collections do
-        Arangox.delete(conn, "/_api/collection/#{collection}")
-        Arangox.post(conn, "/_api/collection", %{name: collection})
-      end
-    end
-
-    context
+    :ok
   end
 
   describe "using prefix" do
     test "it can insert with prefix" do
-      Repo.insert(%User{first_name: "John", last_name: "Smith"})
-      Repo.insert(%User{first_name: "Bob", last_name: "Smith"}, prefix: "tenant1")
+      TestRepo.insert(%User{first_name: "John", last_name: "Smith"})
+      TestRepo.insert(%User{first_name: "Bob", last_name: "Smith"}, prefix: "tenant1")
 
-      assert {:ok, [%{"first_name" => "John"}]} =
+      assert {:ok, {1, [%{"first_name" => "John"}]}} =
                raw_prefix_query("arangox_ecto_test", "FOR u IN users RETURN u")
 
-      assert {:ok, [%{"first_name" => "Bob"}]} =
+      assert {:ok, {1, [%{"first_name" => "Bob"}]}} =
                raw_prefix_query("tenant1_arangox_ecto_test", "FOR u IN users RETURN u")
     end
 
     test "it can update with prefix" do
-      {:ok, user} = Repo.insert(%User{first_name: "Bob", last_name: "Smith"}, prefix: "tenant1")
+      {:ok, user} =
+        TestRepo.insert(%User{first_name: "Bob", last_name: "Smith"}, prefix: "tenant1")
 
       # this works because the prefix is stored in the module
       user
       |> Ecto.Changeset.change(first_name: "Billy")
-      |> Repo.update()
+      |> TestRepo.update()
 
-      assert {:ok, []} = raw_prefix_query("arangox_ecto_test", "FOR u IN users RETURN u")
+      assert {:ok, {0, []}} = raw_prefix_query("arangox_ecto_test", "FOR u IN users RETURN u")
 
-      assert {:ok, [%{"first_name" => "Billy"}]} =
+      assert {:ok, {1, [%{"first_name" => "Billy"}]}} =
                raw_prefix_query("tenant1_arangox_ecto_test", "FOR u IN users RETURN u")
     end
 
     test "it can delete with prefix" do
-      Repo.insert(%User{first_name: "John", last_name: "Smith"})
+      TestRepo.insert(%User{first_name: "John", last_name: "Smith"})
 
       {:ok, %{id: id} = user} =
-        Repo.insert(%User{first_name: "Bob", last_name: "Smith"}, prefix: "tenant1")
+        TestRepo.insert(%User{first_name: "Bob", last_name: "Smith"}, prefix: "tenant1")
 
       # this works because the prefix is stored in the module
-      assert {:ok, %{id: ^id}} = Repo.delete(user)
+      assert {:ok, %{id: ^id}} = TestRepo.delete(user)
 
-      assert {:ok, [%{"first_name" => "John"}]} =
+      assert {:ok, {1, [%{"first_name" => "John"}]}} =
                raw_prefix_query("arangox_ecto_test", "FOR u IN users RETURN u")
 
-      assert {:ok, []} = raw_prefix_query("tenant1_arangox_ecto_test", "FOR u IN users RETURN u")
+      assert {:ok, {0, []}} =
+               raw_prefix_query("tenant1_arangox_ecto_test", "FOR u IN users RETURN u")
     end
 
     test "it can query using a prefix" do
-      Repo.insert(%User{first_name: "Bob", last_name: "Smith"}, prefix: "tenant1")
+      TestRepo.insert(%User{first_name: "Bob", last_name: "Smith"}, prefix: "tenant1")
 
-      assert [] = Repo.all(User)
-      assert [%{first_name: "Bob", last_name: "Smith"}] = Repo.all(User, prefix: "tenant1")
+      assert [] = TestRepo.all(User)
+      assert [%{first_name: "Bob", last_name: "Smith"}] = TestRepo.all(User, prefix: "tenant1")
     end
   end
 
   defp raw_prefix_query(db, query) do
-    {:ok, conn} =
-      Repo.config()
-      |> Keyword.put(:database, db)
-      |> Arangox.start_link()
-
-    Arangox.transaction(conn, fn c ->
-      Arangox.cursor(c, query)
-      |> Enum.reduce([], fn resp, acc ->
-        acc ++ resp.body["result"]
-      end)
-    end)
+    ArangoXEcto.aql_query(TestRepo, query, [], database: db)
   end
 end

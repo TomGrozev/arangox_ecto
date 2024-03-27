@@ -44,9 +44,23 @@ end
 
 # Load up the repository, start it, and run migrations
 _ = ArangoXEcto.Adapter.storage_down(TestRepo.config())
+
+_ =
+  ArangoXEcto.Adapter.storage_down(
+    TestRepo.config()
+    |> Keyword.put(:database, "tenant1_arangox_ecto_test")
+  )
+
 _ = ArangoXEcto.Adapter.storage_down(DynamicRepo.config())
 
 :ok = ArangoXEcto.Adapter.storage_up(TestRepo.config())
+
+_ =
+  ArangoXEcto.Adapter.storage_up(
+    TestRepo.config()
+    |> Keyword.put(:database, "tenant1_arangox_ecto_test")
+  )
+
 :ok = ArangoXEcto.Adapter.storage_up(DynamicRepo.config())
 
 {:ok, _pid} = TestRepo.start_link()

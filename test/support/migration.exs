@@ -14,6 +14,16 @@ defmodule ArangoXEcto.Integration.Migration do
       timestamps()
     end
 
+    create collection(:users, prefix: "tenant1") do
+      add :first_name, :string, comment: "first_name column"
+      add :last_name, :string
+      add :gender, :integer
+      add :age, :integer
+      add :location, :map
+
+      timestamps()
+    end
+
     create view(:user_search, commitIntervalMsec: 1, consolidationIntervalMsec: 1) do
       add_sort(:created_at, :desc)
       add_sort(:first_name)
