@@ -263,7 +263,6 @@ defmodule ArangoXEcto.Sandbox do
   """
   defmodule Connection do
     @moduledoc false
-    alias ArangoXEcto.Adapter
 
     if Code.ensure_loaded?(DBConnection) do
       @behaviour DBConnection

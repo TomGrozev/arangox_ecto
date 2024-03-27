@@ -72,7 +72,7 @@ defmodule ArangoXEcto do
       )
 
   def aql_query(
-        %{telemetry: telemetry, opts: default_opts} = adapter_meta,
+        %{repo: repo, telemetry: telemetry, opts: default_opts} = adapter_meta,
         query,
         vars,
         opts
@@ -81,7 +81,9 @@ defmodule ArangoXEcto do
 
     {query, vars} = process_vars(query, vars)
 
-    opts = Adapter.with_log(telemetry, vars, opts ++ default_opts)
+    database = Adapter.get_database(repo, opts)
+
+    opts = Adapter.with_log(telemetry, vars, [database: database] ++ opts ++ default_opts)
 
     try do
       ArangoXEcto.Behaviour.Transaction.transaction(

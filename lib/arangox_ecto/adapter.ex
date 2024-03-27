@@ -368,7 +368,11 @@ defmodule ArangoXEcto.Adapter do
 
   @doc false
   def with_log(telemetry, params, opts) do
-    [log: &log(telemetry, params, &1, opts)] ++ opts
+    if Keyword.get(opts, :log) |> is_function() do
+      opts
+    else
+      [log: &log(telemetry, params, &1, opts)] ++ opts
+    end
   end
 
   defp log({repo, log, event_name}, params, entry, opts) do
@@ -586,14 +590,18 @@ defmodule ArangoXEcto.Adapter do
     end
   end
 
+  @sources_keys [:write, :read, :exclusive]
   defp process_sources(opts) do
-    Keyword.take(opts, [:write, :read, :exclusive])
+    opts
     |> Enum.map(fn
-      {k, v} when is_list(v) ->
+      {k, v} when is_list(v) and k in @sources_keys ->
         {k, Enum.map(v, &convert_source/1)}
 
-      {k, v} ->
+      {k, v} when k in @sources_keys ->
         {k, convert_source(v)}
+
+      v ->
+        v
     end)
   end
 
