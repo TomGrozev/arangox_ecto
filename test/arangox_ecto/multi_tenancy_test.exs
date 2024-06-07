@@ -1,8 +1,8 @@
 defmodule ArangoXEctoTest.MultiTenancyTest do
   use ArangoXEcto.Integration.Case, write: ["users"], sandbox: false
 
-  alias ArangoXEcto.Integration.User
   alias ArangoXEcto.Integration.TestRepo
+  alias ArangoXEcto.Integration.User
 
   setup do
     TestRepo.delete_all(User)

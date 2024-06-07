@@ -1260,5 +1260,5 @@ defmodule ArangoXEcto.MigrationTest do
     end
   end
 
-  defp last_command(), do: Process.get(:last_command)
+  defp last_command, do: Process.get(:last_command)
 end

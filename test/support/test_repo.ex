@@ -1,3 +1,27 @@
+defmodule ArangoXEcto.Integration.Repo do
+  defmacro __using__(opts) do
+    quote do
+      use Ecto.Repo, unquote(opts)
+
+      @query_event __MODULE__
+                   |> Module.split()
+                   |> Enum.map(&(&1 |> Macro.underscore() |> String.to_atom()))
+                   |> Kernel.++([:query])
+
+      def init(_, opts) do
+        fun = &ArangoXEcto.Integration.Repo.handle_event/4
+        :telemetry.attach_many(__MODULE__, [[:custom], @query_event], fun, :ok)
+        {:ok, opts}
+      end
+    end
+  end
+
+  def handle_event(event, latency, metadata, _config) do
+    handler = Process.delete(:telemetry) || fn _, _, _ -> :ok end
+    handler.(event, latency, metadata)
+  end
+end
+
 defmodule MigrationsAgent do
   use Agent
 
@@ -100,14 +124,18 @@ defmodule ArangoXEcto.TestAdapter do
   end
 end
 
+defmodule ArangoXEcto.Integration.PoolRepo do
+  use ArangoXEcto.Integration.Repo, otp_app: :arangox_ecto, adapter: ArangoXEcto.Adapter
+end
+
 defmodule ArangoXEcto.Integration.TestRepo do
-  use Ecto.Repo,
+  use ArangoXEcto.Integration.Repo,
     otp_app: :arangox_ecto,
     adapter: ArangoXEcto.Adapter
 end
 
 defmodule ArangoXEcto.Integration.DynamicRepo do
-  use Ecto.Repo,
+  use ArangoXEcto.Integration.Repo,
     otp_app: :arangox_ecto,
     adapter: ArangoXEcto.Adapter
 end

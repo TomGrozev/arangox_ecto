@@ -115,11 +115,11 @@ defmodule ArangoXEcto.MigratorTest do
   defmodule MigrationWithCallbacks do
     use ArangoXEcto.Migration
 
-    def after_begin() do
+    def after_begin do
       execute "after_begin", "after_begin_down"
     end
 
-    def before_commit() do
+    def before_commit do
       if flushed?() do
         execute "before_commit", "before_commit_down"
       end
@@ -129,7 +129,7 @@ defmodule ArangoXEcto.MigratorTest do
       create index(:posts, [:foo])
     end
 
-    defp flushed?() do
+    defp flushed? do
       %{commands: commands} = Agent.get(runner(), fn state -> state end)
       Enum.empty?(commands)
     end
@@ -147,11 +147,11 @@ defmodule ArangoXEcto.MigratorTest do
 
     @disable_ddl_transaction true
 
-    def after_begin() do
+    def after_begin do
       execute "after_begin", "after_begin_down"
     end
 
-    def before_commit() do
+    def before_commit do
       execute "before_commit", "before_commit_down"
     end
 
@@ -883,7 +883,7 @@ defmodule ArangoXEcto.MigratorTest do
         Process.get(:start_link)
       end
 
-      def stop() do
+      def stop do
         Process.put(:stopped, true)
       end
 
@@ -964,5 +964,5 @@ defmodule ArangoXEcto.MigratorTest do
     end
   end
 
-  defp last_command(), do: Process.get(:last_command)
+  defp last_command, do: Process.get(:last_command)
 end

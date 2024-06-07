@@ -6,11 +6,12 @@ defmodule ArangoXEcto.ViewTest do
   import Ecto.Query
   import ArangoXEcto.Query, only: [search: 2, search: 3]
 
-  alias ArangoXEcto.Integration.{TestRepo, DynamicRepo}
+  alias ArangoXEcto.Integration.{DynamicRepo, TestRepo}
   alias ArangoXEcto.Integration.{PostsView, User, UsersView}
 
   setup_all do
     :ok = ArangoXEcto.Sandbox.checkout(TestRepo, sandbox: false, write: ["users"])
+    TestRepo.delete_all(User)
     %User{first_name: "John", last_name: "Smith", gender: :male} |> TestRepo.insert!()
     %User{first_name: "Jane", last_name: "Smith", gender: :female} |> TestRepo.insert!()
     :ok = ArangoXEcto.Sandbox.checkin(TestRepo)

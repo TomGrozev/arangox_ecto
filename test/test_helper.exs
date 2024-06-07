@@ -1,11 +1,23 @@
+Logger.configure(level: :info)
+
 Code.require_file("./support/test_repo.ex", __DIR__)
 Code.require_file("./support/file_helpers.exs", __DIR__)
 
-alias ArangoXEcto.Integration.{TestRepo, DynamicRepo}
+alias ArangoXEcto.Integration.{PoolRepo, TestRepo, DynamicRepo}
+
+Application.put_env(:arangox_ecto, PoolRepo,
+  pool_size: 10,
+  max_restarts: 20,
+  max_seconds: 10,
+  log: false,
+  database: "arangox_ecto_test",
+  endpoints: System.get_env("DB_ENDPOINT"),
+  username: System.get_env("DB_USER"),
+  password: System.get_env("DB_PASSWORD")
+)
 
 Application.put_env(:arangox_ecto, TestRepo,
   pool: ArangoXEcto.Sandbox,
-  show_sensitive_data_on_connection_error: true,
   log: false,
   database: "arangox_ecto_test",
   endpoints: System.get_env("DB_ENDPOINT"),
@@ -15,7 +27,6 @@ Application.put_env(:arangox_ecto, TestRepo,
 
 Application.put_env(:arangox_ecto, DynamicRepo,
   pool: ArangoXEcto.Sandbox,
-  show_sensitive_data_on_connection_error: true,
   log: false,
   static: false,
   database: "arangox_ecto_dynamic_test",
@@ -34,6 +45,7 @@ defmodule ArangoXEcto.Integration.Case do
 
       setup do
         :ok = ArangoXEcto.Sandbox.checkout(TestRepo, unquote(opts))
+        :ok = ArangoXEcto.Sandbox.checkout(DynamicRepo, unquote(Keyword.drop(opts, [:write])))
       end
     end
   end
@@ -65,6 +77,7 @@ _ =
 
 {:ok, _pid} = TestRepo.start_link()
 {:ok, _pid} = DynamicRepo.start_link()
+{:ok, _pid} = PoolRepo.start_link()
 
 :ok = ArangoXEcto.Migrator.up(TestRepo, 0, ArangoXEcto.Integration.Migration, log: false)
 ArangoXEcto.Sandbox.mode(TestRepo, :manual)

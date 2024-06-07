@@ -56,14 +56,18 @@ defmodule ArangoXEcto.Integration.Migration do
       timestamps(null: true)
     end
 
+    create edge(:post_user)
+    create edge(:user_user)
+
     create edge(:posts_users) do
       add :type, :string
     end
 
-    # Add a unique index on uuid. We use this
-    # to verify the behaviour that the index
-    # only matters if the UUID column is not NULL.
-    create unique_index(:posts, [:uuid], comment: "posts index")
+    create edge(:posts_users_options, keyOptions: %{type: :uuid}) do
+      add :type, :string
+    end
+
+    create unique_index(:posts_users_options, [:type])
 
     create collection(:permalinks) do
       add :uniform_resource_locator, :string
@@ -72,10 +76,12 @@ defmodule ArangoXEcto.Integration.Migration do
 
     create unique_index(:permalinks, [:uniform_resource_locator])
 
-    create collection(:comments) do
+    create collection(:comments, keyOptions: %{type: :uuid}) do
       add :text, :string, max_length: 100
       add :lock_version, :integer
     end
+
+    create unique_index(:comments, [:text])
 
     create collection(:customs) do
       add :bid, :string

@@ -1,6 +1,8 @@
 defmodule ArangoXEcto.Integration.User do
   use ArangoXEcto.Schema
 
+  import Ecto.Changeset
+
   schema "users" do
     field(:first_name, :string)
     field(:last_name, :string)
@@ -21,6 +23,12 @@ defmodule ArangoXEcto.Integration.User do
     one_outgoing(:best_post, ArangoXEcto.Integration.Post)
 
     timestamps()
+  end
+
+  def changeset(struct, attrs) do
+    struct
+    |> cast(attrs, [:first_name, :last_name, :gender, :age, :location])
+    |> validate_required([:last_name])
   end
 end
 
@@ -66,7 +74,6 @@ end
 
 defmodule ArangoXEcto.Integration.Comment do
   use ArangoXEcto.Schema
-  import Ecto.Changeset
 
   options(keyOptions: %{type: :uuid})
 
@@ -91,7 +98,7 @@ defmodule ArangoXEcto.Integration.Deep.Magic do
   end
 end
 
-defmodule ArangoXEcto.Integration.PostsUsers do
+defmodule ArangoXEcto.Integration.UserPosts do
   use ArangoXEcto.Edge,
     from: ArangoXEcto.Integration.Post,
     to: ArangoXEcto.Integration.User
@@ -103,23 +110,29 @@ defmodule ArangoXEcto.Integration.PostsUsers do
 
     field(:type, :string)
   end
+
+  def changeset(edge, attrs) do
+    edges_changeset(edge, attrs)
+    |> cast(attrs, [:type])
+  end
 end
 
-defmodule ArangoXEcto.Integration.PostsUsersOptions do
+defmodule ArangoXEcto.Integration.UserPostsOptions do
   use ArangoXEcto.Edge,
     from: ArangoXEcto.Integration.Post,
     to: ArangoXEcto.Integration.User
 
-  options(keyOptions: %{type: :uuid})
-
-  indexes([
-    [fields: [:type], unique: true]
-  ])
+  import Ecto.Changeset
 
   schema "posts_users_options" do
     edge_fields()
 
     field(:type, :string)
+  end
+
+  def changeset(edge, attrs) do
+    edges_changeset(edge, attrs)
+    |> cast(attrs, [:type])
   end
 end
 
@@ -165,6 +178,69 @@ defmodule ArangoXEcto.Integration.PostsView do
         }
       }
     })
+
+    options(primarySortCompression: :lz4)
+  end
+end
+
+defmodule ArangoXEcto.Integration.CommentView do
+  use ArangoXEcto.View
+
+  alias ArangoXEcto.View.Link
+
+  view "comment_search" do
+    link(ArangoXEcto.Integration.Comment, %Link{
+      includeAllFields: true,
+      fields: %{
+        text: %Link{
+          analyzers: [:text_en]
+        }
+      }
+    })
+
+    options(primarySortCompression: :lz4)
+  end
+end
+
+defmodule ArangoXEcto.Integration.AnalyzerTestView do
+  use ArangoXEcto.View, analyzer_module: ArangoXEcto.Integration.Analyzers
+
+  alias ArangoXEcto.View.Link
+
+  view "analyzer_test_view" do
+    link(
+      ArangoXEcto.Integration.Comment,
+      %Link{
+        includeAllFields: true,
+        fields: %{
+          name: %Link{
+            analyzers: [:f]
+          }
+        }
+      }
+    )
+
+    options(primarySortCompression: :lz4)
+  end
+end
+
+defmodule ArangoXEcto.Integration.FailedAnalyzerTestView do
+  use ArangoXEcto.View
+
+  alias ArangoXEcto.View.Link
+
+  view "failed_analyzer_test_view" do
+    link(
+      ArangoXEcto.Integration.Comment,
+      %Link{
+        includeAllFields: true,
+        fields: %{
+          name: %Link{
+            analyzers: [:f]
+          }
+        }
+      }
+    )
 
     options(primarySortCompression: :lz4)
   end
