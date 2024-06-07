@@ -268,18 +268,22 @@ defmodule ArangoXEcto.Sandbox do
       @behaviour DBConnection
     end
 
+    @doc false
     def connect(_opts) do
       raise "should never be invoked"
     end
 
+    @doc false
     def disconnect(err, {conn_mod, state, _in_transaction}) do
       conn_mod.disconnect(err, state)
     end
 
+    @doc false
     def checkout(state), do: proxy(:checkout, state, [])
     def checkin(state), do: proxy(:checkin, state, [])
     def ping(state), do: proxy(:ping, state, [])
 
+    @doc false
     def handle_begin(opts, {conn_mod, state, false}) do
       case conn_mod.handle_begin(opts, state) do
         {:ok, value, state} ->
@@ -296,34 +300,43 @@ defmodule ArangoXEcto.Sandbox do
       end
     end
 
+    @doc false
     def handle_commit(_opts, {conn_mod, state, true}) do
       # Fake the commiting since sub transactions aren't supported
       {:ok, nil, {conn_mod, state, false}}
     end
 
+    @doc false
     def handle_rollback(_opts, {conn_mod, state, _}) do
       # Fake the rolling back since sub transactions aren't supported
       {:ok, nil, {conn_mod, state, false}}
     end
 
+    @doc false
     def handle_status(opts, state),
       do: proxy(:handle_status, state, [opts])
 
+    @doc false
     def handle_prepare(query, opts, state),
       do: proxy(:handle_prepare, state, [query, opts])
 
+    @doc false
     def handle_execute(query, params, opts, state),
       do: proxy(:handle_execute, state, [query, params, opts])
 
+    @doc false
     def handle_close(query, opts, state),
       do: proxy(:handle_close, state, [query, opts])
 
+    @doc false
     def handle_declare(query, params, opts, state),
       do: proxy(:handle_declare, state, [query, params, opts])
 
+    @doc false
     def handle_fetch(query, cursor, opts, state),
       do: proxy(:handle_fetch, state, [query, cursor, opts])
 
+    @doc false
     def handle_deallocate(query, cursor, opts, state),
       do: proxy(:handle_deallocate, state, [query, cursor, opts])
 
