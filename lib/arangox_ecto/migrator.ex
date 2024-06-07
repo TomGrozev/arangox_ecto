@@ -87,9 +87,9 @@ defmodule ArangoXEcto.Migrator do
 
   require Logger
 
-  alias ArangoXEcto.Migration.JsonSchema
+  alias ArangoXEcto.View.Link
   alias ArangoXEcto.Migration.{Runner, SchemaMigration}
-  alias ArangoXEcto.Migration.{Analyzer, Collection, Index, View}
+  alias ArangoXEcto.Migration.{Analyzer, Collection, Index, JsonSchema, View}
 
   @type command :: :create | :create_if_not_exists | :drop | :drop_if_exists
   @type subcommand :: :add | :add_enum | :rename
@@ -716,7 +716,14 @@ defmodule ArangoXEcto.Migrator do
 
     url = ArangoXEcto.__build_connection_url__(meta, "analyzer", opts)
 
-    ArangoXEcto.api_query(meta, :post, url, analyzer, %{}, opts)
+    ArangoXEcto.api_query(
+      meta,
+      :post,
+      url,
+      Analyzer.definition(analyzer),
+      %{},
+      opts
+    )
     |> process_existing(command)
     |> log_execute()
   end
@@ -770,7 +777,7 @@ defmodule ArangoXEcto.Migrator do
             schema_name
           end
 
-        put_in(acc, [:links, schema_name], ArangoXEcto.View.Link.to_map(link))
+        put_in(acc, [:links, schema_name], Link.to_map(link))
     end)
   end
 

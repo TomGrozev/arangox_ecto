@@ -46,8 +46,8 @@ defmodule ArangoXEcto.Migration do
 
   require Logger
 
-  alias ArangoXEcto.View.Link
   alias ArangoXEcto.Migration.Runner
+  alias ArangoXEcto.View.Link
 
   @typedoc "All migration commands"
   @type command ::
@@ -344,6 +344,20 @@ defmodule ArangoXEcto.Migration do
     end
 
     defp valid_key?(_, _), do: false
+
+    @doc false
+    def definition(analyzer) do
+      case Map.get(analyzer.properties, :pipeline) do
+        nil ->
+          analyzer
+
+        pipeline ->
+          Map.update!(analyzer, :properties, fn props ->
+            Map.put(props, :pipeline, Enum.map(pipeline, &Map.from_struct/1))
+          end)
+      end
+      |> Map.from_struct()
+    end
   end
 
   defmodule Index do

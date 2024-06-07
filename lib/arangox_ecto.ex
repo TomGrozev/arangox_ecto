@@ -9,8 +9,8 @@ defmodule ArangoXEcto do
 
   import Ecto.Query, only: [from: 2]
 
-  alias Ecto.Adapter
   alias ArangoXEcto.Adapter
+  alias ArangoXEcto.Behaviour.Transaction
   alias ArangoXEcto.Edge
   alias ArangoXEcto.Migration
 
@@ -86,10 +86,20 @@ defmodule ArangoXEcto do
     opts = Adapter.with_log(telemetry, vars, [database: database] ++ opts ++ default_opts)
 
     try do
-      ArangoXEcto.Behaviour.Transaction.transaction(
+      Transaction.transaction(
         adapter_meta,
         opts,
         fn cursor ->
+          default_properties = [options: %{fullCount: true}]
+
+          opts =
+            Keyword.update(
+              opts,
+              :properties,
+              default_properties,
+              &Keyword.merge(&1, default_properties)
+            )
+
           stream = Arangox.cursor(cursor, query, vars, opts)
 
           Enum.reduce(
@@ -97,15 +107,10 @@ defmodule ArangoXEcto do
             {0, []},
             fn resp, {_len, acc} ->
               len =
-                cond do
-                  is_write_operation ->
-                    resp.body["extra"]["stats"]["writesExecuted"]
-
-                  resp.body["extra"]["stats"]["scannedIndex"] > 0 ->
-                    resp.body["extra"]["stats"]["scannedIndex"]
-
-                  true ->
-                    resp.body["extra"]["stats"]["scannedFull"]
+                if is_write_operation do
+                  resp.body["extra"]["stats"]["writesExecuted"]
+                else
+                  resp.body["extra"]["stats"]["fullCount"]
                 end
 
               {len, acc ++ resp.body["result"]}
@@ -339,13 +344,11 @@ defmodule ArangoXEcto do
   """
   @spec create_edge(Ecto.Repo.t(), module(), module(), Keyword.t()) ::
           {:ok, Ecto.Schema.t()} | {:error, Ecto.Changeset.t()}
-  def create_edge(repo, from, to, opts \\ [])
-
-  def create_edge(repo, from, to, opts) do
+  def create_edge(repo, from, to, opts \\ []) do
     from_id = struct_id(from)
     to_id = struct_id(to)
 
-    Keyword.get(opts, :edge, edge_module(from, to, opts))
+    Keyword.get_lazy(opts, :edge, fn -> edge_module(from, to, opts) end)
     |> do_create_edge(repo, from_id, to_id, opts)
   end
 
@@ -385,6 +388,10 @@ defmodule ArangoXEcto do
   @spec create_view(Ecto.Repo.t(), ArangoXEcto.View.t(), Keyword.t()) ::
           :ok | {:error, Arangox.Error.t()}
   def create_view(repo, view, opts \\ []) do
+    unless view?(view) do
+      raise ArgumentError, "not a valid view schema"
+    end
+
     # check if is dynamic mode
     if not Keyword.get(repo.config(), :static, true) do
       analyzer_module = view.__analyzer_module__()
@@ -419,6 +426,7 @@ defmodule ArangoXEcto do
 
     case repo.__adapter__().execute_ddl(repo, {:create, view_def, subcommands}, opts) do
       {:ok, [{:info, _, _}]} -> :ok
+      {:ok, [{:error, reason, _}]} -> {:error, reason}
       {:error, reason} -> {:error, reason}
     end
   end
@@ -467,8 +475,9 @@ defmodule ArangoXEcto do
 
     Enum.reduce(analyzers, {[], []}, fn analyzer, {success, fail} ->
       case repo.__adapter__().execute_ddl(repo, {:create, analyzer}, opts) do
-        {:info, _, _} -> {[analyzer.name | success], fail}
-        {:error, reason, _} -> {success, [{analyzer.name, reason} | fail]}
+        {:ok, [{:info, _, _}]} -> {[analyzer.name | success], fail}
+        {:ok, [{:error, reason, _}]} -> {:error, reason}
+        {:error, reason} -> {:error, reason}
       end
     end)
     |> case do
@@ -571,21 +580,13 @@ defmodule ArangoXEcto do
       :ok
   """
   @spec delete_all_edges(Ecto.Repo.t(), module(), module(), Keyword.t()) :: :ok
-  def delete_all_edges(repo, from, to, opts \\ [])
-
-  def delete_all_edges(repo, from, to, [edge: edge_module] = opts) do
+  def delete_all_edges(repo, from, to, opts \\ []) do
     from_id = struct_id(from)
     to_id = struct_id(to)
 
-    edge_module
-    |> do_delete_all_edges(repo, from_id, to_id, opts)
-  end
-
-  def delete_all_edges(repo, from, to, opts) do
-    from_id = struct_id(from)
-    to_id = struct_id(to)
-
-    edge_module(from, to, opts)
+    Keyword.get_lazy(opts, :edge, fn ->
+      edge_module(from, to, Keyword.put(opts, :create, false))
+    end)
     |> do_delete_all_edges(repo, from_id, to_id, opts)
   end
 
@@ -773,7 +774,7 @@ defmodule ArangoXEcto do
   def load(_, _), do: raise(ArgumentError, "Invalid input map or module")
 
   @doc """
-  Generates a edge schema dynamically
+  Generates an edge schema dynamically
 
   If a collection name is not provided one will be dynamically generated. The naming convention
   is the names of the two modules is alphabetical order. E.g. `User` and `Post` will combine for a collection
@@ -799,10 +800,10 @@ defmodule ArangoXEcto do
   ## Examples
 
       iex> ArangoXEcto.edge_module(MyProject.User, MyProject.Company, [collection_name: "works_for"])
-      MyProject.WorksFor
+      MyProject.Edges.WorksFor
 
       iex> ArangoXEcto.edge_module(MyProject.User, MyProject.Company)
-      MyProject.UsersCompanies
+      MyProject.Edges.CompanyUser
   """
   @spec edge_module(module(), module(), Keyword.t()) :: atom()
   def edge_module(from_module, to_module, opts \\ [])
@@ -1100,15 +1101,19 @@ defmodule ArangoXEcto do
   end
 
   defp do_delete_all_edges(module, repo, from_id, to_id, opts) do
-    module
-    |> validate_ecto_schema()
-    |> validate_edge_module()
-    |> source_name()
-    |> collection_exists!(repo, 3)
+    collection_name =
+      module
+      |> validate_ecto_schema()
+      |> validate_edge_module()
+      |> source_name()
 
-    module
-    |> find_edge_by_nodes(repo, from_id, to_id, opts)
-    |> Enum.each(&repo.delete/1)
+    if collection_exists?(repo, collection_name, :edge) do
+      module
+      |> find_edge_by_nodes(repo, from_id, to_id, opts)
+      |> Enum.each(&repo.delete/1)
+    end
+
+    :ok
   end
 
   defp find_edge_by_nodes(module, repo, from_id, to_id, opts) do
@@ -1271,7 +1276,8 @@ defmodule ArangoXEcto do
   end
 
   defp maybe_create_edges_collection(schema, repo) do
-    unless collection_exists?(repo, source_name(schema), :edge) do
+    unless Keyword.get(repo.config(), :static, true) or
+             collection_exists?(repo, source_name(schema), :edge) do
       create_collection(repo, schema)
     end
 
