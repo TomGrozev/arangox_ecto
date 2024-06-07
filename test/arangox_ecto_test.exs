@@ -3,7 +3,7 @@ defmodule ArangoXEctoTest do
     write: ["users", "posts", "posts_users", "posts_users_options", "user_user"]
 
   alias ArangoXEcto.Integration.{Class, Post, User, UserPosts, UserPostsOptions}
-  alias ArangoXEcto.Integration.{DynamicRepo, PoolRepo, TestRepo}
+  alias ArangoXEcto.Integration.{DynamicRepo, TestRepo}
 
   import Ecto.Query
 
