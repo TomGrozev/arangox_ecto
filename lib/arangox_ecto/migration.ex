@@ -119,8 +119,7 @@ defmodule ArangoXEcto.Migration do
     def new(name, opts) when is_atom(name), do: new(Atom.to_string(name), opts)
 
     def new(name, opts) do
-      keys =
-        Keyword.merge(opts, name: name, type: "arangosearch")
+      keys = Keyword.merge(opts, name: name, type: "arangosearch")
 
       struct(__MODULE__, keys)
     end

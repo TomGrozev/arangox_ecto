@@ -194,8 +194,7 @@ defmodule ArangoXEctoTest do
 
   describe "create_view/2" do
     test "creates a new view but fails on recreate" do
-      assert :ok =
-               ArangoXEcto.create_view(DynamicRepo, ArangoXEcto.Integration.UsersView)
+      assert :ok = ArangoXEcto.create_view(DynamicRepo, ArangoXEcto.Integration.UsersView)
 
       assert {:error, "duplicate name"} =
                ArangoXEcto.create_view(DynamicRepo, ArangoXEcto.Integration.UsersView)
@@ -203,8 +202,7 @@ defmodule ArangoXEctoTest do
 
     test "automatically creates collection if it doesn't exist" do
       # Comments collection doesn't exist by default
-      assert :ok =
-               ArangoXEcto.create_view(DynamicRepo, ArangoXEcto.Integration.CommentView)
+      assert :ok = ArangoXEcto.create_view(DynamicRepo, ArangoXEcto.Integration.CommentView)
     end
 
     test "error on invalid view schema" do
@@ -221,8 +219,7 @@ defmodule ArangoXEctoTest do
                  ArangoXEcto.Integration.FailedAnalyzerTestView
                )
 
-      assert :ok =
-               ArangoXEcto.create_view(DynamicRepo, ArangoXEcto.Integration.AnalyzerTestView)
+      assert :ok = ArangoXEcto.create_view(DynamicRepo, ArangoXEcto.Integration.AnalyzerTestView)
     end
   end
 

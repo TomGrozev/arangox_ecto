@@ -82,8 +82,7 @@ defmodule ArangoXEcto.ViewTest do
         |> search([uv], fragment("ANALYZER(? == ?, \"identity\")", uv.first_name, "John"))
         |> select([uv], uv)
 
-      assert %{first_name: "John", last_name: "Smith"} =
-               TestRepo.one(query)
+      assert %{first_name: "John", last_name: "Smith"} = TestRepo.one(query)
 
       # make sure non existent analyzer returns empty
       query =

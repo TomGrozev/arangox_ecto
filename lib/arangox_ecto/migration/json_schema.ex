@@ -130,8 +130,7 @@ defmodule ArangoXEcto.Migration.JsonSchema do
   end
 
   defp command_to_schema({name, :uuid, command_opts}, opts) do
-    pattern =
-      "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+    pattern = "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
 
     command_to_schema(
       {name, :string, Keyword.put(command_opts, :pattern, pattern)},

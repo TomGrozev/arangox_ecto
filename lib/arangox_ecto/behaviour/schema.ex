@@ -206,8 +206,7 @@ defmodule ArangoXEcto.Behaviour.Schema do
       ) do
     return_new = should_return_new?(returning, opts)
 
-    options =
-      build_options([{return_new, "returnNew"}])
+    options = build_options([{return_new, "returnNew"}])
 
     doc = Enum.into(fields, %{})
 

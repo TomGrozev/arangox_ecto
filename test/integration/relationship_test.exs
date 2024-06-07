@@ -21,8 +21,7 @@ defmodule ArangoxEctoTest.Integration.RelationshipTest do
         |> Ecto.Changeset.put_assoc(:posts_two, [post])
         |> TestRepo.insert!()
 
-      assert [%{_from: ^user_id, _to: ^post_id}] =
-               TestRepo.all(UserPosts)
+      assert [%{_from: ^user_id, _to: ^post_id}] = TestRepo.all(UserPosts)
 
       assert %User{__id__: ^user_id, posts_two: [%Post{__id__: ^post_id, title: "abc"}]} =
                TestRepo.preload(user, :posts_two)
