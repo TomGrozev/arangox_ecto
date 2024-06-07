@@ -149,7 +149,7 @@ defmodule ArangoXEcto.Adapter do
   def loaders(:date, _type), do: [&load_date/1]
   def loaders(:time, _type), do: [&load_time/1]
   def loaders(:utc_datetime, _type), do: [&load_utc_datetime/1]
-  def loaders(:naive_datetime, _type), do: [&NaiveDateTime.from_iso8601/1]
+  def loaders(:naive_datetime, _type), do: [&load_naive_datetime/1]
   def loaders(:float, type), do: [&load_float/1, type]
   def loaders(:integer, type), do: [&load_integer/1, type]
   def loaders(:decimal, _type), do: [&load_decimal/1]
@@ -280,13 +280,16 @@ defmodule ArangoXEcto.Adapter do
 
   @doc false
   def load_integer(arg) when is_number(arg), do: {:ok, trunc(arg)}
+  def load_integer(nil), do: {:ok, nil}
   def load_integer(_), do: :error
 
   @doc false
   def load_float(arg) when is_number(arg), do: {:ok, :erlang.float(arg)}
+  def load_float(nil), do: {:ok, nil}
   def load_float(_), do: :error
 
   @doc false
+  def load_decimal(nil), do: {:ok, nil}
   def load_decimal(arg), do: {:ok, Decimal.new(arg)}
 
   # Connection helpers
@@ -569,12 +572,16 @@ defmodule ArangoXEcto.Adapter do
   defp aql_colour("FOR" <> _), do: :cyan
   defp aql_colour(_), do: nil
 
+  defp load_date(nil), do: {:ok, nil}
+
   defp load_date(d) do
     case Date.from_iso8601(d) do
       {:ok, res} -> {:ok, res}
       {:error, _reason} -> :error
     end
   end
+
+  defp load_time(nil), do: {:ok, nil}
 
   defp load_time(t) do
     case Time.from_iso8601(t) do
@@ -583,9 +590,20 @@ defmodule ArangoXEcto.Adapter do
     end
   end
 
+  defp load_utc_datetime(nil), do: {:ok, nil}
+
   defp load_utc_datetime(dt) do
     case DateTime.from_iso8601(dt) do
       {:ok, res, _} -> {:ok, res}
+      {:error, _reason} -> :error
+    end
+  end
+
+  defp load_naive_datetime(nil), do: {:ok, nil}
+
+  defp load_naive_datetime(dt) do
+    case NaiveDateTime.from_iso8601(dt) do
+      {:ok, res} -> {:ok, res}
       {:error, _reason} -> :error
     end
   end
