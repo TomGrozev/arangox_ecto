@@ -281,8 +281,6 @@ defmodule ArangoXEcto.Sandbox do
     def ping(state), do: proxy(:ping, state, [])
 
     def handle_begin(opts, {conn_mod, state, false}) do
-      opts = [mode: :savepoint] ++ opts
-
       case conn_mod.handle_begin(opts, state) do
         {:ok, value, state} ->
           {:ok, value, {conn_mod, state, true}}
@@ -298,44 +296,36 @@ defmodule ArangoXEcto.Sandbox do
       end
     end
 
-    def handle_commit(opts, {conn_mod, state, true}) do
-      opts = [mode: :savepoint] ++ opts
-      proxy(:handle_commit, {conn_mod, state, false}, [opts])
+    def handle_commit(_opts, {conn_mod, state, true}) do
+      # Fake the commiting since sub transactions aren't supported
+      {:ok, nil, {conn_mod, state, false}}
     end
 
-    def handle_rollback(opts, {conn_mod, state, _}) do
-      opts = [mode: :savepoint] ++ opts
-      proxy(:handle_rollback, {conn_mod, state, false}, [opts])
+    def handle_rollback(_opts, {conn_mod, state, _}) do
+      # Fake the rolling back since sub transactions aren't supported
+      {:ok, nil, {conn_mod, state, false}}
     end
 
     def handle_status(opts, state),
-      do: proxy(:handle_status, state, [maybe_savepoint(opts, state)])
+      do: proxy(:handle_status, state, [opts])
 
     def handle_prepare(query, opts, state),
-      do: proxy(:handle_prepare, state, [query, maybe_savepoint(opts, state)])
+      do: proxy(:handle_prepare, state, [query, opts])
 
     def handle_execute(query, params, opts, state),
-      do: proxy(:handle_execute, state, [query, params, maybe_savepoint(opts, state)])
+      do: proxy(:handle_execute, state, [query, params, opts])
 
     def handle_close(query, opts, state),
-      do: proxy(:handle_close, state, [query, maybe_savepoint(opts, state)])
+      do: proxy(:handle_close, state, [query, opts])
 
     def handle_declare(query, params, opts, state),
-      do: proxy(:handle_declare, state, [query, params, maybe_savepoint(opts, state)])
+      do: proxy(:handle_declare, state, [query, params, opts])
 
     def handle_fetch(query, cursor, opts, state),
-      do: proxy(:handle_fetch, state, [query, cursor, maybe_savepoint(opts, state)])
+      do: proxy(:handle_fetch, state, [query, cursor, opts])
 
     def handle_deallocate(query, cursor, opts, state),
-      do: proxy(:handle_deallocate, state, [query, cursor, maybe_savepoint(opts, state)])
-
-    defp maybe_savepoint(opts, {_, _, in_transaction?}) do
-      if not in_transaction? and Keyword.get(opts, :sandbox_subtransaction, true) do
-        [mode: :savepoint] ++ opts
-      else
-        opts
-      end
-    end
+      do: proxy(:handle_deallocate, state, [query, cursor, opts])
 
     defp proxy(fun, {conn_mod, state, in_transaction?}, args) do
       result = apply(conn_mod, fun, args ++ [state])
@@ -534,7 +524,7 @@ defmodule ArangoXEcto.Sandbox do
   defp find_repo(repo), do: repo
 
   defp post_checkout(conn_mod, conn_state, opts) do
-    case conn_mod.handle_begin([mode: :transaction] ++ opts, conn_state) do
+    case conn_mod.handle_begin(opts, conn_state) do
       {:ok, _, conn_state} ->
         {:ok, Connection, {conn_mod, conn_state, false}}
 
@@ -547,13 +537,16 @@ defmodule ArangoXEcto.Sandbox do
         or a connection was not appropriately rolled back after use.
         """
 
-      {_error_or_disconnect, err, conn_state} ->
+      {:error, conn_state} ->
+        {:disconnect, Arangox.Error.exception("Unknown exit reason"), conn_mod, conn_state}
+
+      {:disconnect, err, conn_state} ->
         {:disconnect, err, conn_mod, conn_state}
     end
   end
 
   defp pre_checkin(:checkin, Connection, {conn_mod, conn_state, _in_transaction?}, opts) do
-    case conn_mod.handle_rollback([mode: :transaction] ++ opts, conn_state) do
+    case conn_mod.handle_rollback(opts, conn_state) do
       {:ok, _, conn_state} ->
         {:ok, conn_mod, conn_state}
 
