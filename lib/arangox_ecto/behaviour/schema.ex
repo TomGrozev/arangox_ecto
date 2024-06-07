@@ -97,7 +97,12 @@ defmodule ArangoXEcto.Behaviour.Schema do
     case ArangoXEcto.api_query(
            adapter_meta,
            :post,
-           ArangoXEcto.__build_connection_url__(repo, "document/#{collection}", prefix, options),
+           ArangoXEcto.__build_connection_url__(
+             repo,
+             "document/#{collection}",
+             Keyword.put(opts, :prefix, prefix),
+             options
+           ),
            docs,
            %{},
            opts
@@ -279,6 +284,10 @@ defmodule ArangoXEcto.Behaviour.Schema do
 
   defp extract_doc({:error, %{error_num: 1202}}, _, _on_conflict) do
     {:error, :stale}
+  end
+
+  defp extract_doc({:error, %{error_num: 1620, message: msg}}, _, _on_conflict) do
+    {:invalid, [schema: msg]}
   end
 
   defp extract_doc({:error, %{error_num: error_num, message: msg}}, _, _on_conflict) do
