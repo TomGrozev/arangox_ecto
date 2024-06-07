@@ -50,24 +50,28 @@ defmodule ArangoXEcto.Migration.JsonSchema do
     |> maybe_add_opt(command_opts, :contentEncoding, :content_encoding)
     |> maybe_add_opt(command_opts, :contentMediaType, :content_media_type)
     |> maybe_add_opt(command_opts, :"$comment", :comment)
+    |> apply_nullable(command_opts)
   end
 
   defp command_to_schema({_name, :enum, command_opts}, _opts) do
     %{enum: Keyword.fetch!(command_opts, :values)}
     |> maybe_add_opt(command_opts, :"$comment", :comment)
+    |> apply_nullable(command_opts)
   end
 
   defp command_to_schema({_name, :const, command_opts}, _opts) do
     %{const: Keyword.fetch!(command_opts, :value)}
     |> maybe_add_opt(command_opts, :"$comment", :comment)
+    |> apply_nullable(command_opts)
   end
 
   defp command_to_schema({_name, :boolean, _command_opts}, _opts) do
     %{type: "boolean"}
   end
 
-  defp command_to_schema({_name, :map, _command_opts}, _opts) do
+  defp command_to_schema({_name, :map, command_opts}, _opts) do
     %{type: "object"}
+    |> apply_nullable(command_opts)
   end
 
   defp command_to_schema({_name, {:array, type}, command_opts}, _opts) do
@@ -76,6 +80,7 @@ defmodule ArangoXEcto.Migration.JsonSchema do
     |> maybe_add_opt(command_opts, :maxItems, :max_items)
     |> maybe_add_opt(command_opts, :uniqueItems, :unique_items)
     |> maybe_add_opt(command_opts, :"$comment", :comment)
+    |> apply_nullable(command_opts)
   end
 
   defp command_to_schema({name, [_ | _] = subcommands, command_opts}, opts) do
@@ -94,17 +99,19 @@ defmodule ArangoXEcto.Migration.JsonSchema do
     |> maybe_add_opt(command_opts, :minProperties, :min_properties)
     |> maybe_add_opt(command_opts, :maxProperties, :max_properties)
     |> maybe_add_opt(command_opts, :"$comment", :comment)
+    |> apply_nullable(command_opts)
   end
 
   defp command_to_schema({_name, numeric, command_opts}, _opts)
        when numeric in [:integer, :number, :decimal, :float] do
-    %{type: Atom.to_string(numeric)}
+    %{type: "number"}
     |> maybe_add_opt(command_opts, :minimum)
     |> maybe_add_opt(command_opts, :exclusiveMinimum, :exclusive_minimum)
     |> maybe_add_opt(command_opts, :maximum)
     |> maybe_add_opt(command_opts, :exclusiveMaximum, :exclusive_maximum)
     |> maybe_add_opt(command_opts, :multipleOf, :multiple_of)
     |> maybe_add_opt(command_opts, :"$comment", :comment)
+    |> apply_nullable(command_opts)
   end
 
   defp command_to_schema({name, :date, command_opts}, opts) do
@@ -124,7 +131,7 @@ defmodule ArangoXEcto.Migration.JsonSchema do
 
   defp command_to_schema({name, :uuid, command_opts}, opts) do
     pattern =
-      " ^[0-9a-fA-F]{8}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{12}$ "
+      "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
 
     command_to_schema(
       {name, :string, Keyword.put(command_opts, :pattern, pattern)},
@@ -244,4 +251,12 @@ defmodule ArangoXEcto.Migration.JsonSchema do
   end
 
   defp atom_keys(val), do: val
+
+  defp apply_nullable(object, opts) do
+    if Keyword.get(opts, :null, true) do
+      Map.update!(object, :type, &[&1, "null"])
+    else
+      object
+    end
+  end
 end
