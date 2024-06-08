@@ -31,6 +31,8 @@ defmodule ArangoXEctoTest do
     end
 
     test "filter AQL query" do
+      # A fix for something weird in the CI pipeline
+      TestRepo.delete_all(User)
       fname = "John"
       lname = "Smith"
       %User{first_name: fname, last_name: lname} |> TestRepo.insert!()
