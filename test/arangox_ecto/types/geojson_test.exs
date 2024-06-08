@@ -1,6 +1,5 @@
 defmodule ArangoXEctoTest.Types.GeojsonTest do
   use ExUnit.Case
-  @moduletag :supported
 
   alias ArangoXEcto.Types.GeoJSON
 

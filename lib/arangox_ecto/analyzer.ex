@@ -39,6 +39,8 @@ defmodule ArangoXEcto.Analyzer do
   """
   @moduledoc since: "1.3.0"
 
+  alias ArangoXEcto.Migration.Analyzer
+
   @doc false
   defmacro __using__(_) do
     quote do
@@ -75,14 +77,7 @@ defmodule ArangoXEcto.Analyzer do
   """
   defmacro identity(name, features) do
     quote do
-      name = ArangoXEcto.Analyzer.validate_name(unquote(name))
-      features = ArangoXEcto.Analyzer.validate_features(unquote(features))
-
-      analyzer = %{
-        name: name,
-        type: :identity,
-        features: features
-      }
+      analyzer = Analyzer.new(unquote(name), :identity, unquote(features))
 
       pipeline = Module.get_attribute(__MODULE__, :pipeline)
 
@@ -114,18 +109,7 @@ defmodule ArangoXEcto.Analyzer do
   """
   defmacro delimiter(name, features, properties \\ %{}) do
     quote do
-      name = ArangoXEcto.Analyzer.validate_name(unquote(name))
-      features = ArangoXEcto.Analyzer.validate_features(unquote(features))
-
-      properties =
-        ArangoXEcto.Analyzer.validate_properties(unquote(properties), name, [:delimiter])
-
-      analyzer = %{
-        name: name,
-        type: :delimiter,
-        features: features,
-        properties: properties
-      }
+      analyzer = Analyzer.new(unquote(name), :delimiter, unquote(features), unquote(properties))
 
       pipeline = Module.get_attribute(__MODULE__, :pipeline)
 
@@ -157,17 +141,7 @@ defmodule ArangoXEcto.Analyzer do
   """
   defmacro stem(name, features, properties \\ %{}) do
     quote do
-      name = ArangoXEcto.Analyzer.validate_name(unquote(name))
-      features = ArangoXEcto.Analyzer.validate_features(unquote(features))
-
-      properties = ArangoXEcto.Analyzer.validate_properties(unquote(properties), name, [:locale])
-
-      analyzer = %{
-        name: name,
-        type: :stem,
-        features: features,
-        properties: properties
-      }
+      analyzer = Analyzer.new(unquote(name), :stem, unquote(features), unquote(properties))
 
       pipeline = Module.get_attribute(__MODULE__, :pipeline)
 
@@ -204,22 +178,7 @@ defmodule ArangoXEcto.Analyzer do
   """
   defmacro norm(name, features, properties \\ %{}) do
     quote do
-      name = ArangoXEcto.Analyzer.validate_name(unquote(name))
-      features = ArangoXEcto.Analyzer.validate_features(unquote(features))
-
-      properties =
-        ArangoXEcto.Analyzer.validate_properties(unquote(properties), name, [
-          :locale,
-          :accent,
-          :case
-        ])
-
-      analyzer = %{
-        name: name,
-        type: :norm,
-        features: features,
-        properties: properties
-      }
+      analyzer = Analyzer.new(unquote(name), :norm, unquote(features), unquote(properties))
 
       pipeline = Module.get_attribute(__MODULE__, :pipeline)
 
@@ -258,25 +217,7 @@ defmodule ArangoXEcto.Analyzer do
   """
   defmacro ngram(name, features, properties \\ %{}) do
     quote do
-      name = ArangoXEcto.Analyzer.validate_name(unquote(name))
-      features = ArangoXEcto.Analyzer.validate_features(unquote(features))
-
-      properties =
-        ArangoXEcto.Analyzer.validate_properties(unquote(properties), name, [
-          :min,
-          :max,
-          :preserveOriginal,
-          :startMarker,
-          :endMarker,
-          :streamType
-        ])
-
-      analyzer = %{
-        name: name,
-        type: :ngram,
-        features: features,
-        properties: properties
-      }
+      analyzer = Analyzer.new(unquote(name), :ngram, unquote(features), unquote(properties))
 
       pipeline = Module.get_attribute(__MODULE__, :pipeline)
 
@@ -321,26 +262,7 @@ defmodule ArangoXEcto.Analyzer do
   """
   defmacro text(name, features, properties \\ %{}) do
     quote do
-      name = ArangoXEcto.Analyzer.validate_name(unquote(name))
-      features = ArangoXEcto.Analyzer.validate_features(unquote(features))
-
-      properties =
-        ArangoXEcto.Analyzer.validate_properties(unquote(properties), name, [
-          :locale,
-          :accent,
-          :case,
-          :stemming,
-          :edgeNgram,
-          :stopwords,
-          :stopwordsPath
-        ])
-
-      analyzer = %{
-        name: name,
-        type: :text,
-        features: features,
-        properties: properties
-      }
+      analyzer = Analyzer.new(unquote(name), :text, unquote(features), unquote(properties))
 
       pipeline = Module.get_attribute(__MODULE__, :pipeline)
 
@@ -373,17 +295,7 @@ defmodule ArangoXEcto.Analyzer do
   """
   defmacro collation(name, features, properties \\ %{}) do
     quote do
-      name = ArangoXEcto.Analyzer.validate_name(unquote(name))
-      features = ArangoXEcto.Analyzer.validate_features(unquote(features))
-
-      properties = ArangoXEcto.Analyzer.validate_properties(unquote(properties), name, [:locale])
-
-      analyzer = %{
-        name: name,
-        type: :collation,
-        features: features,
-        properties: properties
-      }
+      analyzer = Analyzer.new(unquote(name), :collation, unquote(features), unquote(properties))
 
       pipeline = Module.get_attribute(__MODULE__, :pipeline)
 
@@ -424,25 +336,7 @@ defmodule ArangoXEcto.Analyzer do
   """
   defmacro aql(name, features, properties \\ %{}) do
     quote do
-      name = ArangoXEcto.Analyzer.validate_name(unquote(name))
-      features = ArangoXEcto.Analyzer.validate_features(unquote(features))
-
-      properties =
-        ArangoXEcto.Analyzer.validate_properties(unquote(properties), name, [
-          :queryString,
-          :collapsePositions,
-          :keepNull,
-          :batchSize,
-          :memoryLimit,
-          :returnType
-        ])
-
-      analyzer = %{
-        name: name,
-        type: :aql,
-        features: features,
-        properties: properties
-      }
+      analyzer = Analyzer.new(unquote(name), :aql, unquote(features), unquote(properties))
 
       pipeline = Module.get_attribute(__MODULE__, :pipeline)
 
@@ -492,9 +386,6 @@ defmodule ArangoXEcto.Analyzer do
   """
   defmacro pipeline(name, features, block) do
     quote do
-      name = ArangoXEcto.Analyzer.validate_name(unquote(name))
-      features = ArangoXEcto.Analyzer.validate_features(unquote(features))
-
       Module.put_attribute(__MODULE__, :pipeline, [])
 
       try do
@@ -503,12 +394,12 @@ defmodule ArangoXEcto.Analyzer do
         :ok
       end
 
-      Module.put_attribute(__MODULE__, :analyzers, %{
-        name: name,
-        type: :pipeline,
-        features: features,
-        properties: %{pipeline: Module.get_attribute(__MODULE__, :pipeline)}
-      })
+      analyzer =
+        Analyzer.new(unquote(name), :pipeline, unquote(features), %{
+          pipeline: Module.get_attribute(__MODULE__, :pipeline)
+        })
+
+      Module.put_attribute(__MODULE__, :analyzers, analyzer)
 
       Module.put_attribute(__MODULE__, :pipeline, nil)
     end
@@ -534,21 +425,7 @@ defmodule ArangoXEcto.Analyzer do
   """
   defmacro stopwords(name, features, properties \\ %{}) do
     quote do
-      name = ArangoXEcto.Analyzer.validate_name(unquote(name))
-      features = ArangoXEcto.Analyzer.validate_features(unquote(features))
-
-      properties =
-        ArangoXEcto.Analyzer.validate_properties(unquote(properties), name, [
-          :stopwords,
-          :hex
-        ])
-
-      analyzer = %{
-        name: name,
-        type: :stopwords,
-        features: features,
-        properties: properties
-      }
+      analyzer = Analyzer.new(unquote(name), :stopwords, unquote(features), unquote(properties))
 
       pipeline = Module.get_attribute(__MODULE__, :pipeline)
 
@@ -599,22 +476,8 @@ defmodule ArangoXEcto.Analyzer do
   """
   defmacro segmentation(name, features, properties \\ %{}) do
     quote do
-      name = ArangoXEcto.Analyzer.validate_name(unquote(name))
-      features = ArangoXEcto.Analyzer.validate_features(unquote(features))
-
-      properties =
-        ArangoXEcto.Analyzer.validate_properties(unquote(properties), name, [
-          :break,
-          :graphic,
-          :case
-        ])
-
-      analyzer = %{
-        name: name,
-        type: :segmentation,
-        features: features,
-        properties: properties
-      }
+      analyzer =
+        Analyzer.new(unquote(name), :segmentation, unquote(features), unquote(properties))
 
       pipeline = Module.get_attribute(__MODULE__, :pipeline)
 
@@ -648,12 +511,6 @@ defmodule ArangoXEcto.Analyzer do
   """
   defmacro minhash(name, features, properties, block) do
     quote do
-      name = ArangoXEcto.Analyzer.validate_name(unquote(name))
-      features = ArangoXEcto.Analyzer.validate_features(unquote(features))
-
-      properties =
-        ArangoXEcto.Analyzer.validate_properties(unquote(properties), name, [:numHashes])
-
       Module.put_attribute(__MODULE__, :pipeline, [])
 
       try do
@@ -669,12 +526,11 @@ defmodule ArangoXEcto.Analyzer do
               "no analyzer was provided for analyzer '#{name}', an analyzer in the do block is required"
       end
 
-      Module.put_attribute(__MODULE__, :analyzers, %{
-        name: name,
-        type: :minhash,
-        features: features,
-        analyzer: List.first(pipeline)
-      })
+      properties = unquote(properties) |> Map.put(:analyzer, List.first(pipeline))
+
+      analyzer = Analyzer.new(unquote(name), :minhash, unquote(features), properties)
+
+      Module.put_attribute(__MODULE__, :analyzers, analyzer)
 
       Module.put_attribute(__MODULE__, :pipeline, nil)
     end
@@ -702,22 +558,8 @@ defmodule ArangoXEcto.Analyzer do
   """
   defmacro classification(name, features, properties \\ %{}) do
     quote do
-      name = ArangoXEcto.Analyzer.validate_name(unquote(name))
-      features = ArangoXEcto.Analyzer.validate_features(unquote(features))
-
-      properties =
-        ArangoXEcto.Analyzer.validate_properties(unquote(properties), name, [
-          :model_location,
-          :top_k,
-          :threshold
-        ])
-
-      analyzer = %{
-        name: name,
-        type: :classification,
-        features: features,
-        properties: properties
-      }
+      analyzer =
+        Analyzer.new(unquote(name), :classification, unquote(features), unquote(properties))
 
       pipeline = Module.get_attribute(__MODULE__, :pipeline)
 
@@ -750,21 +592,8 @@ defmodule ArangoXEcto.Analyzer do
   """
   defmacro nearest_neighbors(name, features, properties \\ %{}) do
     quote do
-      name = ArangoXEcto.Analyzer.validate_name(unquote(name))
-      features = ArangoXEcto.Analyzer.validate_features(unquote(features))
-
-      properties =
-        ArangoXEcto.Analyzer.validate_properties(unquote(properties), name, [
-          :model_location,
-          :top_k
-        ])
-
-      analyzer = %{
-        name: name,
-        type: :nearest_neighbors,
-        features: features,
-        properties: properties
-      }
+      analyzer =
+        Analyzer.new(unquote(name), :nearest_neighbors, unquote(features), unquote(properties))
 
       pipeline = Module.get_attribute(__MODULE__, :pipeline)
 
@@ -805,21 +634,7 @@ defmodule ArangoXEcto.Analyzer do
   """
   defmacro geojson(name, features, properties \\ %{}) do
     quote do
-      name = ArangoXEcto.Analyzer.validate_name(unquote(name))
-      features = ArangoXEcto.Analyzer.validate_features(unquote(features))
-
-      properties =
-        ArangoXEcto.Analyzer.validate_properties(unquote(properties), name, [
-          :type,
-          :options
-        ])
-
-      analyzer = %{
-        name: name,
-        type: :geojson,
-        features: features,
-        properties: properties
-      }
+      analyzer = Analyzer.new(unquote(name), :geojson, unquote(features), unquote(properties))
 
       pipeline = Module.get_attribute(__MODULE__, :pipeline)
 
@@ -870,22 +685,7 @@ defmodule ArangoXEcto.Analyzer do
   """
   defmacro geo_s2(name, features, properties \\ %{}) do
     quote do
-      name = ArangoXEcto.Analyzer.validate_name(unquote(name))
-      features = ArangoXEcto.Analyzer.validate_features(unquote(features))
-
-      properties =
-        ArangoXEcto.Analyzer.validate_properties(unquote(properties), name, [
-          :format,
-          :type,
-          :options
-        ])
-
-      analyzer = %{
-        name: name,
-        type: :geo_s2,
-        features: features,
-        properties: properties
-      }
+      analyzer = Analyzer.new(unquote(name), :geo_s2, unquote(features), unquote(properties))
 
       pipeline = Module.get_attribute(__MODULE__, :pipeline)
 
@@ -926,22 +726,7 @@ defmodule ArangoXEcto.Analyzer do
   """
   defmacro geopoint(name, features, properties \\ %{}) do
     quote do
-      name = ArangoXEcto.Analyzer.validate_name(unquote(name))
-      features = ArangoXEcto.Analyzer.validate_features(unquote(features))
-
-      properties =
-        ArangoXEcto.Analyzer.validate_properties(unquote(properties), name, [
-          :latitude,
-          :longitude,
-          :options
-        ])
-
-      analyzer = %{
-        name: name,
-        type: :geopoint,
-        features: features,
-        properties: properties
-      }
+      analyzer = Analyzer.new(unquote(name), :geopoint, unquote(features), unquote(properties))
 
       pipeline = Module.get_attribute(__MODULE__, :pipeline)
 
@@ -953,84 +738,4 @@ defmodule ArangoXEcto.Analyzer do
       end
     end
   end
-
-  @doc false
-  @spec validate_name(atom()) :: atom()
-  def validate_name(name) when is_atom(name), do: name
-
-  def validate_name(name),
-    do: raise(ArgumentError, "the name for analyzer must be an atom, got: #{inspect(name)}")
-
-  @valid_keys [:frequency, :norm, :position]
-
-  @doc false
-  @spec validate_features([atom()]) :: [atom()]
-  def validate_features(features) do
-    unless is_list(features) and Enum.all?(features, &Enum.member?(@valid_keys, &1)) do
-      raise ArgumentError,
-            "the features provided are invalid, only accepts keys [:frequency, :norm, :position], got: #{inspect(features)}"
-    end
-
-    features
-  end
-
-  @doc false
-  @spec validate_properties([atom()], atom(), [atom()]) :: [atom()]
-  def validate_properties(properties, name, valid_keys) do
-    Enum.all?(properties, fn {k, v} ->
-      Enum.member?(valid_keys, k) and valid_key?(k, v)
-    end)
-    |> unless do
-      raise ArgumentError,
-            "the properties provided for analyzer '#{name}' are invalid, only accepts keys #{inspect(valid_keys)}, got: #{inspect(properties)}"
-    end
-
-    properties
-  end
-
-  defp valid_key?(:delimiter, value), do: is_binary(value)
-  defp valid_key?(:locale, value), do: is_binary(value)
-  defp valid_key?(:accent, value), do: is_boolean(value)
-  defp valid_key?(:case, value), do: value in [:none, :lower, :upper]
-  defp valid_key?(:min, value), do: is_integer(value)
-  defp valid_key?(:max, value), do: is_integer(value)
-  defp valid_key?(:preserveOriginal, value), do: is_boolean(value)
-  defp valid_key?(:startMarker, value), do: is_binary(value)
-  defp valid_key?(:endMarker, value), do: is_binary(value)
-  defp valid_key?(:streamType, value), do: value in [:binary, :utf8]
-  defp valid_key?(:stemming, value), do: is_boolean(value)
-  defp valid_key?(:stopwords, value), do: is_list(value) and Enum.all?(value, &is_binary/1)
-  defp valid_key?(:stopwordsPath, value), do: is_binary(value)
-  defp valid_key?(:queryString, value), do: is_binary(value)
-  defp valid_key?(:collapsePositions, value), do: is_boolean(value)
-  defp valid_key?(:keepNull, value), do: is_boolean(value)
-  defp valid_key?(:batchSize, value), do: is_integer(value) and value >= 1 and value <= 1000
-  defp valid_key?(:numHashes, value), do: is_integer(value) and value >= 1
-  defp valid_key?(:hex, value), do: is_boolean(value)
-  defp valid_key?(:model_location, value), do: is_binary(value)
-  defp valid_key?(:top_k, value), do: is_integer(value)
-  defp valid_key?(:threshold, value), do: is_float(value) or is_integer(value)
-  defp valid_key?(:latitude, value), do: is_list(value) and Enum.all?(value, &is_binary/1)
-  defp valid_key?(:longitude, value), do: is_list(value) and Enum.all?(value, &is_binary/1)
-  defp valid_key?(:returnType, value), do: value in [:string, :number, :bool]
-  defp valid_key?(:break, value), do: value in [:all, :alpha, :graphic]
-  defp valid_key?(:type, value), do: value in [:shape, :centroid, :point]
-  defp valid_key?(:format, value), do: value in [:latLngDouble, :latLngInt, :s2Point]
-
-  defp valid_key?(:memoryLimit, value),
-    do: is_integer(value) and value >= 1_048_576 and value <= 33_554_432
-
-  defp valid_key?(:edgeNgram, value),
-    do:
-      is_map(value) and
-        Enum.all?(value, fn {k, v} ->
-          k in [:min, :max, :preserveOriginal] and valid_key?(k, v)
-        end)
-
-  defp valid_key?(:options, value),
-    do:
-      is_map(value) and
-        Enum.all?(value, fn {k, v} ->
-          k in [:maxCells, :minLevel, :maxLevel] and is_integer(v)
-        end)
 end

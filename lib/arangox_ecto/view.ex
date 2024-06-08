@@ -219,6 +219,32 @@ defmodule ArangoXEcto.View do
     end
   end
 
+  @doc false
+  def __after_compile__(%{module: module} = env, _) do
+    # If we are compiling code, we can validate associations now,
+    # as the Elixir compiler will solve dependencies.
+    if Code.can_await_module_compilation?() do
+      for {schema, link} <- module.__view__(:links) do
+        unless is_atom(schema) and
+                 (ArangoXEcto.document?(schema) or ArangoXEcto.edge?(schema)) do
+          IO.warn(
+            "the schema passed must be an Ecto schema, got: #{inspect(schema)}",
+            Macro.Env.stacktrace(env)
+          )
+        end
+
+        unless Link.valid?(link) do
+          IO.warn(
+            "the link is invalid for field `#{schema}` got: #{inspect(link)}",
+            Macro.Env.stacktrace(env)
+          )
+        end
+      end
+    end
+
+    :ok
+  end
+
   @doc """
   Defines a primary sort field on the view.
 
@@ -303,21 +329,10 @@ defmodule ArangoXEcto.View do
       schema = unquote(schema)
       link = unquote(link)
 
-      unless is_atom(schema) and
-               (ArangoXEcto.is_document?(schema) or ArangoXEcto.is_edge?(schema)) do
-        raise ArgumentError,
-              "the schema passed must be an Ecto schema, got: #{inspect(schema)}"
-      end
-
-      unless Link.valid?(link) do
-        raise ArgumentError,
-              "the link is invalid for field `#{schema}` got: #{inspect(link)}"
-      end
-
       Module.put_attribute(
         __MODULE__,
         :view_links,
-        {unquote(schema), unquote(link)}
+        {schema, link}
       )
     end
   end
@@ -368,33 +383,6 @@ defmodule ArangoXEcto.View do
     end
   end
 
-  @doc """
-  Generates the view definition
-
-  This takes the macros that define the view and converts it into
-  a definition for use on creation.
-  """
-  @spec definition(Module.t()) :: map()
-  def definition(view) when is_atom(view) do
-    if function_exported?(view, :__view__, 1) do
-      opts = Enum.into(view.__view__(:options), %{})
-
-      %{
-        name: view.__view__(:name),
-        type: "arangosearch",
-        links: %{},
-        primarySort: [],
-        storedValues: []
-      }
-      |> add_links(view)
-      |> add_primary_sort(view)
-      |> add_stored_values(view)
-      |> Map.merge(opts)
-    else
-      raise ArgumentError, "not a valid view schema"
-    end
-  end
-
   @doc false
   def __schema__(links) do
     {primary_keys, query_fields, fields, field_sources} =
@@ -431,29 +419,6 @@ defmodule ArangoXEcto.View do
                                                                          a_field_sources} ->
       {Map.put_new(a_fields, field, schema.__schema__(:type, field)),
        Map.put_new(a_field_sources, field, schema.__schema__(:field_source, field))}
-    end)
-  end
-
-  defp add_links(map, view) do
-    view.__view__(:links)
-    |> Enum.reduce(map, fn {schema, link}, acc ->
-      put_in(acc, [:links, schema.__schema__(:source)], Link.to_map(link))
-    end)
-  end
-
-  defp add_stored_values(map, view) do
-    view.__view__(:stored_values)
-    |> Enum.reduce(map, fn {fields, compression}, acc ->
-      val = %{fields: fields, compression: compression}
-      Map.update!(acc, :storedValues, &[val | &1])
-    end)
-  end
-
-  defp add_primary_sort(map, view) do
-    view.__view__(:primary_sort)
-    |> Enum.reduce(map, fn {field, direction}, acc ->
-      val = %{field: field, direction: direction}
-      Map.update!(acc, :primarySort, &[val | &1])
     end)
   end
 end

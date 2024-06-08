@@ -46,13 +46,684 @@ defmodule ArangoXEcto.Migration do
 
   require Logger
 
-  alias ArangoXEcto.Migration.{Collection, Index}
+  alias ArangoXEcto.Migration.Runner
+  alias ArangoXEcto.View.Link
+
+  @typedoc "All migration commands"
+  @type command ::
+          raw ::
+          String.t()
+          | {:create, Collection.t(), [collection_subcommand]}
+          | {:create_if_not_exists, Collection.t(), [collection_subcommand]}
+          | {:alter, Collection.t(), [collection_subcommand]}
+          | {:drop, Collection.t()}
+          | {:drop_if_exists, Collection.t()}
+          | {:create, Index.t()}
+          | {:create_if_not_exists, Index.t()}
+          | {:drop, Index.t()}
+          | {:drop_if_exists, Index.t()}
+
+  @typedoc "All commands allowed within the block passed to `collection/2`"
+  @type collection_subcommand ::
+          {:add, field :: atom, type :: Ecto.Type.t() | Reference.t() | binary(), Keyword.t()}
+          | {:add_if_not_exists, field :: atom, type :: Ecto.Type.t() | Reference.t() | binary(),
+             Keyword.t()}
+          | {:modify, field :: atom, type :: Ecto.Type.t() | Reference.t() | binary(),
+             Keyword.t()}
+          | {:remove, field :: atom, type :: Ecto.Type.t() | Reference.t() | binary(),
+             Keyword.t()}
+          | {:remove, field :: atom}
+          | {:remove_if_exists, type :: Ecto.Type.t() | Reference.t() | binary()}
+
+  defmodule View do
+    @moduledoc """
+    Represents a view module in ArangoDB
+    """
+
+    @enforce_keys [:name]
+    defstruct [
+      :name,
+      :consolidationIntervalMsec,
+      :consolidationPolicy,
+      :commitIntervalMsec,
+      :writebufferSizeMax,
+      :writebufferIdle,
+      :writebufferActive,
+      :cleanupIntervalStep,
+      :primarySortCompression,
+      :prefix,
+      type: "arangosearch",
+      links: %{},
+      primarySort: [],
+      storedValues: []
+    ]
+
+    @type t :: %__MODULE__{}
+
+    @type view_option ::
+            :consolidationIntervalMsec
+            | :consolidationPolicy
+            | :commitIntervalMsec
+            | :writebufferSizeMax
+            | :writebufferIdle
+            | :writebufferActive
+            | :cleanupIntervalStep
+            | :primarySortCompression
+            | :prefix
+
+    @doc """
+    Creates a new View struct
+    """
+    @spec new(atom() | String.t(), [view_option()]) :: t()
+    def new(name, opts \\ [])
+    def new(name, opts) when is_atom(name), do: new(Atom.to_string(name), opts)
+
+    def new(name, opts) do
+      keys = Keyword.merge(opts, name: name, type: "arangosearch")
+
+      struct(__MODULE__, keys)
+    end
+  end
+
+  defmodule Analyzer do
+    @moduledoc """
+    Represents a analyzer module in ArangoDB
+    """
+
+    @enforce_keys [:name, :type, :features]
+    defstruct [
+      :name,
+      :type,
+      :features,
+      :prefix,
+      properties: %{}
+    ]
+
+    @type t :: %__MODULE__{}
+
+    @type type ::
+            :identity
+            | :delimiter
+            | :stem
+            | :norm
+            | :ngram
+            | :text
+            | :collation
+            | :aql
+            | :pipeline
+            | :stopwords
+            | :segmentation
+            | :minhash
+            | :classification
+            | :nearest_neighbors
+            | :geojson
+            | :geo_s2
+            | :geopoint
+
+    @type feature :: :frequency | :norm | :position
+
+    @valid_types [
+      :identity,
+      :delimiter,
+      :stem,
+      :norm,
+      :ngram,
+      :text,
+      :collation,
+      :aql,
+      :pipeline,
+      :stopwords,
+      :segmentation,
+      :minhash,
+      :classification,
+      :nearest_neighbors,
+      :geojson,
+      :geo_s2,
+      :geopoint
+    ]
+
+    @doc """
+    Creates a new Analyzer struct
+    """
+    @spec new(atom() | String.t(), type(), [feature()], map(), prefix: atom()) :: t()
+    def new(name, type, features, properties \\ %{}, opts \\ [])
+
+    def new(name, type, features, properties, opts) when is_atom(name),
+      do: new(Atom.to_string(name), type, features, properties, opts)
+
+    def new(name, type, features, properties, opts) when is_binary(name) do
+      validate_type!(type)
+      validate_features!(features)
+      validate_properties!(properties, name, type)
+
+      keys =
+        Keyword.merge(opts, name: name, type: type, features: features, properties: properties)
+
+      struct(__MODULE__, keys)
+    end
+
+    @doc false
+    @spec validate_type!(atom()) :: :ok
+    def validate_type!(type) do
+      unless type in @valid_types do
+        raise ArgumentError,
+              "the type for analyzer must be one of (#{inspect(@valid_types)}), got: #{inspect(type)}"
+      end
+
+      :ok
+    end
+
+    @valid_keys [:frequency, :norm, :position]
+
+    @doc false
+    @spec validate_features!([atom()]) :: :ok
+    def validate_features!(features) do
+      unless is_list(features) and Enum.all?(features, &Enum.member?(@valid_keys, &1)) do
+        raise ArgumentError,
+              "the features provided are invalid, only accepts keys [:frequency, :norm, :position], got: #{inspect(features)}"
+      end
+
+      :ok
+    end
+
+    @doc false
+    @spec validate_properties!([atom()], atom(), type()) :: :ok
+    def validate_properties!(properties, name, type) do
+      keys = valid_keys(type)
+
+      Enum.all?(properties, fn {k, v} ->
+        Enum.member?(keys, k) and valid_key?(k, v)
+      end)
+      |> unless do
+        raise ArgumentError,
+              "the properties provided for analyzer '#{name}' are invalid, only accepts keys #{inspect(keys)}, got: #{inspect(properties)}"
+      end
+
+      :ok
+    end
+
+    defp valid_keys(:delimiter), do: [:delimiter]
+    defp valid_keys(:stem), do: [:locale]
+    defp valid_keys(:norm), do: [:locale, :accent, :case]
+    defp valid_keys(:collation), do: [:locale]
+    defp valid_keys(:stopwords), do: [:stopwords, :hex]
+    defp valid_keys(:segmentation), do: [:break, :graphic, :case]
+    defp valid_keys(:minhash), do: [:numHashes, :analyzer]
+    defp valid_keys(:classification), do: [:model_location, :top_k, :threshold]
+    defp valid_keys(:nearest_neighbors), do: [:model_location, :top_k]
+    defp valid_keys(:geojson), do: [:type, :options]
+    defp valid_keys(:geo_s2), do: [:format, :type, :options]
+    defp valid_keys(:geopoint), do: [:latitude, :longitude, :options]
+    defp valid_keys(:pipeline), do: [:pipeline]
+
+    defp valid_keys(:ngram) do
+      [
+        :min,
+        :max,
+        :preserveOriginal,
+        :startMarker,
+        :endMarker,
+        :streamType
+      ]
+    end
+
+    defp valid_keys(:text) do
+      [
+        :locale,
+        :accent,
+        :case,
+        :stemming,
+        :edgeNgram,
+        :stopwords,
+        :stopwordsPath
+      ]
+    end
+
+    defp valid_keys(:aql) do
+      [
+        :queryString,
+        :collapsePositions,
+        :keepNull,
+        :batchSize,
+        :memoryLimit,
+        :returnType
+      ]
+    end
+
+    defp valid_keys(_), do: []
+
+    defp valid_key?(:delimiter, value), do: is_binary(value)
+    defp valid_key?(:locale, value), do: is_binary(value)
+    defp valid_key?(:accent, value), do: is_boolean(value)
+    defp valid_key?(:case, value), do: value in [:none, :lower, :upper]
+    defp valid_key?(:min, value), do: is_integer(value)
+    defp valid_key?(:max, value), do: is_integer(value)
+    defp valid_key?(:preserveOriginal, value), do: is_boolean(value)
+    defp valid_key?(:startMarker, value), do: is_binary(value)
+    defp valid_key?(:endMarker, value), do: is_binary(value)
+    defp valid_key?(:streamType, value), do: value in [:binary, :utf8]
+    defp valid_key?(:stemming, value), do: is_boolean(value)
+    defp valid_key?(:stopwords, value), do: is_list(value) and Enum.all?(value, &is_binary/1)
+    defp valid_key?(:stopwordsPath, value), do: is_binary(value)
+    defp valid_key?(:queryString, value), do: is_binary(value)
+    defp valid_key?(:collapsePositions, value), do: is_boolean(value)
+    defp valid_key?(:keepNull, value), do: is_boolean(value)
+    defp valid_key?(:batchSize, value), do: is_integer(value) and value >= 1 and value <= 1000
+    defp valid_key?(:numHashes, value), do: is_integer(value) and value >= 1
+    defp valid_key?(:hex, value), do: is_boolean(value)
+    defp valid_key?(:model_location, value), do: is_binary(value)
+    defp valid_key?(:top_k, value), do: is_integer(value)
+    defp valid_key?(:threshold, value), do: is_float(value) or is_integer(value)
+    defp valid_key?(:latitude, value), do: is_list(value) and Enum.all?(value, &is_binary/1)
+    defp valid_key?(:longitude, value), do: is_list(value) and Enum.all?(value, &is_binary/1)
+    defp valid_key?(:returnType, value), do: value in [:string, :number, :bool]
+    defp valid_key?(:break, value), do: value in [:all, :alpha, :graphic]
+    defp valid_key?(:type, value), do: value in [:shape, :centroid, :point]
+    defp valid_key?(:format, value), do: value in [:latLngDouble, :latLngInt, :s2Point]
+    defp valid_key?(:analyzer, %Analyzer{}), do: true
+
+    defp valid_key?(:pipeline, analyzers),
+      do: Enum.all?(analyzers, fn analyzer -> match?(%Analyzer{}, analyzer) end)
+
+    defp valid_key?(:memoryLimit, value),
+      do: is_integer(value) and value >= 1_048_576 and value <= 33_554_432
+
+    defp valid_key?(:edgeNgram, value) do
+      is_map(value) and
+        Enum.all?(value, fn {k, v} ->
+          k in [:min, :max, :preserveOriginal] and valid_key?(k, v)
+        end)
+    end
+
+    defp valid_key?(:options, value) do
+      is_map(value) and
+        Enum.all?(value, fn {k, v} ->
+          k in [:maxCells, :minLevel, :maxLevel] and is_integer(v)
+        end)
+    end
+
+    defp valid_key?(_, _), do: false
+
+    @doc false
+    def definition(analyzer) do
+      case Map.get(analyzer.properties, :pipeline) do
+        nil ->
+          analyzer
+
+        pipeline ->
+          Map.update!(analyzer, :properties, fn props ->
+            Map.put(props, :pipeline, Enum.map(pipeline, &Map.from_struct/1))
+          end)
+      end
+      |> Map.from_struct()
+    end
+  end
+
+  defmodule Index do
+    @moduledoc """
+    Represents a collection index in ArangoDB
+
+    The attributes in this struct are directly passed to the
+    ArangoDB API for creation. No validation is done on the
+    attributes and is left to the database to manage.
+    """
+
+    @enforce_keys [:collection_name]
+    defstruct [
+      :collection_name,
+      :fields,
+      :sparse,
+      :unique,
+      :deduplication,
+      :minLength,
+      :geoJson,
+      :expireAfter,
+      :prefix,
+      :name,
+      type: :hash
+    ]
+
+    @type t :: %__MODULE__{}
+
+    @type index_option ::
+            {:type, atom}
+            | {:prefix, String.t()}
+            | {:unique, boolean}
+            | {:sparse, boolean}
+            | {:deduplication, boolean}
+            | {:minLength, integer}
+            | {:geoJson, boolean}
+            | {:expireAfter, integer}
+            | {:name, atom}
+
+    @doc """
+    Creates a new Index struct
+    """
+    @spec new(String.t(), [atom() | String.t()], [index_option()]) :: t()
+    def new(name, fields, opts \\ [])
+    def new(name, fields, opts) when is_atom(name), do: new(Atom.to_string(name), fields, opts)
+
+    def new(name, fields, opts) when is_binary(name) and is_atom(fields),
+      do: new(name, [fields], opts)
+
+    def new(name, fields, opts) when is_binary(name) and is_list(fields) and is_list(opts) do
+      keys = Keyword.merge(opts, collection_name: name, fields: fields)
+
+      index = struct(__MODULE__, keys)
+      %{index | name: index.name || default_index_name(index)}
+    end
+
+    defp default_index_name(index) do
+      ["idx", index.collection_name, index.fields]
+      |> List.flatten()
+      |> Enum.map_join(
+        "_",
+        fn item ->
+          item
+          |> to_string()
+          |> String.replace(~r"[^\w]", "_")
+          |> String.replace_trailing("_", "")
+        end
+      )
+    end
+  end
+
+  defmodule Collection do
+    @moduledoc """
+    Represent a collection in ArangoDB
+
+    The attributes in this struct are directly passed to the
+    ArangoDB API for creation. No validation is done on the
+    attributes and is left to the database to manage.
+    """
+
+    @enforce_keys [:name]
+    defstruct [
+      :name,
+      :waitForSync,
+      :schema,
+      :keyOptions,
+      :isSystem,
+      :prefix,
+      :cacheEnabled,
+      :numberOfShards,
+      :shardKeys,
+      :replicationFactor,
+      :writeConcern,
+      :distributeShardsLike,
+      :shardingStrategy,
+      :smartJoinAttribute,
+      type: 2
+    ]
+
+    @type t :: %__MODULE__{}
+
+    @type collection_option ::
+            {:waitForSync, boolean}
+            | {:type, :document | :edge}
+            | {:schema, map}
+            | {:prefix, String.t()}
+            | {:keyOptions, map}
+            | {:cacheEnabled, boolean}
+            | {:numberOfShards, integer}
+            | {:isSystem, boolean()}
+            | {:shardKeys, String.t()}
+            | {:replicationFactor, integer}
+            | {:writeConcern, integer}
+            | {:distributeShardsLike, String.t()}
+            | {:shardingStrategy, String.t()}
+            | {:smartJoinAttribute, String.t()}
+
+    @doc """
+    Creates a new Collection struct
+    """
+    @spec new(String.t(), [collection_option()]) :: t()
+    def new(name, opts \\ [])
+    def new(name, opts) when is_atom(name), do: new(Atom.to_string(name), opts)
+
+    def new(name, opts) when is_binary(name) and is_list(opts) do
+      type = Keyword.get(opts, :type, :document)
+
+      keys = Keyword.merge(opts, name: name, type: collection_type(type))
+
+      struct(__MODULE__, keys)
+    end
+
+    defp collection_type(:document), do: 2
+    defp collection_type(:edge), do: 3
+  end
+
+  defmodule Command do
+    @moduledoc """
+    Represents the up and down of a reversible raw command.
+    """
+
+    defstruct up: nil, down: nil
+    @type t :: %__MODULE__{up: String.t(), down: String.t()}
+  end
+
+  @doc """
+  Migration code to run immediately after the transaction is opened.
+
+  Keep in mind that it is treated like any normal migration code, and should
+  consider both the up *and* down cases of the migration.
+  """
+  @callback after_begin() :: term
+
+  @doc """
+  Migration code to run immediately before the transaction is closed.
+
+  Keep in mind that it is treated like any normal migration code, and should
+  consider both the up *and* down cases of the migration.
+  """
+  @callback before_commit() :: term
+  @optional_callbacks after_begin: 0, before_commit: 0
 
   defmacro __using__(_) do
-    # Init conn
-    quote do
+    quote location: :keep do
       import ArangoXEcto.Migration
+
+      @disable_ddl_transaction false
+      @before_compile ArangoXEcto.Migration
     end
+  end
+
+  @doc false
+  defmacro __before_compile__(_env) do
+    quote do
+      def __migration__ do
+        [
+          disable_ddl_transaction: @disable_ddl_transaction
+        ]
+      end
+    end
+  end
+
+  @doc """
+  Creates a collection.
+
+  The collection `:id` type will be `:binary_id`.
+
+  ## Example
+
+      create collection(:users) do
+        add :first_name, :string
+        add :last_name, :string, default: "Smith"
+
+        timestamps()
+      end
+  """
+  defmacro create(object, do: block) do
+    expand_create(object, :create, block)
+  end
+
+  @doc """
+  Creates a collection if it doesn't exist.
+
+  Works just the same as `create/2` but will raise an error
+  when the object already exists.
+  """
+  defmacro create_if_not_exists(object, do: block) do
+    expand_create(object, :create_if_not_exists, block)
+  end
+
+  defp expand_create(object, command, block) do
+    quote do
+      object = unquote(object)
+
+      unless object.__struct__ in [Collection, View] do
+        raise Ecto.MigrationError,
+              "subcommands can only be passed when creating a Collection or a View, the following was passed: `#{object.__struct__}`"
+      end
+
+      Runner.start_command({unquote(command), ArangoXEcto.Migration.__prefix__(object)})
+      unquote(block)
+      Runner.end_command()
+
+      object
+    end
+  end
+
+  @doc """
+  Alters a collection
+
+  ## Examples 
+
+      alter collection(:users) do
+        add :middle_name, :string
+        modify :people, :integer
+        rename :people, to: :num
+        remove :last_name
+      end
+  """
+  defmacro alter(object, do: block) do
+    quote do
+      object = unquote(object)
+
+      unless object.__struct__ in [Collection, View] do
+        raise Ecto.MigrationError,
+              "subcommands can only be passed when altering a Collection or a View, the following was passed: `#{object.__struct__}`"
+      end
+
+      Runner.start_command({:alter, ArangoXEcto.Migration.__prefix__(object)})
+      unquote(block)
+      Runner.end_command()
+    end
+  end
+
+  @doc """
+  Creates on of the following: 
+
+    * an index
+    * a collection with no schema
+
+  When reversing (in a `change/0` running backwards), indexes are only dropped
+  if they exist, and no errors are raised. To enforce dropping an index, use
+  `drop/1`.
+
+  ## Examples
+
+      create index("users", [:name])
+      create collection("posts")
+
+  """
+  def create(%Collection{} = collection) do
+    do_create(collection, :create)
+  end
+
+  def create(%View{} = view) do
+    do_create(view, :create)
+  end
+
+  def create(%Index{} = index) do
+    Runner.execute({:create, __prefix__(index)})
+    index
+  end
+
+  def create(%Analyzer{} = analyzer) do
+    Runner.execute({:create, __prefix__(analyzer)})
+    analyzer
+  end
+
+  @doc """
+  Creates a collection without a schema or an index if it doesn't exist already.
+
+  ## Examples
+
+      create_if_not_exists index("users", [:name])
+
+      create_if_not_exists collection("posts")
+
+  """
+  def create_if_not_exists(%Index{} = index) do
+    Runner.execute({:create_if_not_exists, __prefix__(index)})
+  end
+
+  def create_if_not_exists(%Collection{} = collection) do
+    do_create(collection, :create_if_not_exists)
+  end
+
+  defp do_create(collection_or_view, command) do
+    Runner.execute({command, __prefix__(collection_or_view), []})
+  end
+
+  @doc """
+  Drops one of the following: 
+
+    * an index
+    * a collection
+
+  ## Examples 
+
+      drop index("users", [:name])
+      drop collection("posts")
+
+  """
+  def drop(%mod{} = object) when mod in [Collection, Index, View, Analyzer] do
+    Runner.execute({:drop, __prefix__(object)})
+
+    object
+  end
+
+  @doc """
+  Drops a collection or index if it exists
+
+  Does not raise an error if the specified collection or index does not exist.
+
+  ## Examples 
+
+      drop_if_exists index("users", [:name])
+      drop_if_exists collection("posts")
+
+  """
+  def drop_if_exists(%mod{} = object)
+      when mod in [Collection, Index, View, Analyzer] do
+    Runner.execute({:drop_if_exists, __prefix__(object)})
+
+    object
+  end
+
+  @doc """
+  Gets the migrator direction.
+  """
+  @spec direction :: :up | :down
+  def direction do
+    Runner.migrator_direction()
+  end
+
+  @doc """
+  Gets the migrator repo.
+  """
+  @spec repo :: Ecto.Repo.t()
+  def repo do
+    Runner.repo()
+  end
+
+  @doc """
+  Gets the migrator prefix.
+  """
+  def prefix do
+    Runner.prefix()
   end
 
   @doc """
@@ -73,28 +744,31 @@ defmodule ArangoXEcto.Migration do
       iex> collection("users")
       %ArangoXEcto.Migration.Collection{name: "users", type: 2)
 
-      iex> collection("users", :edge)
+      iex> collection("users", type: :edge)
       %ArangoXEcto.Migration.Collection{name: "users", type: 3)
 
-      iex> collection("users", :document, keyOptions: %{type: :uuid})
+      iex> collection("users", keyOptions: %{type: :uuid})
       %ArangoXEcto.Migration.Collection{name: "users", type: 2, keyOptions: %{type: :uuid})
   """
-  @spec collection(String.t(), atom(), [Collection.collection_option()]) :: Collection.t()
-  def collection(collection_name, type \\ :document, opts \\ []),
-    do: Collection.new(collection_name, type, opts)
+  @spec collection(String.t(), [Collection.collection_option()]) :: Collection.t()
+  def collection(collection_name, opts \\ []),
+    do: Collection.new(collection_name, opts)
 
   @doc """
   Creates an edge collection struct
 
-  Same as passing `:edge` as the second parameter to `collection/3`.
+  Same as passing `:edge` as the type to `collection/3`.
   """
   @spec edge(String.t(), [Collection.collection_option()]) :: Collection.t()
-  def edge(edge_name, opts \\ []), do: collection(edge_name, :edge, opts)
+  def edge(edge_name, opts \\ []), do: collection(edge_name, Keyword.put(opts, :type, :edge))
 
   @doc """
   Creates an index struct
 
   Default index type is a hash. To change this pass the `:type` option in options.
+
+  This will generate a name for the index if not provided. This allows for the dropping
+  of the index.
 
   ## Options
 
@@ -132,186 +806,459 @@ defmodule ArangoXEcto.Migration do
   def index(collection_name, fields, opts \\ []), do: Index.new(collection_name, fields, opts)
 
   @doc """
-  Creates an object
+  Shortcut for creating a unique index.
 
-  Will create the passed object, one of a collection, an index, analyzers or a view.
+  See `index/3` for more information.
+  """
+  @spec unique_index(String.t(), [atom() | String.t()], [Index.index_option()]) :: Index.t()
+  def unique_index(collection, fields, opts \\ []) when is_list(opts) do
+    index(collection, fields, [unique: true] ++ opts)
+  end
 
-  Since view schemas and analyzers are just module definitions we can use them directly here. Therefore
-  the module is just passed directly.
+  @doc """
+  Represents a view module
+  """
+  defdelegate view(name, opts \\ []), to: View, as: :new
 
-  There is the ability to pass additional options as the second argument
+  @doc """
+  Represents an analyzer module
+  """
+  defdelegate analyzer(name, type, features, properties \\ %{}, opts \\ []),
+    to: Analyzer,
+    as: :new
 
-  ## Options
+  @doc """
+  Executes arbitrary AQL.
 
-  - `:repo` - The repo or connection to use for the migration create action
-  - `:prefix` - The prefix to use for tenant creation
+  The argument is typically a string, containing the AQL command to be executed.
+
+  Reversible commands can be defined by calling `execute/2`.
 
   ## Examples
 
-  Create a collection
-
-      iex> create(collection("users"))
-      :ok
-
-  Create an index
-
-      iex> create(index("users", [:email])
-      :ok
-
-  Create a view
-
-      iex> create(MyProject.UsersView)
-      :ok
+      execute "FOR u IN `users` RETURN u.name"
   """
-  @spec create(Collection.t() | Index.t() | atom(), Keyword.t()) ::
-          :ok | {:error, binary()}
-  def create(object_to_create, opts \\ [])
-
-  def create(%Collection{} = collection, opts) do
-    repo_or_conn = Keyword.get(opts, :repo)
-    {:ok, conn} = get_db_conn(repo_or_conn)
-
-    args =
-      collection
-      |> Map.from_struct()
-
-    args = :maps.filter(fn _, v -> not is_nil(v) end, args)
-
-    case Arangox.post(
-           conn,
-           ArangoXEcto.__build_connection_url__(
-             conn,
-             "collection",
-             Keyword.get(opts, :prefix)
-           ),
-           args
-         ) do
-      {:ok, _} ->
-        :ok
-
-      {:error, %{status: status, message: message}} ->
-        msg = "#{status} - #{message}"
-
-        Logger.debug("#{inspect(__MODULE__)}.create", %{
-          "#{inspect(__MODULE__)}.create-collection" => %{collection: collection, message: msg}
-        })
-
-        {:error, msg}
-    end
+  def execute(command) when is_binary(command) or is_function(command, 0) or is_list(command) do
+    Runner.execute(command)
   end
 
-  def create(%Index{collection_name: collection_name} = index, opts) do
-    repo_or_conn = Keyword.get(opts, :repo)
-    {:ok, conn} = get_db_conn(repo_or_conn)
+  @doc """
+  Executes reversible AQL commands.
 
-    case Arangox.post(
-           conn,
-           ArangoXEcto.__build_connection_url__(
-             conn,
-             "index",
-             Keyword.get(opts, :prefix),
-             "?collection=#{collection_name}"
-           ),
-           Map.from_struct(index)
-         ) do
-      {:ok, _} ->
-        :ok
+  This is useful for database-specific functionality that does not
+  warrant special support in ArangoXEcto. The `execute/2` form avoids having
+  having to define separate `up/0` and `down/0` blocks that each contain an `execute/1`
+  expression.
 
-      {:error, %{status: status, message: message}} ->
-        msg = "#{status} - #{message}"
+  The allowed parameters are explained in `execute/1`.
 
-        Logger.debug("#{inspect(__MODULE__)}.create", %{
-          "#{inspect(__MODULE__)}.create-index" => %{index: index, message: msg}
-        })
+  ## Examples
 
-        {:error, msg}
-    end
+      defmodule MyApp.MyMigration do
+        use ArangoXEcto.Migration
+
+        def change do
+          execute "FOR u IN `users` RETURN u", "FOR u IN `users` RETURN u"
+          execute(&execute_up/0, &execute_down/0)
+        end
+
+        defp execute_up, do: repo().query!("'Up query …';", [], [log: :info])
+        defp execute_down, do: repo().query!("'Down query …';", [], [log: :info])
+      end
+  """
+  def execute(up, down)
+      when (is_binary(up) or is_function(up, 0) or is_list(up)) and
+             (is_binary(down) or is_function(down, 0) or is_list(down)) do
+    Runner.execute(%Command{up: up, down: down})
   end
 
-  def create(module, opts) when is_atom(module) do
-    {:ok, conn} = Keyword.get(opts, :repo) |> get_db_conn()
+  @doc """
+  Adds a field when creating or altering a collection with subfields.
 
-    cond do
-      function_exported?(module, :__analyzers__, 0) -> create_analyzers(conn, module, opts)
-      function_exported?(module, :__view__, 1) -> create_view(conn, module, opts)
-      true -> {:error, "invalid module, not a view or an anlyzer module"}
-    end
-  end
+  See `add/3` for options and more info.
+  """
+  defmacro add_embed(field, opts \\ [], do: block) when is_atom(field) and is_list(opts) do
+    quote do
+      Runner.subcommand({:add_embed, unquote(field), [], unquote(opts)})
+      unquote(block)
+      Runner.end_subcommand()
 
-  defp create_analyzers(conn, module, opts) do
-    case ArangoXEcto.create_analyzers(conn, module, opts) do
-      {:ok, _} ->
-        :ok
-
-      {:error, success, errors} ->
-        msg = "Failed with errrors (Success: #{length(success)}, Error: #{length(errors)})"
-
-        Logger.debug("#{inspect(__MODULE__)}.create", %{
-          "#{inspect(__MODULE__)}.create-analyzer" => %{analyzers: module, message: msg}
-        })
-
-        {:error, msg}
-    end
-  end
-
-  defp create_view(conn, module, opts) do
-    case ArangoXEcto.create_view(conn, module, opts) do
-      {:ok, _} ->
-        :ok
-
-      {:error, %{status: status, message: message}} ->
-        msg = "#{status} - #{message}"
-
-        Logger.debug("#{inspect(__MODULE__)}.create", %{
-          "#{inspect(__MODULE__)}.create-view" => %{view: module, message: msg}
-        })
-
-        {:error, msg}
+      :ok
     end
   end
 
   @doc """
-  Deletes an object
+  Adds a field when creating or altering a collection.
 
-  Will delete an object passed, can only be a collection, indexes cannot be deleted here. This is because indexes have a randomly generated id and this needs to be known to delete the index, for now this is outside the scope of this project.
+  TODO: Add note about what types are accepted
 
-  ## Example
+  TODO: Update examples and options
+  ## Examples
 
-      iex> drop(collection("users"))
-      :ok
+      create collection("posts") do
+        add :title, :string, default: "Untitled"
+      end
+
+  ## Options
+
+    * `:primary_key` - when `true`, marks this field as the primary key.
+      If multiple fields are marked, a composite primary key will be created.
+    * `:default` - the column's default value. It can be a string, number, empty
+      list, list of strings, list of numbers, or a fragment generated by
+      `fragment/1`.
+    * `:null` - determines whether the column accepts null values. When not specified,
+      the database will use its default behaviour (which is to treat the column as nullable
+      in most databases).
+    * `:size` - the size of the type (for example, the number of characters).
+      The default is no size, except for `:string`, which defaults to `255`.
+    * `:precision` - the precision for a numeric type. Required when `:scale` is
+      specified.
+    * `:scale` - the scale of a numeric type. Defaults to `0`.
+    * `:comment` - adds a comment to the added column.
+    * `:after` - positions field after the specified one. Only supported on MySQL,
+      it is ignored by other databases.
+    * `:generated` - a string representing the expression for a generated column. See
+      above for a comprehensive set of examples for each of the built-in adapters. If
+      specified alongside `:start_value`/`:increment`, those options will be ignored.
+    * `:start_value` - option for `:identity` key, represents initial value in sequence
+      generation. Default is defined by the database.
+    * `:increment` - option for `:identity` key, represents increment value for
+      sequence generation. Default is defined by the database.
+
   """
-  @spec drop(Collection.t()) :: :ok | {:error, binary()}
-  def drop(%Collection{name: collection_name}, conn \\ nil) do
-    {:ok, conn} = get_db_conn(conn)
+  def add(field, type, opts \\ []) when is_atom(field) and is_list(opts) do
+    validate_precision_opts!(opts, field)
+    validate_type!(type)
+    Runner.subcommand({:add, field, type, opts})
+  end
 
-    case Arangox.delete(conn, "/_api/collection/#{collection_name}") do
-      {:ok, _} -> :ok
-      {:error, %{status: status, message: message}} -> {:error, "#{status} - #{message}"}
+  def add_if_not_exists(field, type, opts \\ []) when is_atom(field) and is_list(opts) do
+    validate_precision_opts!(opts, field)
+    validate_type!(type)
+    Runner.subcommand({:add_if_not_exists, field, type, opts})
+  end
+
+  @doc """
+  Adds a primary sort to a view.
+  """
+  def add_sort(field, direction \\ :asc) when is_atom(field) and direction in [:asc, :desc] do
+    Runner.subcommand({:add_sort, field, direction})
+  end
+
+  @doc """
+  Adds a stored value to a view.
+  """
+  def add_store(fields, compression \\ :lz4) when compression in [:none, :lz4] do
+    Runner.subcommand({:add_store, List.wrap(fields), compression})
+  end
+
+  @doc """
+  Adds a link to a view.
+
+  Uses a `ArangoXEcto.View.Link` struct to define the link
+  """
+  def add_link(schema_name, link) when is_atom(schema_name),
+    do: add_link(Atom.to_string(schema_name), link)
+
+  def add_link(schema_name, %Link{} = link) when is_binary(schema_name) do
+    validate_link!(link)
+    Runner.subcommand({:add_link, schema_name, link})
+  end
+
+  @doc """
+  Renames a collection, view or a collection field
+
+  ## Examples
+
+      # rename a collection
+      rename collection("users"), to: collection("new_users")
+
+      # rename a view
+      rename view("user_search"), to: view("new_user_search")
+
+      alter collection("users") do
+        rename :name, to: :first_name
+      end
+
+  """
+  def rename(%Collection{} = collection_current, to: %Collection{} = collection_new) do
+    Runner.execute({:rename, __prefix__(collection_current), __prefix__(collection_new)})
+    collection_new
+  end
+
+  def rename(%View{} = view_current, to: %View{} = view_new) do
+    Runner.execute({:rename, __prefix__(view_current), __prefix__(view_new)})
+    view_new
+  end
+
+  def rename(current_field, to: new_field) when is_atom(current_field) and is_atom(new_field) do
+    Runner.subcommand({:rename, current_field, new_field})
+  end
+
+  @doc """
+  Removes a field when altering a collection.
+
+  If it doesn't exist it will simply be ignored.
+
+  This command is not reversible as Ecto does not know what type it should add
+  the field back as. See `remove/3` as a reversible alternative.
+
+  ## Examples
+
+      alter collection("users") do
+        remove :name
+      end
+
+  """
+  def remove(field) when is_atom(field) do
+    Runner.subcommand({:remove, field})
+  end
+
+  @doc """
+  Removes a field in a reversible way when altering a collection.
+
+  `type` and `opts` are exactly the same as in `add/3`, and
+  they are used when the command is reversed.
+
+  ## Examples
+
+      alter collection("users") do
+        remove :name, :string, min_length: 4
+      end
+
+  """
+  def remove(field, type, opts \\ []) when is_atom(field) do
+    validate_type!(type)
+    Runner.subcommand({:remove, field, type, opts})
+  end
+
+  @doc """
+  Removes a field only if it exists in the schema
+
+  `type` and `opts` are exactly the same as in `add/3`, and
+  they are used when the command is reversed.
+
+  ## Examples
+
+      alter collection("users") do
+        remove_if_exists :name, :string, min_length: 4
+      end
+
+  """
+  def remove_if_exists(field, type, opts \\ []) when is_atom(field) do
+    validate_type!(type)
+    Runner.subcommand({:remove_if_exists, field, type, opts})
+  end
+
+  @doc """
+  Modifies the type of a field when altering a collection.
+
+  This command is not reversible unless the `:from` option is provided.
+
+  See `add/3` for more information on supported types.
+
+  ## Examples
+
+      alter collection("users") do
+        modify :name, :string
+      end
+
+      # Self rollback when using the :from option
+      alter collection("users") do
+        modify :name, :string, from: :integer
+      end
+
+  ## Options
+
+    * `:default` - changes the default value of the column.
+    * `:from` - specifies the current type and options of the field.
+    * `:comment` - adds a comment to the modified column.
+  """
+  def modify(field, type, opts \\ []) when is_atom(field) and is_list(opts) do
+    validate_precision_opts!(opts, field)
+    validate_type!(type)
+    Runner.subcommand({:modify, field, type, opts})
+  end
+
+  @doc """
+  Modifies a field when creating or altering a collection with subfields.
+
+  See `modify/3` for options and more info.
+  """
+  defmacro modify_embed(field, opts \\ [], do: block) when is_atom(field) and is_list(opts) do
+    quote do
+      Runner.subcommand({:modify_embed, unquote(field), [], unquote(opts)})
+      unquote(block)
+      Runner.end_subcommand()
+
+      :ok
     end
   end
 
-  defp get_db_conn(nil) do
-    config(pool_size: 1)
-    |> Arangox.start_link()
+  @doc """
+  Removes a link when altering a view.
+
+  If it doesn't exist it will simply be ignored.
+
+  This command is not reversible as Ecto does not know what type it should add
+  the field back as. See `remove_link/2` as a reversible alternative.
+
+  ## Examples
+
+      alter view("user_search") do
+        remove_link "users"
+      end
+
+  """
+  def remove_link(schema_name) when is_binary(schema_name) or is_atom(schema_name) do
+    Runner.subcommand({:remove_link, "#{schema_name}"})
   end
 
-  defp get_db_conn(repo) when is_atom(repo) do
-    repo.config()
-    |> Arangox.start_link()
+  @doc """
+  Removes a link in a reversable way when altering a view.
+
+  `link` is the same as in `add_link/2`.
+
+  ## Examples
+
+      alter view("user_search") do
+        remove_link "users", %Link{
+          includeAllFields: true,
+          fields: %{
+            last_name: %Link{
+              analyzers: [:text_en]
+            }
+          }
+        }
+      end
+
+  """
+  def remove_link(schema_name, link) when is_atom(schema_name),
+    do: remove_link(Atom.to_string(schema_name), link)
+
+  def remove_link(schema_name, %Link{} = link) when is_binary(schema_name) do
+    validate_link!(link)
+    Runner.subcommand({:remove_link, schema_name, link})
   end
 
-  defp get_db_conn(conn), do: {:ok, conn}
+  @doc """
+  Adds `:inserted_at` and `:updated_at` timestamp fields.
 
-  defp get_default_repo! do
-    case Mix.Ecto.parse_repo([])
-         |> List.first() do
-      nil -> raise "No Default Repo Found"
-      repo -> repo
+  Those fields are of `:naive_datetime` type and by default cannot be null. A
+  list of `opts` can be given to customize the generated fields.
+
+  Following options will override the repo configuration specified by
+  `:migration_timestamps` option.
+
+  ## Options
+
+    * `:inserted_at` - the name of the column for storing insertion times.
+      Setting it to `false` disables the column.
+    * `:updated_at` - the name of the column for storing last-updated-at times.
+      Setting it to `false` disables the column.
+    * `:type` - the type of the `:inserted_at` and `:updated_at` columns.
+      Defaults to `:naive_datetime`.
+    * `:default` - the columns' default value. It can be a string, number, empty
+      list, list of strings, list of numbers, or a fragment generated by
+      `fragment/1`.
+
+  """
+  def timestamps(opts \\ []) when is_list(opts) do
+    opts = Keyword.merge(Runner.repo_config(:migration_timestamps, []), opts)
+
+    {type, opts} = Keyword.pop(opts, :type, :naive_datetime)
+    {inserted_at, opts} = Keyword.pop(opts, :inserted_at, :inserted_at)
+    {updated_at, opts} = Keyword.pop(opts, :updated_at, :updated_at)
+
+    if inserted_at != false, do: add(inserted_at, type, opts)
+    if updated_at != false, do: add(updated_at, type, opts)
+  end
+
+  @doc """
+  Executes queued migration commands
+  """
+  defmacro flush do
+    quote do
+      if direction() == :down and not function_exported?(__MODULE__, :down, 0) do
+        raise "calling flush() inside change when doing rollback is not supported."
+      else
+        Runner.flush()
+      end
     end
   end
 
-  defp config(opts) do
-    get_default_repo!().config()
-    |> Keyword.merge(opts)
+  @doc false
+  def __prefix__(%{prefix: prefix} = module) do
+    runner_prefix = Runner.prefix()
+
+    cond do
+      is_nil(prefix) ->
+        prefix = runner_prefix || Runner.repo_config(:migration_default_prefix, nil)
+        %{module | prefix: prefix}
+
+      is_nil(runner_prefix) or runner_prefix == to_string(prefix) ->
+        module
+
+      true ->
+        raise Ecto.MigrationError,
+          message:
+            "the :prefix option `#{prefix}` does not match the migrator prefix `#{runner_prefix}`"
+    end
+  end
+
+  ###########
+  # Helpers #
+  ###########
+
+  # Validation helpers
+  defp validate_link!(%Link{} = link) do
+    if Link.valid?(link) do
+      :ok
+    else
+      raise Ecto.MigrationError, "the passed link is invalid got: #{inspect(link)}"
+    end
+  end
+
+  defp validate_type!(type) when is_atom(type) do
+    case Atom.to_string(type) do
+      "Elixir." <> _ ->
+        raise_invalid_migration_type!(type)
+
+      _ ->
+        :ok
+    end
+  end
+
+  defp validate_type!({type, subtype}) when is_atom(type) and is_atom(subtype) do
+    validate_type!(subtype)
+  end
+
+  defp validate_type!({type, subtype}) when is_atom(type) and is_tuple(subtype) do
+    for t <- Tuple.to_list(subtype), do: validate_type!(t)
+  end
+
+  defp validate_type!(type) do
+    raise_invalid_migration_type!(type)
+  end
+
+  defp raise_invalid_migration_type!(type) do
+    raise ArgumentError, """
+    invalid migration type: #{inspect(type)}. Expected one of:
+
+      * an atom, such as :string
+      * a tuple representing a composite type, such as {:array, :integer} or {:map, :string}
+
+    Ecto types are automatically translated to JSON Schema types. All other types
+    are sent to the database as is.
+
+    Types defined through Ecto.Type or Ecto.ParameterizedType aren't allowed,
+    use their underlying types instead.
+    """
+  end
+
+  defp validate_precision_opts!(opts, field) when is_list(opts) do
+    if opts[:scale] && !opts[:precision] do
+      raise ArgumentError, "field #{Atom.to_string(field)} is missing precision option"
+    end
   end
 end

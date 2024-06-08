@@ -1,59 +1,46 @@
-defmodule ArangoXEctoTest.ViewTest do
-  use ExUnit.Case
-  @moduletag :supported
+defmodule ArangoXEcto.ViewTest do
+  use ArangoXEcto.Integration.Case, sandbox: false
+
+  @moduletag :integration
 
   import Ecto.Query
   import ArangoXEcto.Query, only: [search: 2, search: 3]
 
-  alias ArangoXEctoTest.{Repo, StaticRepo}
-  alias ArangoXEctoTest.Integration.{User, UsersView}
+  alias ArangoXEcto.Integration.{DynamicRepo, TestRepo}
+  alias ArangoXEcto.Integration.{PostsView, User, UsersView}
 
-  @test_collections [
-    :users
-  ]
-
-  @test_views [
-    :user_search,
-    :comment_search
-  ]
-
-  # Gets connection
   setup_all do
-    %{pid: conn} = Ecto.Adapter.lookup_meta(Repo)
+    :ok = ArangoXEcto.Sandbox.checkout(TestRepo, sandbox: false, write: ["users"])
+    TestRepo.delete_all(User)
+    %User{first_name: "John", last_name: "Smith", gender: :male} |> TestRepo.insert!()
+    %User{first_name: "Jane", last_name: "Smith", gender: :female} |> TestRepo.insert!()
+    :ok = ArangoXEcto.Sandbox.checkin(TestRepo)
 
-    # Empties all test collections
-    for collection <- @test_collections do
-      Arangox.put(conn, "/_api/collection/#{collection}/truncate")
-    end
+    Process.sleep(100)
 
-    # Adds some test values into the test collections
-    %User{first_name: "John", last_name: "Smith", gender: :male} |> Repo.insert!()
-    %User{first_name: "Bob", last_name: "Smith", gender: :male} |> Repo.insert!()
-
-    [conn: conn]
-  end
-
-  # Deletes each test view before every test
-  setup %{conn: conn} = context do
-    for view <- @test_views do
-      Arangox.delete(conn, "/_api/view/#{view}")
-    end
-
-    context
+    on_exit(fn ->
+      :ok = ArangoXEcto.Sandbox.checkout(TestRepo, sandbox: false, write: ["users"])
+      TestRepo.delete_all(User)
+      :ok = ArangoXEcto.Sandbox.checkin(TestRepo)
+    end)
   end
 
   describe "searching using a view" do
     test "does not allow querying of non-existent view in static mode" do
       assert_raise RuntimeError, ~r/does not exist. Maybe a migration is missing/, fn ->
-        StaticRepo.all(UsersView)
+        TestRepo.all(PostsView)
       end
+
+      :ok = ArangoXEcto.create_view(DynamicRepo, PostsView)
+
+      assert [] = DynamicRepo.all(PostsView)
     end
 
     test "ecto query can load a view results" do
-      assert [%{first_name: "John", last_name: "Smith"}, _] = Repo.all(UsersView)
+      assert [_, %{first_name: "John", last_name: "Smith"}] = TestRepo.all(UsersView)
 
-      assert [%User{first_name: "John", last_name: "Smith"}, _] =
-               Repo.all(UsersView) |> ArangoXEcto.load(User)
+      assert [_, %User{first_name: "John", last_name: "Smith"}] =
+               TestRepo.all(UsersView) |> ArangoXEcto.load(User)
     end
 
     test "can search using ecto query" do
@@ -62,13 +49,13 @@ defmodule ArangoXEctoTest.ViewTest do
         |> search(first_name: "John")
         |> search([uv], uv.gender == :male)
 
-      assert %{first_name: "John", last_name: "Smith"} = Repo.one(query)
+      assert %{first_name: "John", last_name: "Smith"} = TestRepo.one(query)
 
       query =
         UsersView
         |> search(first_name: "John")
 
-      assert %{first_name: "John", last_name: "Smith"} = Repo.one(query)
+      assert %{first_name: "John", last_name: "Smith"} = TestRepo.one(query)
     end
 
     test "cannot update or delete a view" do
@@ -79,13 +66,13 @@ defmodule ArangoXEctoTest.ViewTest do
       assert_raise ArgumentError,
                    ~r/queries containing views cannot be update or delete operations/,
                    fn ->
-                     Repo.update_all(query |> update(set: [last_name: "McClean"]), [])
+                     TestRepo.update_all(query |> update(set: [last_name: "McClean"]), [])
                    end
 
       assert_raise ArgumentError,
                    ~r/queries containing views cannot be update or delete operations/,
                    fn ->
-                     Repo.delete_all(query, [])
+                     TestRepo.delete_all(query, [])
                    end
     end
 
@@ -93,25 +80,26 @@ defmodule ArangoXEctoTest.ViewTest do
       query =
         from(UsersView)
         |> search([uv], fragment("ANALYZER(? == ?, \"identity\")", uv.first_name, "John"))
+        |> select([uv], uv)
 
-      assert %{first_name: "John", last_name: "Smith"} = Repo.one(query)
+      assert %{first_name: "John", last_name: "Smith"} = TestRepo.one(query)
 
       # make sure non existent analyzer returns empty
       query =
         from(UsersView)
         |> search([uv], fragment("ANALYZER(? == ?, \"text_en\")", uv.first_name, "John"))
 
-      assert [] = Repo.all(query)
+      assert [] = TestRepo.all(query)
     end
 
     test "sorting by relevance" do
       query =
         from(UsersView)
-        |> search(gender: :male)
+        |> search(last_name: "Smith")
         |> order_by([uv], fragment("BM25(?)", uv))
         |> select([uv], {uv.first_name, fragment("BM25(?)", uv)})
 
-      assert [{"John", score}, {"Bob", score}] = Repo.all(query)
+      assert [{"Jane", score}, {"John", score}] = TestRepo.all(query)
     end
 
     test "can search using aql for a view" do
@@ -121,16 +109,8 @@ defmodule ArangoXEctoTest.ViewTest do
         RETURN uv
       """
 
-      assert {:error, _} =
-               ArangoXEcto.aql_query(Repo, query,
-                 "@view": UsersView.__view__(:name),
-                 first_name: "John"
-               )
-
-      {:ok, _} = ArangoXEcto.create_view(Repo, UsersView)
-
-      assert {:ok, [%{"first_name" => "John"}]} =
-               ArangoXEcto.aql_query(Repo, query,
+      assert {:ok, {1, [%{"first_name" => "John"}]}} =
+               ArangoXEcto.aql_query(TestRepo, query,
                  "@view": UsersView.__view__(:name),
                  first_name: "John"
                )

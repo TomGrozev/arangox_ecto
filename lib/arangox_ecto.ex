@@ -9,12 +9,13 @@ defmodule ArangoXEcto do
 
   import Ecto.Query, only: [from: 2]
 
+  alias ArangoXEcto.Adapter
+  alias ArangoXEcto.Behaviour.Transaction
   alias ArangoXEcto.Edge
   alias ArangoXEcto.Migration
 
   @type query :: binary()
   @type vars :: keyword() | map()
-  @type mod :: Ecto.Schema.t()
 
   @doc """
   Runs a raw AQL query on the database.
@@ -32,8 +33,9 @@ defmodule ArangoXEcto do
 
   Accepts any of the options accepted by DBConnection.transaction/3, as well as any of the following:
 
-    :read - An array of collection names or a single collection name as a binary.
-    :write - An array of collection names or a single collection name as a binary.
+    :prefix - The prefix to use for the database. Defaults to the repo database.
+    :read - An array of collection names or a single collection name as a binary to mark as read-only.
+    :write - An array of collection names or a single collection name as a binary to mark as writable. If not set then no writes will be stored.
     :exclusive - An array of collection names or a single collection name as a binary.
     :properties - A list or map of additional body attributes to append to the request body when beginning a transaction.
 
@@ -47,39 +49,84 @@ defmodule ArangoXEcto do
             fname: "John",
             lname: "Smith"
           )
-      {:ok,
-      [
-        %{
-          "_id" => "users/12345",
-          "_key" => "12345",
-          "_rev" => "_bHZ8PAK---",
-          "first_name" => "John",
-          "last_name" => "Smith"
-        }
-      ]}
+      {:ok, {1, 
+        [
+          %{
+            "_id" => "users/12345",
+            "_key" => "12345",
+            "_rev" => "_bHZ8PAK---",
+            "first_name" => "John",
+            "last_name" => "Smith"
+          }
+        ]}}
   """
-  @spec aql_query(Ecto.Repo.t(), query(), vars(), [DBConnection.option()]) ::
-          {:ok, list(map)} | {:error, any()}
-  def aql_query(repo, query, vars \\ [], opts \\ []) do
-    conn = gen_conn_from_repo(repo)
+  @spec aql_query(Ecto.Repo.t() | Ecto.Adapter.adapter_meta(), query(), vars(), [
+          DBConnection.option()
+        ]) ::
+          {:ok, {non_neg_integer(), list(map)}} | {:error, any()}
+  def aql_query(
+        repo_or_meta,
+        query,
+        vars \\ [],
+        opts \\ []
+      )
+
+  def aql_query(
+        %{repo: repo, telemetry: telemetry, opts: default_opts} = adapter_meta,
+        query,
+        vars,
+        opts
+      ) do
+    is_write_operation = String.match?(query, ~r/(update|remove) .+/i)
 
     {query, vars} = process_vars(query, vars)
 
-    try do
-      Arangox.transaction(
-        conn,
-        fn cursor ->
-          stream = Arangox.cursor(cursor, query, vars)
+    database = Adapter.get_database(repo, opts)
 
-          Enum.reduce(stream, [], fn resp, acc ->
-            acc ++ resp.body["result"]
-          end)
-        end,
-        opts
+    opts = Adapter.with_log(telemetry, vars, [database: database] ++ opts ++ default_opts)
+
+    try do
+      Transaction.transaction(
+        adapter_meta,
+        opts,
+        fn cursor ->
+          default_properties = [options: %{fullCount: true}]
+
+          opts =
+            Keyword.update(
+              opts,
+              :properties,
+              default_properties,
+              &Keyword.merge(&1, default_properties)
+            )
+
+          stream = Arangox.cursor(cursor, query, vars, opts)
+
+          Enum.reduce(
+            stream,
+            {0, []},
+            fn resp, {_len, acc} ->
+              len =
+                if is_write_operation do
+                  resp.body["extra"]["stats"]["writesExecuted"]
+                else
+                  resp.body["extra"]["stats"]["fullCount"]
+                end
+
+              {len, acc ++ resp.body["result"]}
+            end
+          )
+        end
       )
     rescue
       e -> {:error, e}
     end
+  end
+
+  def aql_query(repo, query, vars, opts) when is_atom(repo) do
+    adapter_meta = Ecto.Adapter.lookup_meta(repo)
+
+    aql_query(adapter_meta, query, vars, opts)
   end
 
   @doc """
@@ -95,7 +142,7 @@ defmodule ArangoXEcto do
             fname: "John",
             lname: "Smith"
           )
-      [
+       {1, [
         %{
           "_id" => "users/12345",
           "_key" => "12345",
@@ -103,11 +150,14 @@ defmodule ArangoXEcto do
           "first_name" => "John",
           "last_name" => "Smith"
         }
-      ]
+      ]}
   """
-  @spec aql_query!(Ecto.Repo.t(), query(), vars(), [DBConnection.option()]) :: list(map)
-  def aql_query!(repo, query, vars \\ [], opts \\ []) do
-    case aql_query(repo, query, vars, opts) do
+  @spec aql_query!(Ecto.Repo.t() | Ecto.Adapter.adapter_meta(), query(), vars(), [
+          DBConnection.option()
+        ]) ::
+          {non_neg_integer(), list(map)}
+  def aql_query!(repo_or_meta, query, vars \\ [], opts \\ []) do
+    case aql_query(repo_or_meta, query, vars, opts) do
       {:ok, res} -> res
       {:error, err} -> raise err
     end
@@ -122,9 +172,10 @@ defmodule ArangoXEcto do
 
   - `repo` - The Ecto repo module used for connection
   - `function` - An atom of the Arangox function to run
-  - `args` - The options passed to the function (not including the conn argument)
-
-  The `conn` argument is automatically prepended to your supplied `args`
+  - `path` - The path of the query
+  - `body` - The body of the request
+  - `headers` - The headers of the request
+  - `opts` - The last opts arg passed to the function
 
   ## Supported Functions
 
@@ -152,10 +203,10 @@ defmodule ArangoXEcto do
 
   ## Examples
 
-      iex> ArangoXEcto.api_query(Repo, :get, ["/_api/collection"])
+      iex> ArangoXEcto.api_query(Repo, :get, "/_api/collection")
       {:ok, %Arangox.Response{body: ...}}
 
-      iex> ArangoXEcto.api_query(Repo, :non_existent, ["/_api/collection"])
+      iex> ArangoXEcto.api_query(Repo, :non_existent, "/_api/collection")
       ** (ArgumentError) Invalid function passed to `Arangox` module
 
   """
@@ -182,16 +233,50 @@ defmodule ArangoXEcto do
     :status,
     :transaction
   ]
-  @spec api_query(mod(), atom(), list()) :: {:ok, Arangox.Response.t()} | {:error, any()}
-  def api_query(repo, function, args \\ []) do
-    conn = gen_conn_from_repo(repo)
+  @spec api_query(
+          Ecto.Repo.t() | Ecto.Adapter.adapter_meta(),
+          atom(),
+          Arangox.path(),
+          Arangox.body(),
+          Arangox.headers(),
+          [
+            DBConnection.option()
+          ]
+        ) :: {:ok, Arangox.Response.t()} | {:error, any()}
+  def api_query(
+        repo_or_meta,
+        function,
+        path,
+        body \\ "",
+        headers \\ %{},
+        opts \\ []
+      )
+
+  def api_query(
+        %{pid: pool, telemetry: telemetry, opts: default_opts},
+        function,
+        path,
+        body,
+        headers,
+        opts
+      ) do
+    conn = Adapter.get_conn_or_pool(pool)
+
+    opts = Adapter.with_log(telemetry, body, opts ++ default_opts)
 
     if function in @allowed_arangox_funcs and
          function in Keyword.keys(Arangox.__info__(:functions)) do
-      apply(Arangox, function, [conn | args])
+      Arangox.request(conn, function, path, body, headers, opts)
+      |> do_result()
     else
-      raise ArgumentError, "Invalid function passed to `Arangox` module"
+      raise ArgumentError, "Invalid function [#{function}] passed to `Arangox` module"
     end
+  end
+
+  def api_query(repo, function, path, body, headers, opts) when is_atom(repo) do
+    adapter_meta = Ecto.Adapter.lookup_meta(repo)
+
+    api_query(adapter_meta, function, path, body, headers, opts)
   end
 
   @doc """
@@ -257,15 +342,13 @@ defmodule ArangoXEcto do
       %UserPosts{_from: "users/12345", _to: "users/54321", from: #Ecto.Association.NotLoaded<association :from is not loaded>, to: #Ecto.Association.NotLoaded<association :to is not loaded>, type: "wrote"}
 
   """
-  @spec create_edge(Ecto.Repo.t(), mod(), mod(), keyword()) ::
+  @spec create_edge(Ecto.Repo.t(), module(), module(), Keyword.t()) ::
           {:ok, Ecto.Schema.t()} | {:error, Ecto.Changeset.t()}
-  def create_edge(repo, from, to, opts \\ [])
-
-  def create_edge(repo, from, to, opts) do
+  def create_edge(repo, from, to, opts \\ []) do
     from_id = struct_id(from)
     to_id = struct_id(to)
 
-    Keyword.get(opts, :edge, edge_module(from, to, opts))
+    Keyword.get_lazy(opts, :edge, fn -> edge_module(from, to, opts) end)
     |> do_create_edge(repo, from_id, to_id, opts)
   end
 
@@ -302,15 +385,17 @@ defmodule ArangoXEcto do
 
   """
   @doc since: "1.3.0"
-  @spec create_view(Ecto.Repo.t() | pid(), ArangoXEcto.View.t(), Keyword.t()) ::
-          {:ok, Arangox.Response.t()} | {:error, Arangox.Error.t()}
+  @spec create_view(Ecto.Repo.t(), ArangoXEcto.View.t(), Keyword.t()) ::
+          :ok | {:error, Arangox.Error.t()}
   def create_view(repo, view, opts \\ []) do
-    view_definition = ArangoXEcto.View.definition(view)
-    analyzer_module = view.__analyzer_module__()
+    unless view?(view) do
+      raise ArgumentError, "not a valid view schema"
+    end
 
     # check if is dynamic mode
-    if not is_pid(repo) and
-         not Keyword.get(repo.config(), :static, false) do
+    if not Keyword.get(repo.config(), :static, true) do
+      analyzer_module = view.__analyzer_module__()
+
       # create the analyzers if in dynamic mode
       if not is_nil(analyzer_module) do
         create_analyzers(repo, analyzer_module, opts)
@@ -323,10 +408,27 @@ defmodule ArangoXEcto do
       end)
     end
 
-    ArangoXEcto.api_query(repo, :post, [
-      __build_connection_url__(repo, "view", Keyword.get(opts, :prefix)),
-      view_definition
-    ])
+    name = view.__view__(:name)
+    options = view.__view__(:options)
+    links = view.__view__(:links)
+    primary_sort = view.__view__(:primary_sort)
+    stored_values = view.__view__(:stored_values)
+
+    view_def = Migration.view(name, Keyword.merge(options, opts))
+
+    subcommands =
+      [add_link: links, add_sort: primary_sort, add_store: stored_values]
+      |> Enum.reduce([], fn {type, list}, acc ->
+        Enum.reduce(list, acc, fn {arg1, arg2}, acc2 ->
+          [{type, arg1, arg2} | acc2]
+        end)
+      end)
+
+    case repo.__adapter__().execute_ddl(repo, {:create, view_def, subcommands}, opts) do
+      {:ok, [{:info, _, _}]} -> :ok
+      {:ok, [{:error, reason, _}]} -> {:error, reason}
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   @doc """
@@ -364,23 +466,22 @@ defmodule ArangoXEcto do
 
   """
   @doc since: "1.3.0"
-  @spec create_analyzers(Ecto.Repo.t() | pid(), ArangoXEcto.Analyzer.t(), Keyword.t()) ::
-          {:ok, Arangox.Response.t()} | {:error, [Arangox.Response.t()], [Arangox.Error.t()]}
+  @spec create_analyzers(Ecto.Repo.t(), ArangoXEcto.Analyzer.t(), Keyword.t()) ::
+          :ok | {:error, [atom()], [{atom(), Arangox.Error.t()}]}
   def create_analyzers(repo, analyzer_module, opts \\ []) do
     analyzers = analyzer_module.__analyzers__()
 
     remove_existing_analyzers(repo, analyzers, opts)
 
-    url = __build_connection_url__(repo, "analyzer", Keyword.get(opts, :prefix))
-
     Enum.reduce(analyzers, {[], []}, fn analyzer, {success, fail} ->
-      case ArangoXEcto.api_query(repo, :post, [url, analyzer]) do
-        {:ok, res} -> {[{analyzer.name, res} | success], fail}
-        {:error, res} -> {success, [{analyzer.name, res} | fail]}
+      case repo.__adapter__().execute_ddl(repo, {:create, analyzer}, opts) do
+        {:ok, [{:info, _, _}]} -> {[analyzer.name | success], fail}
+        {:ok, [{:error, reason, _}]} -> {:error, reason}
+        {:error, reason} -> {:error, reason}
       end
     end)
     |> case do
-      {success, []} -> {:ok, success}
+      {_, []} -> :ok
       {success, fail} -> {:error, success, fail}
     end
   end
@@ -416,21 +517,22 @@ defmodule ArangoXEcto do
   @spec create_collection(Ecto.Repo.t(), ArangoXEcto.Schema.t(), Keyword.t()) ::
           :ok | {:error, any()}
   def create_collection(repo, schema, opts \\ []) do
-    if Keyword.get(repo.config(), :static, false) do
+    if Keyword.get(repo.config(), :static, true) do
       raise("This function cannot be called in static mode. Please use migrations instead.")
     else
       # will throw if not a schema
       type = ArangoXEcto.schema_type!(schema)
       collection_name = source_name(schema)
-      collection_opts = schema.__collection_options__()
+      collection_opts = schema.__collection_options__() |> Keyword.put(:type, type)
       indexes = schema.__collection_indexes__()
-      opts = Keyword.put(opts, :repo, repo)
 
-      collection = Migration.collection(collection_name, type, collection_opts)
+      collection = Migration.collection(collection_name, collection_opts)
 
-      case Migration.create(collection, opts) do
+      meta = Ecto.Adapter.lookup_meta(repo)
+
+      case repo.__adapter__().execute_ddl(meta, {:create, collection, []}, opts) do
         :ok ->
-          maybe_create_indexes(collection_name, indexes, opts)
+          maybe_create_indexes(meta, collection_name, indexes, opts)
 
         error ->
           error
@@ -477,22 +579,14 @@ defmodule ArangoXEcto do
       iex> ArangoXEcto.delete_all_edges(Repo, user1, user2, conditions: [type: "best_friend"])
       :ok
   """
-  @spec delete_all_edges(Ecto.Repo.t(), mod(), mod(), keyword()) :: :ok
-  def delete_all_edges(repo, from, to, opts \\ [])
-
-  def delete_all_edges(repo, from, to, [edge: edge_module] = opts) do
+  @spec delete_all_edges(Ecto.Repo.t(), module(), module(), Keyword.t()) :: :ok
+  def delete_all_edges(repo, from, to, opts \\ []) do
     from_id = struct_id(from)
     to_id = struct_id(to)
 
-    edge_module
-    |> do_delete_all_edges(repo, from_id, to_id, opts)
-  end
-
-  def delete_all_edges(repo, from, to, opts) do
-    from_id = struct_id(from)
-    to_id = struct_id(to)
-
-    edge_module(from, to, opts)
+    Keyword.get_lazy(opts, :edge, fn ->
+      edge_module(from, to, Keyword.put(opts, :create, false))
+    end)
     |> do_delete_all_edges(repo, from_id, to_id, opts)
   end
 
@@ -513,7 +607,7 @@ defmodule ArangoXEcto do
       iex> ArangoXEcto.get_id_from_struct(user)
       "users/123456"
   """
-  @spec get_id_from_struct(mod()) :: binary()
+  @spec get_id_from_struct(module()) :: binary()
   def get_id_from_struct(struct) when is_map(struct) or is_binary(struct), do: struct_id(struct)
 
   @doc """
@@ -680,7 +774,7 @@ defmodule ArangoXEcto do
   def load(_, _), do: raise(ArgumentError, "Invalid input map or module")
 
   @doc """
-  Generates a edge schema dynamically
+  Generates an edge schema dynamically
 
   If a collection name is not provided one will be dynamically generated. The naming convention
   is the names of the two modules is alphabetical order. E.g. `User` and `Post` will combine for a collection
@@ -706,12 +800,12 @@ defmodule ArangoXEcto do
   ## Examples
 
       iex> ArangoXEcto.edge_module(MyProject.User, MyProject.Company, [collection_name: "works_for"])
-      MyProject.WorksFor
+      MyProject.Edges.WorksFor
 
       iex> ArangoXEcto.edge_module(MyProject.User, MyProject.Company)
-      MyProject.UsersCompanies
+      MyProject.Edges.CompanyUser
   """
-  @spec edge_module(mod(), mod(), keyword()) :: atom()
+  @spec edge_module(module(), module(), Keyword.t()) :: atom()
   def edge_module(from_module, to_module, opts \\ [])
 
   def edge_module(%from_module{}, %to_module{}, opts),
@@ -779,23 +873,25 @@ defmodule ArangoXEcto do
       true
   """
   @spec collection_exists?(
-          Ecto.Repo.t() | pid(),
+          Ecto.Repo.t(),
           binary() | atom(),
           atom() | integer(),
           Keyword.t()
         ) ::
           boolean()
-  def collection_exists?(repo_or_conn, collection_name, type \\ :document, opts \\ [])
+  def collection_exists?(repo, collection_name, type \\ :document, opts \\ [])
       when is_binary(collection_name) or is_atom(collection_name) do
-    conn = gen_conn_from_repo(repo_or_conn)
-
-    Arangox.get(
-      conn,
+    api_query(
+      repo,
+      :get,
       __build_connection_url__(
-        repo_or_conn,
+        repo,
         "collection/#{collection_name}",
-        Keyword.get(opts, :prefix)
-      )
+        opts
+      ),
+      "",
+      %{},
+      opts
     )
     |> case do
       {:ok, %Arangox.Response{body: %{"isSystem" => false} = body}} ->
@@ -827,11 +923,9 @@ defmodule ArangoXEcto do
       iex> ArangoXEcto.view_exists?(Repo, :users_search)
       true
   """
-  @spec view_exists?(Ecto.Repo.t() | pid(), binary() | atom()) :: boolean()
-  def view_exists?(repo_or_conn, view_name) when is_binary(view_name) or is_atom(view_name) do
-    conn = gen_conn_from_repo(repo_or_conn)
-
-    Arangox.get(conn, "/_api/view/#{view_name}")
+  @spec view_exists?(Ecto.Repo.t(), binary() | atom()) :: boolean()
+  def view_exists?(repo, view_name) when is_binary(view_name) or is_atom(view_name) do
+    api_query(repo, :get, "/_api/view/#{view_name}")
     |> case do
       {:ok, %Arangox.Response{}} ->
         true
@@ -846,22 +940,24 @@ defmodule ArangoXEcto do
 
   Checks for the presence of the `__edge__/0` function on the module.
   """
-  @spec is_edge?(atom()) :: boolean()
-  def is_edge?(module) when is_atom(module), do: function_exported?(module, :__edge__, 0)
+  @spec edge?(atom()) :: boolean()
+  def edge?(module) when is_atom(module),
+    do: Code.ensure_loaded?(module) and function_exported?(module, :__edge__, 0)
 
-  def is_edge?(_), do: false
+  def edge?(_), do: false
 
   @doc """
   Returns if a Schema is a document schema or not
 
   Checks for the presence of the `__schema__/1` function on the module and not an edge.
   """
-  @spec is_document?(atom()) :: boolean()
-  def is_document?(module) when is_atom(module),
-    do:
-      function_exported?(module, :__schema__, 1) and not is_edge?(module) and not is_view?(module)
+  @spec document?(atom()) :: boolean()
+  def document?(module) when is_atom(module) do
+    Code.ensure_loaded?(module) and function_exported?(module, :__schema__, 1) and
+      not edge?(module) and not view?(module)
+  end
 
-  def is_document?(_), do: false
+  def document?(_), do: false
 
   @doc """
   Returns if a Schema is a view schema or not
@@ -869,16 +965,16 @@ defmodule ArangoXEcto do
   Checks for the presence of the `__view__/1` function on the module.
   """
   @doc since: "1.3.0"
-  @spec is_view?(atom()) :: boolean()
-  def is_view?(module) when is_atom(module),
-    do: function_exported?(module, :__view__, 1)
+  @spec view?(atom()) :: boolean()
+  def view?(module) when is_atom(module),
+    do: Code.ensure_loaded?(module) and function_exported?(module, :__view__, 1)
 
-  def is_view?(_), do: false
+  def view?(_), do: false
 
   @doc """
   Returns the type of a module
 
-  This is just a shortcut to using `is_edge/1`, `is_document/1` and `is_view/1`. If it is none of them nil is returned.
+  This is just a shortcut to using `edge?/1`, `document?/1` and `view?/1`. If it is none of them nil is returned.
 
   ## Examples
 
@@ -900,9 +996,9 @@ defmodule ArangoXEcto do
   @spec schema_type(atom()) :: :document | :edge | nil
   def schema_type(module) do
     cond do
-      is_view?(module) -> :view
-      is_edge?(module) -> :edge
-      is_document?(module) -> :document
+      view?(module) -> :view
+      edge?(module) -> :edge
+      document?(module) -> :document
       true -> nil
     end
   end
@@ -934,40 +1030,36 @@ defmodule ArangoXEcto do
   end
 
   @doc false
-  def __build_connection_url__(repo, string, _prefix, options \\ "")
+  def __build_connection_url__(repo, string, opts, options \\ "")
 
-  def __build_connection_url__(repo, string, _prefix, options) when is_pid(repo),
-    do: "/_api/#{string}#{options}"
+  def __build_connection_url__(%{repo: repo}, string, opts, options),
+    do: __build_connection_url__(repo, string, opts, options)
 
-  def __build_connection_url__(repo, string, prefix, options),
-    do: "/_db/#{get_prefix_database(repo, prefix)}/_api/#{string}#{options}"
+  def __build_connection_url__(repo, string, opts, options) do
+    database = Adapter.get_database(repo, opts)
+
+    "/_db/#{database}/_api/#{string}#{options}"
+  end
 
   ###############
   ##  Helpers  ##
   ###############
 
-  defp gen_conn_from_repo(repo_or_conn) do
-    case repo_or_conn do
-      pid when is_pid(pid) ->
-        pid
-
-      repo ->
-        %{pid: conn} = Ecto.Adapter.lookup_meta(repo)
-
-        conn
-    end
-  end
-
   defp remove_existing_analyzers(repo, analyzers, opts) do
     for %{name: name} <- analyzers do
-      ArangoXEcto.api_query(repo, :delete, [
-        __build_connection_url__(
+      ArangoXEcto.api_query(
+        repo,
+        :delete,
+        ArangoXEcto.__build_connection_url__(
           repo,
           "analyzer/#{name}",
-          Keyword.get(opts, :prefix),
+          opts,
           "?force=true"
-        )
-      ])
+        ),
+        "",
+        %{},
+        opts
+      )
     end
   end
 
@@ -1009,15 +1101,19 @@ defmodule ArangoXEcto do
   end
 
   defp do_delete_all_edges(module, repo, from_id, to_id, opts) do
-    module
-    |> validate_ecto_schema()
-    |> validate_edge_module()
-    |> source_name()
-    |> collection_exists!(repo, 3)
+    collection_name =
+      module
+      |> validate_ecto_schema()
+      |> validate_edge_module()
+      |> source_name()
 
-    module
-    |> find_edge_by_nodes(repo, from_id, to_id, opts)
-    |> Enum.each(&repo.delete/1)
+    if collection_exists?(repo, collection_name, :edge) do
+      module
+      |> find_edge_by_nodes(repo, from_id, to_id, opts)
+      |> Enum.each(&repo.delete/1)
+    end
+
+    :ok
   end
 
   defp find_edge_by_nodes(module, repo, from_id, to_id, opts) do
@@ -1180,7 +1276,8 @@ defmodule ArangoXEcto do
   end
 
   defp maybe_create_edges_collection(schema, repo) do
-    unless collection_exists?(repo, source_name(schema), :edge) do
+    unless Keyword.get(repo.config(), :static, true) or
+             collection_exists?(repo, source_name(schema), :edge) do
       create_collection(repo, schema)
     end
 
@@ -1196,12 +1293,12 @@ defmodule ArangoXEcto do
     end
   end
 
-  defp maybe_create_indexes(_, [], _), do: :ok
+  defp maybe_create_indexes(_, _, [], _), do: :ok
 
-  defp maybe_create_indexes(collection_name, %{} = indexes, opts),
-    do: maybe_create_indexes(collection_name, Map.to_list(indexes), opts)
+  defp maybe_create_indexes(repo, collection_name, %{} = indexes, opts),
+    do: maybe_create_indexes(repo, collection_name, Map.to_list(indexes), opts)
 
-  defp maybe_create_indexes(collection_name, indexes, opts) when is_list(indexes) do
+  defp maybe_create_indexes(repo, collection_name, indexes, opts) when is_list(indexes) do
     Enum.reduce(indexes, nil, fn
       _index, {:error, reason} ->
         {:error, reason}
@@ -1209,12 +1306,13 @@ defmodule ArangoXEcto do
       index, _acc ->
         {fields, index_opts} = Keyword.pop(index, :fields)
 
-        Migration.index(collection_name, fields, index_opts)
-        |> Migration.create(opts)
+        index_mod = Migration.index(collection_name, fields, index_opts)
+
+        repo.__adapter__().execute_ddl(repo, index_mod, opts)
     end)
   end
 
-  defp maybe_create_indexes(_, _, _),
+  defp maybe_create_indexes(_, _, _, _),
     do: raise("Invalid indexes provided. Should be a list of keyword lists.")
 
   defp process_vars(query, vars) when is_list(vars),
@@ -1226,8 +1324,8 @@ defmodule ArangoXEcto do
     {String.replace(query, "@" <> Atom.to_string(key), val), vars}
   end
 
-  defp process_vars({query, vars}, {_key, _val} = res),
-    do: {query, [res | vars]}
+  defp process_vars({query, vars}, {key, val}),
+    do: {query, [{key, dump(val)} | vars]}
 
   defp patch_map(map) do
     for {k, v} <- map, into: %{}, do: {String.to_atom(k), v}
@@ -1253,4 +1351,15 @@ defmodule ArangoXEcto do
       repo.config() |> Keyword.get(:database)
     end
   end
+
+  defp dump(list_type) when is_list(list_type), do: Enum.map(list_type, &dump/1)
+  defp dump(%NaiveDateTime{} = dt), do: NaiveDateTime.to_iso8601(dt)
+  defp dump(%DateTime{} = dt), do: DateTime.to_iso8601(dt)
+  defp dump(%Time{} = dt), do: Time.to_iso8601(dt)
+  defp dump(%Date{} = dt), do: Date.to_iso8601(dt)
+  defp dump(%Decimal{} = d), do: Decimal.to_string(d)
+  defp dump(val), do: val
+
+  defp do_result({:ok, _request, response}), do: {:ok, response}
+  defp do_result({:error, exception}), do: {:error, exception}
 end

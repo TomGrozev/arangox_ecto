@@ -141,7 +141,7 @@ defmodule ArangoXEcto.Query do
   defp ensure_not_view(%{sources: sources}) do
     sources
     |> Tuple.to_list()
-    |> Enum.any?(fn {_, schema, _} -> ArangoXEcto.is_view?(schema) end)
+    |> Enum.any?(fn {_, schema, _} -> ArangoXEcto.view?(schema) end)
     |> if do
       raise ArgumentError, "queries containing views cannot be update or delete operations"
     end
@@ -187,7 +187,8 @@ defmodule ArangoXEcto.Query do
           raise "Fragments are not supported."
 
         {coll, schema, _} ->
-          name = [String.first(coll) | Integer.to_string(pos)]
+          stripped_coll = String.replace(coll, ~r/[^A-Za-z]/, "")
+          name = [String.first(stripped_coll) | Integer.to_string(pos)]
           {quote_collection(coll), name, schema}
 
         %Ecto.SubQuery{} ->
@@ -373,9 +374,13 @@ defmodule ArangoXEcto.Query do
     Enum.intersperse(fields, ", ")
   end
 
+  defp kv_list(key, value) do
+    [key, ": " | value]
+  end
+
   defp update_op(cmd, name, quoted_key, value, sources, query) do
     value = update_op_value(cmd, name, quoted_key, value, sources, query)
-    [quoted_key, ": " | value]
+    kv_list(quoted_key, value)
   end
 
   defp update_op_value(:set, _name, _quoted_key, value, sources, query),
@@ -563,6 +568,18 @@ defmodule ArangoXEcto.Query do
 
   defp expr(%Ecto.Query.Tagged{value: value, type: :decimal}, sources, query) do
     [expr(value, sources, query)]
+  end
+
+  defp expr(%Ecto.Query.Tagged{value: value, type: :integer}, sources, query) do
+    ["TO_NUMBER(", expr(value, sources, query), ")"]
+  end
+
+  defp expr(%Ecto.Query.Tagged{value: value, type: :string}, sources, query) do
+    ["TO_STRING(", expr(value, sources, query), ")"]
+  end
+
+  defp expr(%Ecto.Query.Tagged{value: value, type: :boolean}, sources, query) do
+    ["TO_BOOL(", expr(value, sources, query), ")"]
   end
 
   defp expr(nil, _sources, _query), do: "NULL"

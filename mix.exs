@@ -11,6 +11,13 @@ defmodule ArangoXEcto.MixProject do
       elixir: "~> 1.10",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
+      test_coverage: [tool: ExCoveralls],
+      preferred_cli_env: [
+        coveralls: :test,
+        "coveralls.detail": :test,
+        "coveralls.github": :test,
+        "coveralls.html": :test
+      ],
       # Hex
       description: "An ArangoDB adapter for Ecto supporting Ecto queries and graph queries.",
       package: package(),
@@ -24,7 +31,7 @@ defmodule ArangoXEcto.MixProject do
   def application do
     [
       extra_applications: [:logger],
-      mod: [],
+      mod: {ArangoXEcto.Application, []},
       env: [
         log_levels: [:info],
         log_colours: %{info: :green, debug: :normal},
@@ -37,14 +44,15 @@ defmodule ArangoXEcto.MixProject do
   defp deps do
     [
       ecto_dep(),
-      {:arangox, ">= 0.5.5"},
+      {:arangox, "~> 0.6.0"},
       {:velocy, "~> 0.1"},
       {:jason, "~> 1.2"},
       {:geo, "~> 3.0"},
-      {:ex_doc, "~> 0.24", only: :dev, runtime: false},
-      {:credo, "~> 1.6.0", only: [:dev, :test], runtime: false},
-      {:doctor, "~> 0.18.0", only: [:dev, :test], runtime: false},
-      {:git_hooks, "~> 0.7.0", only: [:test, :dev], runtime: false}
+      {:ex_doc, "~> 0.31", only: :dev, runtime: false},
+      {:credo, "~> 1.7.4", only: [:dev, :test], runtime: false},
+      {:doctor, "~> 0.21.0", only: [:dev, :test], runtime: false},
+      {:git_hooks, "~> 0.7.0", only: [:test, :dev], runtime: false},
+      {:excoveralls, "~> 0.18", only: :test}
     ]
   end
 
