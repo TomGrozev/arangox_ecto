@@ -152,11 +152,11 @@ defmodule ArangoXEctoTest do
       user = %User{first_name: "John", last_name: "Smith"} |> TestRepo.insert!()
       post = %Post{title: "abc"} |> TestRepo.insert!()
 
-      from = id_from_user(user)
-      to = "posts/" <> post.id
+      from = "posts/" <> post.id
+      to = id_from_user(user)
 
       edge =
-        ArangoXEcto.create_edge(TestRepo, user, post, edge: UserPosts, fields: %{type: "wrote"})
+        ArangoXEcto.create_edge(TestRepo, post, user, edge: UserPosts, fields: %{type: "wrote"})
 
       assert %UserPosts{_from: ^from, _to: ^to, type: "wrote"} = edge
     end
@@ -165,11 +165,11 @@ defmodule ArangoXEctoTest do
       user = %User{first_name: "John", last_name: "Smith"} |> TestRepo.insert!()
       post = %Post{title: "abc"} |> TestRepo.insert!()
 
-      from = id_from_user(user)
-      to = "posts/" <> post.id
+      from = "posts/" <> post.id
+      to = id_from_user(user)
 
       edge =
-        ArangoXEcto.create_edge(TestRepo, user, post,
+        ArangoXEcto.create_edge(TestRepo, post, user,
           edge: UserPostsOptions,
           fields: %{type: "wrote"}
         )
@@ -227,6 +227,34 @@ defmodule ArangoXEctoTest do
 
   describe "create_analyzers/2" do
     test "creates analyzers" do
+      # Fix for ArangoDB versions legacy parameter
+      {:ok, %Arangox.Response{body: %{"version" => version}}} =
+        ArangoXEcto.api_query(TestRepo, :get, "/_api/version")
+
+      analyzer_l =
+        if Version.compare(version, "3.10.5") == :lt do
+          %{
+            "features" => ["norm"],
+            "properties" => %{
+              "options" => %{"maxCells" => 21, "maxLevel" => 24, "minLevel" => 5},
+              "type" => "shape"
+            },
+            "name" => "arangox_ecto_test::l",
+            "type" => "geojson"
+          }
+        else
+          %{
+            "features" => ["norm"],
+            "properties" => %{
+              "options" => %{"maxCells" => 21, "maxLevel" => 24, "minLevel" => 5},
+              "type" => "shape",
+              "legacy" => false
+            },
+            "name" => "arangox_ecto_test::l",
+            "type" => "geojson"
+          }
+        end
+
       expected_responses = [
         %{
           "features" => ["norm"],
@@ -335,16 +363,7 @@ defmodule ArangoXEctoTest do
           "name" => "arangox_ecto_test::k",
           "type" => "segmentation"
         },
-        %{
-          "features" => ["norm"],
-          "properties" => %{
-            "options" => %{"maxCells" => 21, "maxLevel" => 24, "minLevel" => 5},
-            "type" => "shape",
-            "legacy" => false
-          },
-          "name" => "arangox_ecto_test::l",
-          "type" => "geojson"
-        },
+        analyzer_l,
         %{
           "features" => ["norm"],
           "properties" => %{
@@ -392,9 +411,9 @@ defmodule ArangoXEctoTest do
       user = %User{first_name: "John", last_name: "Smith"} |> TestRepo.insert!()
       post = %Post{title: "test"} |> TestRepo.insert!()
 
-      ArangoXEcto.create_edge(TestRepo, user, post, edge: UserPosts, fields: %{type: "wrote"})
+      ArangoXEcto.create_edge(TestRepo, post, user, edge: UserPosts, fields: %{type: "wrote"})
 
-      ArangoXEcto.delete_all_edges(TestRepo, user, post, edge: UserPosts)
+      ArangoXEcto.delete_all_edges(TestRepo, post, user, edge: UserPosts)
 
       assert TestRepo.one(from(e in UserPosts, select: count(e.id))) || 0 == 0
     end
@@ -607,6 +626,11 @@ defmodule ArangoXEctoTest do
     test "one module with extra depth in parent" do
       assert ArangoXEcto.edge_module(User, ArangoXEcto.Integration.Deep.Magic) ==
                ArangoXEcto.Integration.Edges.MagicUser
+    end
+
+    test "multiple modules with depth" do
+      assert ArangoXEcto.edge_module([User, Post], ArangoXEcto.Integration.Deep.Magic) ==
+               ArangoXEcto.Integration.Edges.MagicPostUser
     end
 
     test "using custom collection name" do
