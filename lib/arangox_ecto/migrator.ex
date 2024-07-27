@@ -753,6 +753,8 @@ defmodule ArangoXEcto.Migrator do
     |> log_execute()
   end
 
+  def execute_command(_meta, _command, _opts), do: :ok
+
   ###########
   # Helpers #
   ###########
