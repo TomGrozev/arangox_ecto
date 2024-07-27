@@ -90,16 +90,6 @@ defmodule ArangoXEcto do
         adapter_meta,
         opts,
         fn cursor ->
-          default_properties = [options: %{fullCount: true}]
-
-          opts =
-            Keyword.update(
-              opts,
-              :properties,
-              default_properties,
-              &Keyword.merge(&1, default_properties)
-            )
-
           stream = Arangox.cursor(cursor, query, vars, opts)
 
           Enum.reduce(

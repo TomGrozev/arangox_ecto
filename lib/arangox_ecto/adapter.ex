@@ -66,7 +66,7 @@ defmodule ArangoXEcto.Adapter do
     telemetry = {config[:repo], log, telemetry_prefix ++ [:query]}
 
     config = adapter_config(config)
-    opts = Keyword.take(config, @pool_opts)
+    opts = Keyword.take(config, @pool_opts) |> with_count()
     meta = %{telemetry: telemetry, stacktrace: stacktrace, opts: opts}
     child = Arangox.child_spec(config)
 
@@ -86,6 +86,15 @@ defmodule ArangoXEcto.Adapter do
     config
     |> Keyword.delete(:name)
     |> Keyword.update(:pool, DBConnection.ConnectionPool, &normalize_pool/1)
+  end
+
+  defp with_count(opts) do
+    properties = opts[:properties] || []
+    options = properties[:options] || %{}
+
+    new_properties = Keyword.put(properties, :options, Map.put(options, :fullCount, true))
+
+    Keyword.put(opts, :properties, new_properties)
   end
 
   defp normalize_pool(pool) do

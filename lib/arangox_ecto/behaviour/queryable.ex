@@ -112,7 +112,7 @@ defmodule ArangoXEcto.Behaviour.Queryable do
     |> ArangoXEcto.Behaviour.Stream.build(prepared, params, opts)
     |> Stream.map(fn %Arangox.Response{
                        body: %{
-                         "extra" => %{"stats" => %{"cursorsCreated" => nrows}},
+                         "extra" => %{"stats" => %{"fullCount" => nrows}},
                          "result" => rows
                        }
                      } ->
