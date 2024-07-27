@@ -342,13 +342,13 @@ defmodule ArangoXEcto do
       %UserPosts{_from: "users/12345", _to: "users/54321", from: #Ecto.Association.NotLoaded<association :from is not loaded>, to: #Ecto.Association.NotLoaded<association :to is not loaded>, type: "wrote"}
 
   """
-  @spec create_edge(Ecto.Repo.t(), module(), module(), Keyword.t()) ::
+  @spec create_edge(Ecto.Repo.t(), struct(), struct(), Keyword.t()) ::
           {:ok, Ecto.Schema.t()} | {:error, Ecto.Changeset.t()}
-  def create_edge(repo, from, to, opts \\ []) do
+  def create_edge(repo, from, to, opts \\ []) when is_struct(from) and is_struct(to) do
     from_id = struct_id(from)
     to_id = struct_id(to)
 
-    Keyword.get_lazy(opts, :edge, fn -> edge_module(from, to, opts) end)
+    Keyword.get_lazy(opts, :edge, fn -> edge_module(from.__struct__, to.__struct__, opts) end)
     |> do_create_edge(repo, from_id, to_id, opts)
   end
 
@@ -579,13 +579,13 @@ defmodule ArangoXEcto do
       iex> ArangoXEcto.delete_all_edges(Repo, user1, user2, conditions: [type: "best_friend"])
       :ok
   """
-  @spec delete_all_edges(Ecto.Repo.t(), module(), module(), Keyword.t()) :: :ok
-  def delete_all_edges(repo, from, to, opts \\ []) do
+  @spec delete_all_edges(Ecto.Repo.t(), struct(), struct(), Keyword.t()) :: :ok
+  def delete_all_edges(repo, from, to, opts \\ []) when is_struct(from) and is_struct(to) do
     from_id = struct_id(from)
     to_id = struct_id(to)
 
     Keyword.get_lazy(opts, :edge, fn ->
-      edge_module(from, to, Keyword.put(opts, :create, false))
+      edge_module(from.__struct__, to.__struct__, Keyword.put(opts, :create, false))
     end)
     |> do_delete_all_edges(repo, from_id, to_id, opts)
   end
@@ -776,9 +776,13 @@ defmodule ArangoXEcto do
   Generates an edge schema dynamically
 
   If a collection name is not provided one will be dynamically generated. The naming convention
-  is the names of the two modules is alphabetical order. E.g. `User` and `Post` will combine for a collection
-  name of `post_user` and an edge module name of `PostUser`. This order is used to prevent duplicates if the
-  from and to orders are switched.
+  is the names of the modules is alphabetical order. E.g. `User` and `Post` will combine for a collection
+  name of `posts_users` (uses the collection names of the modules) and an edge module name of `PostUser`. 
+  This order is used to prevent duplicates if the from and to orders are switched.
+
+  You can also use a list of from and to modules, e.g. from: User, to: [Post, Comment], would result
+  in a module name of CommentPostUser and a collection name of comments_posts_users. This may not
+  always be an optimal naming convention so it is generally a good idea to make your own edge collection.
 
   This will create the Ecto Module in the environment dynamically. It will create it under the closest
   common parent module of the passed modules plus the `Edges` alias. For example, if the modules were
@@ -788,8 +792,8 @@ defmodule ArangoXEcto do
 
   ## Parameters
 
-  - `from_module` - Ecto Schema Module for the from part of the edge
-  - `to_module` - Ecto Schema Module for the to part of the edge
+  - `from_modules` - Ecto Schema modules for the from part of the edge
+  - `to_modules` - Ecto Schema modules for the to part of the edge
   - `opts` - Options passed for module generation
 
   ## Options
@@ -801,21 +805,21 @@ defmodule ArangoXEcto do
       iex> ArangoXEcto.edge_module(MyProject.User, MyProject.Company, [collection_name: "works_for"])
       MyProject.Edges.WorksFor
 
-      iex> ArangoXEcto.edge_module(MyProject.User, MyProject.Company)
-      MyProject.Edges.CompanyUser
+      iex> ArangoXEcto.edge_module(MyProject.User, [MyProject.Company, MyProject.Group])
+      MyProject.Edges.CompanyGroupUser
   """
-  @spec edge_module(module(), module(), Keyword.t()) :: atom()
-  def edge_module(from_module, to_module, opts \\ [])
+  @spec edge_module(module() | [module()], module() | [module()], Keyword.t()) :: atom()
+  def edge_module(from_modules, to_modules, opts \\ []) do
+    from_modules = List.wrap(from_modules)
+    to_modules = List.wrap(to_modules)
 
-  def edge_module(%from_module{}, %to_module{}, opts),
-    do: edge_module(from_module, to_module, opts)
+    collection_name =
+      case Keyword.fetch(opts, :collection_name) do
+        {:ok, name} -> name
+        :error -> gen_edge_collection_name(from_modules, to_modules)
+      end
 
-  def edge_module(from_module, to_module, opts) do
-    case Keyword.fetch(opts, :collection_name) do
-      {:ok, name} -> name
-      :error -> gen_edge_collection_name(from_module, to_module)
-    end
-    |> create_edge_module(from_module, to_module, opts)
+    create_edge_module(collection_name, from_modules, to_modules, opts)
   end
 
   @doc """
@@ -1150,17 +1154,17 @@ defmodule ArangoXEcto do
 
   defp collection_from_id(id), do: source_name(id)
 
-  defp create_edge_module(collection_name, from_module, to_module, opts) do
-    project_prefix = Module.concat(common_parent_module(from_module, to_module), "Edges")
+  defp create_edge_module(collection_name, from_modules, to_modules, opts) do
+    common_parent = common_parent_module(from_modules, to_modules)
+    project_prefix = Module.concat(common_parent, "Edges")
     module_name = Module.concat(project_prefix, Macro.camelize(collection_name))
 
-    unless Keyword.get(opts, :create, true) == false or
-             function_exported?(module_name, :__info__, 1) do
+    if Keyword.get(opts, :create, true) and not function_exported?(module_name, :__info__, 1) do
       contents =
         quote do
           use ArangoXEcto.Edge,
-            from: unquote(from_module),
-            to: unquote(to_module)
+            from: unquote(List.first(from_modules)),
+            to: unquote(List.first(to_modules))
 
           schema unquote(collection_name) do
             edge_fields()
@@ -1173,11 +1177,14 @@ defmodule ArangoXEcto do
     module_name
   end
 
-  defp common_parent_module(module1, module2) do
-    parent1 = parent_module_list(module1)
-    parent2 = parent_module_list(module2)
-
-    common_ordered_list(parent1, parent2)
+  defp common_parent_module(modules1, modules2) do
+    List.flatten(modules1, modules2)
+    |> Stream.map(&parent_module_list/1)
+    |> Stream.zip()
+    |> Stream.map(&Tuple.to_list/1)
+    |> Stream.map(&Enum.uniq/1)
+    |> Stream.take_while(&match?([_], &1))
+    |> Enum.flat_map(&Function.identity/1)
     |> Module.concat()
   end
 
@@ -1188,23 +1195,12 @@ defmodule ArangoXEcto do
     |> Enum.drop(-1)
   end
 
-  defp common_ordered_list(list1, list2, acc \\ [])
-
-  defp common_ordered_list([h1 | t1], [h2 | t2], acc) when h1 == h2,
-    do: common_ordered_list(t1, t2, [h1 | acc])
-
-  defp common_ordered_list(_, _, acc), do: Enum.reverse(acc)
-
   defp gen_edge_collection_name(mod1, mod2) do
-    name1 = last_mod(mod1)
-    name2 = last_mod(mod2)
-
-    sorted_elements = Enum.sort([name1, name2])
-
-    name1 = List.first(sorted_elements) |> String.downcase()
-    name2 = List.last(sorted_elements) |> String.downcase()
-
-    "#{name1}_#{name2}"
+    List.flatten(mod1, mod2)
+    |> Stream.map(&last_mod/1)
+    |> Stream.map(&String.downcase/1)
+    |> Enum.sort()
+    |> Enum.join("_")
   end
 
   defp last_mod(module) do
