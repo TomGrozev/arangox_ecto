@@ -239,6 +239,8 @@ defmodule ArangoXEcto.Adapter do
   defdelegate rollback(adapter_meta, value),
     to: ArangoXEcto.Behaviour.Transaction
 
+  def lock_with_migrations(_, _, _), do: []
+
   @doc """
   Receives a DDL command and executes it
   """
