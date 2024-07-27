@@ -153,8 +153,8 @@ defmodule ArangoXEcto.Behaviour.Schema do
       assoc = schema.__schema__(:association, assoc_key)
 
       case assoc.owner_key do
-        :_from -> {assoc.queryable, elem(acc, 1)}
-        :_to -> {elem(acc, 0), assoc.queryable}
+        :_from -> {assoc.queryables, elem(acc, 1)}
+        :_to -> {elem(acc, 0), assoc.queryables}
         _ -> acc
       end
     end)

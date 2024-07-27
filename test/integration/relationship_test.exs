@@ -1,12 +1,34 @@
 defmodule ArangoxEctoTest.Integration.RelationshipTest do
   use ArangoXEcto.Integration.Case,
-    write: ["users", "posts", "posts_users"]
+    write: ["users", "posts", "comments", "posts_users", "user_content"]
 
   alias ArangoXEcto.Integration.TestRepo
-  alias ArangoXEcto.Integration.{Post, User, UserPosts}
+  alias ArangoXEcto.Integration.{Comment, Post, User, UserContent, UserPosts}
 
   describe "many relationship" do
-    test "create edge connection" do
+    test "cast edge connection" do
+      attrs = %{
+        first_name: "John",
+        last_name: "Smith",
+        posts_two: [
+          %{title: "abc"}
+        ]
+      }
+
+      post_changeset = fn struct, map ->
+        Ecto.Changeset.cast(struct, map, [:title])
+      end
+
+      %User{id: user_id} =
+        Ecto.Changeset.cast(%User{}, attrs, [:first_name, :last_name])
+        |> Ecto.Changeset.cast_assoc(:posts_two, with: post_changeset)
+        |> TestRepo.insert!()
+
+      assert %User{id: ^user_id, posts_two: [%Post{title: "abc"}]} =
+               TestRepo.get(User, user_id) |> TestRepo.preload(:posts_two)
+    end
+
+    test "put edge connection" do
       post = %Post{__id__: post_id} = %Post{title: "abc"} |> TestRepo.insert!()
 
       attrs = %{
@@ -34,13 +56,30 @@ defmodule ArangoxEctoTest.Integration.RelationshipTest do
 
       post = %Post{__id__: post_id} = %Post{title: "abc"} |> TestRepo.insert!()
 
-      assert %{_from: ^user_id, _to: ^post_id, type: "abc"} =
-               ArangoXEcto.create_edge(TestRepo, user, post,
+      assert %{_from: ^post_id, _to: ^user_id, type: "abc"} =
+               ArangoXEcto.create_edge(TestRepo, post, user,
                  edge: UserPosts,
                  fields: %{type: "abc"}
                )
 
-      assert [%{_from: ^user_id, _to: ^post_id, type: "abc"}] = TestRepo.all(UserPosts)
+      assert [%{_from: ^post_id, _to: ^user_id, type: "abc"}] = TestRepo.all(UserPosts)
+    end
+
+    test "cannot reverse from and to on edge relationship" do
+      user =
+        %User{__id__: user_id} =
+        %User{first_name: "John", last_name: "Smith"} |> TestRepo.insert!()
+
+      post = %Post{__id__: post_id} = %Post{title: "abc"} |> TestRepo.insert!()
+
+      assert %{_from: ^post_id, _to: ^user_id} =
+               ArangoXEcto.create_edge(TestRepo, post, user, edge: UserPosts)
+
+      assert_raise Ecto.InvalidChangesetError,
+                   ~r/from schema is not in the available from schemas.*to schema is not in the available to schemas/is,
+                   fn ->
+                     ArangoXEcto.create_edge(TestRepo, user, post, edge: UserPosts)
+                   end
     end
 
     test "create relationship with non existent edge field" do
@@ -51,22 +90,30 @@ defmodule ArangoxEctoTest.Integration.RelationshipTest do
       post = %Post{__id__: post_id} = %Post{title: "abc"} |> TestRepo.insert!()
 
       edge =
-        ArangoXEcto.create_edge(TestRepo, user, post, edge: UserPosts, fields: %{fake: "abc"})
+        ArangoXEcto.create_edge(TestRepo, post, user, edge: UserPosts, fields: %{fake: "abc"})
 
       assert not Map.has_key?(edge, :fake)
-      assert %{_from: ^user_id, _to: ^post_id} = edge
+      assert %{_from: ^post_id, _to: ^user_id} = edge
 
-      assert [%{_from: ^user_id, _to: ^post_id}] = TestRepo.all(UserPosts)
+      assert [%{_from: ^post_id, _to: ^user_id}] = TestRepo.all(UserPosts)
     end
 
-    test "preload from and to" do
-      user = %User{} = %User{first_name: "John", last_name: "Smith"} |> TestRepo.insert!()
+    test "create relationship with multiple types of from and to" do
+      user =
+        %User{__id__: user_id} =
+        %User{first_name: "John", last_name: "Smith"} |> TestRepo.insert!()
 
-      post = %Post{} = %Post{title: "abc"} |> TestRepo.insert!()
+      post = %Post{__id__: post_id} = %Post{title: "abc"} |> TestRepo.insert!()
+      comment = %Comment{__id__: comment_id} = %Comment{text: "cba"} |> TestRepo.insert!()
 
-      ArangoXEcto.create_edge(TestRepo, post, user, edge: UserPosts)
+      assert %{_from: ^user_id, _to: ^post_id} =
+               ArangoXEcto.create_edge(TestRepo, user, post, edge: UserContent)
 
-      assert [%UserPosts{from: %Post{}}] = TestRepo.all(UserPosts) |> TestRepo.preload(:from)
+      assert %{_from: ^user_id, _to: ^comment_id} =
+               ArangoXEcto.create_edge(TestRepo, user, comment, edge: UserContent)
+
+      assert %{my_posts: [^post]} = TestRepo.preload(user, :my_posts)
+      assert %{my_comments: [^comment]} = TestRepo.preload(user, :my_comments)
     end
   end
 

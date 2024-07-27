@@ -34,6 +34,7 @@ defmodule ArangoXEcto.Schema do
     quote do
       import unquote(__MODULE__)
       import Ecto.Schema, only: [embedded_schema: 1]
+      import ArangoXEcto.Association
 
       @primary_key {:id, :binary_id, autogenerate: true, source: :_key}
       @timestamps_opts []

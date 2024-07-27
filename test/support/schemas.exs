@@ -20,6 +20,12 @@ defmodule ArangoXEcto.Integration.User do
 
     outgoing(:posts_two, ArangoXEcto.Integration.Post, edge: ArangoXEcto.Integration.UserPosts)
 
+    outgoing(:my_posts, ArangoXEcto.Integration.Post, edge: ArangoXEcto.Integration.UserContent)
+
+    outgoing(:my_comments, ArangoXEcto.Integration.Comment,
+      edge: ArangoXEcto.Integration.UserContent
+    )
+
     one_outgoing(:best_post, ArangoXEcto.Integration.Post)
 
     timestamps()
@@ -133,6 +139,16 @@ defmodule ArangoXEcto.Integration.UserPostsOptions do
   def changeset(edge, attrs) do
     edges_changeset(edge, attrs)
     |> cast(attrs, [:type])
+  end
+end
+
+defmodule ArangoXEcto.Integration.UserContent do
+  use ArangoXEcto.Edge,
+    from: ArangoXEcto.Integration.User,
+    to: [ArangoXEcto.Integration.Post, ArangoXEcto.Integration.Comment]
+
+  schema "user_content" do
+    edge_fields()
   end
 end
 
