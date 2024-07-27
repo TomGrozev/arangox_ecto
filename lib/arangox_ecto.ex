@@ -737,41 +737,40 @@ defmodule ArangoXEcto do
       ]
   """
   @spec load(map() | [map()], Ecto.Schema.t() | [Ecto.Schema.t()]) :: struct()
-  def load(map, module) when is_atom(module),
-    do: load(map, [module])
-
   def load(map, module) when is_list(map),
     do: Enum.map(map, &load(&1, module))
 
   def load(%{"_id" => id} = map, modules) do
-    [source, _key] = String.split(id, "/")
-
-    module =
-      Enum.find(modules, fn mod ->
-        schema_type!(mod)
-
-        mod.__schema__(:source) == source
-      end)
+    module = get_module(modules, id)
 
     Ecto.Repo.Schema.load(ArangoXEcto.Adapter, module, map)
     |> add_associations(module, map)
   end
 
   def load(%{__id__: id} = map, modules) do
-    [source, _key] = String.split(id, "/")
-
-    module =
-      Enum.find(modules, fn mod ->
-        schema_type!(mod)
-
-        mod.__schema__(:source) == source
-      end)
+    module = get_module(modules, id)
 
     struct(module, map)
     |> add_associations(module, map)
   end
 
   def load(_, _), do: raise(ArgumentError, "Invalid input map or module")
+
+  defp get_module(modules, id) do
+    [source, _key] = String.split(id, "/")
+
+    modules
+    |> List.wrap()
+    |> Stream.map(fn
+      {mod, _} -> mod
+      mod -> mod
+    end)
+    |> Enum.find(fn mod ->
+      schema_type!(mod)
+
+      mod.__schema__(:source) == source
+    end)
+  end
 
   @doc """
   Generates an edge schema dynamically
