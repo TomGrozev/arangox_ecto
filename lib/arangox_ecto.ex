@@ -278,8 +278,8 @@ defmodule ArangoXEcto do
   The collection name can be passed as an option or is obtained from the provided schema,
   otherwise it is generated dynamically.
 
-  Since ArangoDB does not care about the order of the from and two options in anonymous graphs, the order of the
-  from and to attributes used in this function will work either way.
+  The order of the `from` and `to` matters. A changeset validation error will be raised if
+  the `from` is not defined in the `from` definition of the edge. The same goes for the `to`.
 
   ## Parameters
 
@@ -1258,6 +1258,32 @@ defmodule ArangoXEcto do
       UndefinedFunctionError ->
         Edge.edges_changeset(struct, attrs)
     end
+    |> validate_edge_ids()
+  end
+
+  defp validate_edge_ids(changeset) do
+    edge_module = changeset.data.__struct__
+
+    changeset
+    |> validate_edge_field(edge_module, :_from, :from)
+    |> validate_edge_field(edge_module, :_to, :to)
+  end
+
+  defp validate_edge_field(changeset, edge_module, key, field) do
+    Ecto.Changeset.validate_change(changeset, key, fn ^key, field_val ->
+      [source, _] = String.split(field_val, "/", parts: 2)
+      related = edge_module.__schema__(:association, field).related
+      sources = Enum.map(related, &source_name/1)
+
+      if source in sources do
+        []
+      else
+        [
+          {key,
+           "#{field} schema is not in the available #{field} schemas for the edge #{edge_module}"}
+        ]
+      end
+    end)
   end
 
   defp maybe_create_edges_collection(schema, repo) do
