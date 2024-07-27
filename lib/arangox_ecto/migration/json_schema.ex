@@ -54,7 +54,7 @@ defmodule ArangoXEcto.Migration.JsonSchema do
   end
 
   defp command_to_schema({_name, :enum, command_opts}, _opts) do
-    %{enum: Keyword.fetch!(command_opts, :values)}
+    %{type: "string", enum: Keyword.fetch!(command_opts, :values)}
     |> maybe_add_opt(command_opts, :"$comment", :comment)
     |> apply_nullable(command_opts)
   end
@@ -74,8 +74,10 @@ defmodule ArangoXEcto.Migration.JsonSchema do
     |> apply_nullable(command_opts)
   end
 
-  defp command_to_schema({_name, {:array, type}, command_opts}, _opts) do
-    %{type: "array", items: %{type: type}}
+  defp command_to_schema({_name, {:array, type}, command_opts}, opts) do
+    sub_type = command_to_schema({:items, type, command_opts}, opts)
+
+    %{type: "array", items: sub_type}
     |> maybe_add_opt(command_opts, :minItems, :min_items)
     |> maybe_add_opt(command_opts, :maxItems, :max_items)
     |> maybe_add_opt(command_opts, :uniqueItems, :unique_items)
