@@ -183,12 +183,13 @@ defmodule ArangoXEcto.Query do
   defp create_names(sources, pos, limit) when pos < limit do
     current =
       case elem(sources, pos) do
-        {:fragment, _, _} ->
-          raise "Fragments are not supported."
+        {:fragment, _, _} = frag ->
+          name = ["frag", Integer.to_string(pos)]
+          {expr(frag, sources, nil), name, nil}
 
         {coll, schema, _} ->
           stripped_coll = String.replace(coll, ~r/[^A-Za-z]/, "")
-          name = [String.first(stripped_coll) | Integer.to_string(pos)]
+          name = [String.first(stripped_coll), Integer.to_string(pos)]
           {quote_collection(coll), name, schema}
 
         %Ecto.SubQuery{} ->
@@ -498,6 +499,11 @@ defmodule ArangoXEcto.Query do
       {:raw, part} -> part
       {:expr, expr} -> expr(expr, sources, query)
     end)
+  end
+
+  defp expr({:splice, _, [{:^, m, [idx]}, count]}, sources, query) do
+    Enum.map(0..(count - 1), &expr({:^, m, [&1 + idx]}, sources, query))
+    |> Enum.intersperse(", ")
   end
 
   defp expr({:is_nil, _, [arg]}, sources, query) do
