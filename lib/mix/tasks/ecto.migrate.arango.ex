@@ -128,8 +128,10 @@ defmodule Mix.Tasks.Ecto.Migrate.Arango do
     # to restart those apps if migrated.
     {:ok, _} = Application.ensure_all_started(:arangox_ecto)
 
-    for repo <- repos do
-      ensure_repo(repo, args)
+    repos
+    |> Stream.map(&ensure_repo(&1, args))
+    |> Stream.filter(&(&1.__adapter__() == ArangoXEcto.Adapter))
+    |> Enum.each(fn repo ->
       paths = ensure_migrations_paths(repo, opts)
       pool = repo.config()[:pool]
 
@@ -142,7 +144,7 @@ defmodule Mix.Tasks.Ecto.Migrate.Arango do
         {:error, error} ->
           Mix.raise("Could not start repo #{inspect(repo)}, error: #{inspect(error)}")
       end
-    end
+    end)
 
     :ok
   end
