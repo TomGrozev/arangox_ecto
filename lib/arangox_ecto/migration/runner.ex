@@ -117,7 +117,7 @@ defmodule ArangoXEcto.Migration.Runner do
         {{:error, "cannot execute command outside of block"}, state}
 
       %{command: command, subcommands: [{embed_opt, name, subcommands, opts} | t]} = state
-      when embed_opt in [:add_embed, :modify_embed] ->
+      when embed_opt in [:add_embed, :modify_embed, :add_embed_many, :modify_embed_many] ->
         validate_type(command, subcommand, state, fn ->
           put_in(state.subcommands, [{embed_opt, name, [subcommand | subcommands], opts} | t])
         end)
@@ -150,6 +150,16 @@ defmodule ArangoXEcto.Migration.Runner do
 
       %{subcommands: [{:modify_embed, name, subcommands, opts} | t]} = state ->
         command = {:modify, name, Enum.reverse(subcommands), opts}
+
+        %{state | subcommands: [command | t]}
+
+      %{subcommands: [{:add_embed_many, name, subcommands, opts} | t]} = state ->
+        command = {:add, name, {:array, Enum.reverse(subcommands)}, opts}
+
+        %{state | subcommands: [command | t]}
+
+      %{subcommands: [{:modify_embed_many, name, subcommands, opts} | t]} = state ->
+        command = {:modify, name, {:array, Enum.reverse(subcommands)}, opts}
 
         %{state | subcommands: [command | t]}
     end)
@@ -250,7 +260,9 @@ defmodule ArangoXEcto.Migration.Runner do
     :remove_if_exists,
     :rename,
     :add_embed,
-    :modify_embed
+    :modify_embed,
+    :add_embed_many,
+    :modify_embed_many
   ]
   defp validate_type(command, subcommand, state, fun) do
     elems = {elem(command, 0), elem(command, 1).__struct__}

@@ -888,6 +888,23 @@ defmodule ArangoXEcto.Migration do
   end
 
   @doc """
+  Adds a field when creating or altering multiple collection with subfields.
+
+  This represents a list of objects.
+
+  See `add_embed/3` for options and more info.
+  """
+  defmacro add_embed_many(field, opts \\ [], do: block) when is_atom(field) and is_list(opts) do
+    quote do
+      Runner.subcommand({:add_embed_many, unquote(field), [], unquote(opts)})
+      unquote(block)
+      Runner.end_subcommand()
+
+      :ok
+    end
+  end
+
+  @doc """
   Adds a field when creating or altering a collection.
 
   TODO: Add note about what types are accepted
@@ -1088,6 +1105,22 @@ defmodule ArangoXEcto.Migration do
   defmacro modify_embed(field, opts \\ [], do: block) when is_atom(field) and is_list(opts) do
     quote do
       Runner.subcommand({:modify_embed, unquote(field), [], unquote(opts)})
+      unquote(block)
+      Runner.end_subcommand()
+
+      :ok
+    end
+  end
+
+  @doc """
+  Modifies a field when creating or altering many collections with subfields.
+
+  See `modify_embed/3` for options and more info.
+  """
+  defmacro modify_embed_many(field, opts \\ [], do: block)
+           when is_atom(field) and is_list(opts) do
+    quote do
+      Runner.subcommand({:modify_embed_many, unquote(field), [], unquote(opts)})
       unquote(block)
       Runner.end_subcommand()
 
