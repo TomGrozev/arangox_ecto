@@ -13,6 +13,7 @@ defmodule ArangoXEcto do
   alias ArangoXEcto.Behaviour.Transaction
   alias ArangoXEcto.Edge
   alias ArangoXEcto.Migration
+  alias Ecto.Repo.Preloader
 
   @type query :: binary()
   @type vars :: keyword() | map()
@@ -528,6 +529,63 @@ defmodule ArangoXEcto do
           error
       end
     end
+  end
+
+  @spec preload(structs_or_struct_or_nil, Ecto.Repo.t(), preloads :: term, opts :: Keyword.t()) ::
+          structs_or_struct_or_nil
+        when structs_or_struct_or_nil: [Ecto.Schema.t()] | Ecto.Schema.t() | nil
+  def preload(struct_or_structs_or_nil, repo, preloads, opts \\ []) do
+    repo = repo.get_dynamic_repo()
+
+    Preloader.preload(
+      struct_or_structs_or_nil,
+      repo,
+      preloads,
+      Ecto.Repo.Supervisor.tuplet(repo, prepare_opts(repo, :preload, opts))
+    )
+    |> load_preload(repo)
+  end
+
+  defp prepare_opts(repo, operation_name, []), do: repo.default_options(operation_name)
+
+  defp prepare_opts(repo, operation_name, [{key, _} | _rest] = opts) when is_atom(key) do
+    operation_name
+    |> repo.default_options()
+    |> Keyword.merge(opts)
+  end
+
+  defp load_preload(structs, repo) when is_list(structs),
+    do: Enum.map(structs, &load_struct(&1, repo))
+
+  defp load_preload(struct, repo) when is_map(struct), do: load_struct(struct, repo)
+
+  defp load_struct(struct, repo) do
+    schema = struct.__struct__
+
+    schema.__schema__(:associations)
+    |> Stream.map(&schema.__schema__(:association, &1))
+    |> Stream.filter(&(&1.__struct__ == ArangoXEcto.Association.Graph))
+    |> Stream.map(&{&1, Map.get(struct, &1.field)})
+    |> Stream.reject(&match?(%Ecto.Association.NotLoaded{}, elem(&1, 1)))
+    |> Enum.reduce(struct, fn {assoc, values}, s ->
+      values
+      |> Stream.map(fn value ->
+        [source, _] = String.split(value._id, "/", parts: 2, trim: true)
+
+        {Enum.find(assoc.queryables, &(&1.__schema__(:source) == source)), value}
+      end)
+      |> Stream.reject(&is_nil/1)
+      |> Enum.map(fn {inner_schema, attrs} ->
+        fields =
+          inner_schema.__schema__(:fields)
+          |> Enum.map(&inner_schema.__schema__(:field_source, &1))
+
+        map = Map.take(attrs, fields)
+
+        repo.load(inner_schema, map)
+      end)
+      |> then(&Map.put(s, assoc.field, &1))
+    end)
   end
 
   @doc """
@@ -1074,6 +1132,9 @@ defmodule ArangoXEcto do
       case module.__schema__(:association, field) do
         %{queryable: assoc_module} ->
           Map.put(map, field, load(map_assoc, assoc_module))
+
+        %{queryables: assoc_modules} ->
+          Map.put(map, field, load(map_assoc, assoc_modules))
 
         _ ->
           map
