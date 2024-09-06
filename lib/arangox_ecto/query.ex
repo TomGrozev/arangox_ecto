@@ -134,6 +134,62 @@ defmodule ArangoXEcto.Query do
     apply(Ecto.Queryable.to_query(query), kind, expr)
   end
 
+  @doc """
+  Query an ArangoDB graph
+  """
+  @spec graph(Range.t(), :inbound | :outbound, Macro.t(), Macro.t(), Keyword.t()) :: Macro.t()
+  defmacro graph(range, direction, source, edge_graph, opts \\ [])
+
+  defmacro graph({:.., _, [min, max]}, direction, source, edge_graph, opts) do
+    if min < 0 or max < min do
+      raise ArgumentError,
+            "graph range min must be positive and max must be greater or equal to the min"
+    end
+
+    unless direction in [:inbound, :outbound] do
+      raise ArgumentError,
+            "graph direction can only be :inbound or :outbound"
+    end
+
+    direction = Atom.to_string(direction) |> String.upcase()
+
+    query_string =
+      [
+        "#{min}..#{max}",
+        direction,
+        "?",
+        "?"
+      ]
+      |> Enum.intersperse(" ")
+      |> add_opts(opts)
+      |> IO.iodata_to_binary()
+
+    args =
+      [query_string, source, edge_graph, Keyword.values(opts)]
+      |> List.flatten()
+
+    quote do: fragment(unquote_splicing(args))
+  end
+
+  defmacro graph(_, _, _, _, _) do
+    raise ArgumentError,
+          "graph can only have an inbound or outbound direction"
+  end
+
+  defp add_opts(query, []), do: query
+
+  defp add_opts(query, opts) do
+    [
+      query,
+      " OPTIONS {",
+      Enum.map(opts, fn {k, v} -> "#{k}: #{value_input(v)}" end),
+      "}"
+    ]
+  end
+
+  defp value_input({:splice, _, _}), do: "[?]"
+  defp value_input(_), do: "?"
+
   #
   # Helpers
   #
@@ -177,30 +233,39 @@ defmodule ArangoXEcto.Query do
   end
 
   defp create_names(%{sources: sources}) do
-    create_names(sources, 0, tuple_size(sources)) |> List.to_tuple()
+    create_names(sources, 0, tuple_size(sources), 0) |> List.to_tuple()
   end
 
-  defp create_names(sources, pos, limit) when pos < limit do
-    current =
+  defp create_names(sources, pos, limit, acc) when pos < limit do
+    {current, count} =
       case elem(sources, pos) do
         {:fragment, _, _} = frag ->
+          {processed_frag, new_acc} = fragment_with_count(frag, acc)
           name = ["frag", Integer.to_string(pos)]
-          {expr(frag, sources, nil), name, nil}
+          {{expr(processed_frag, sources, nil), name, nil}, new_acc}
 
         {coll, schema, _} ->
           stripped_coll = String.replace(coll, ~r/[^A-Za-z]/, "")
           name = [String.first(stripped_coll), Integer.to_string(pos)]
-          {quote_collection(coll), name, schema}
+          {{quote_collection(coll), name, schema}, acc}
 
         %Ecto.SubQuery{} ->
           raise "Subqueries are not supported."
       end
 
-    [current | create_names(sources, pos + 1, limit)]
+    [current | create_names(sources, pos + 1, limit, count)]
   end
 
-  defp create_names(_sources, pos, pos) do
+  defp create_names(_sources, pos, pos, _) do
     []
+  end
+
+  defp fragment_with_count(frag, count) do
+    Macro.prewalk(frag, 0, fn
+      {:^, meta, [idx]}, acc -> {{:^, meta, [idx + count]}, acc + idx + count}
+      {:splice, _, [_, len]} = ast, acc -> {ast, acc + len}
+      other, acc -> {other, acc}
+    end)
   end
 
   defp from(%Query{from: from} = query, sources) do
@@ -352,7 +417,7 @@ defmodule ArangoXEcto.Query do
   defp count_name([val, _], sources), do: count_name(val, sources)
 
   defp count_name({{:., _, [{:&, _, [idx]}, field]}, _, []}, sources) do
-    {_, name, _} = elem(sources, idx)
+    name = name_from_sources(sources, idx)
     [name, ?_, Atom.to_string(field)]
   end
 
@@ -467,19 +532,18 @@ defmodule ArangoXEcto.Query do
 
   defp expr({{:., _, [{:&, _, [idx]}, field]}, _, []}, sources, _query)
        when is_atom(field) do
-    {_, name, _} = elem(sources, idx)
+    name = name_from_sources(sources, idx)
     [name, ?. | quote_name(field)]
   end
 
   defp expr({:&, _, [idx]}, sources, _query) do
-    {_, name, _} = elem(sources, idx)
-    [name]
+    [name_from_sources(sources, idx)]
   end
 
   defp expr({:&, _, [idx, fields, _counter]}, sources, query) do
     {source, name, schema} = elem(sources, idx)
 
-    if is_nil(schema) and is_nil(fields) do
+    if (is_nil(schema) and is_nil(fields)) or schema == :fragment do
       error!(
         query,
         "ArangoDB does not support selecting all fields from #{source} without a schema. " <>
@@ -591,6 +655,16 @@ defmodule ArangoXEcto.Query do
   defp expr(nil, _sources, _query), do: "NULL"
   defp expr(true, _sources, _query), do: "TRUE"
   defp expr(false, _sources, _query), do: "FALSE"
+
+  defp name_from_sources(sources, idx) do
+    case elem(sources, idx) do
+      {:fragment, _, _} ->
+        ["frag#{idx}"]
+
+      {_, name, _} ->
+        [name]
+    end
+  end
 
   defp op_to_binary({op, _, [_, _]} = expr, sources, query) when op in @binary_ops,
     do: paren_expr(expr, sources, query)
