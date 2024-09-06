@@ -165,14 +165,7 @@ defmodule ArangoXEcto.Schema do
   """
   defmacro outgoing(name, target, opts \\ []) do
     quote do
-      opts = unquote(opts)
-
-      many_to_many(unquote(name), unquote(target),
-        join_through:
-          Keyword.get(opts, :edge, ArangoXEcto.edge_module(__MODULE__, unquote(target))),
-        join_keys: [_from: :__id__, _to: :__id__],
-        on_replace: :delete
-      )
+      graph(unquote(name), unquote(target), :outbound, unquote(opts))
     end
   end
 
@@ -240,18 +233,7 @@ defmodule ArangoXEcto.Schema do
   """
   defmacro incoming(name, source, opts \\ []) do
     quote do
-      opts = unquote(opts)
-
-      many_to_many(unquote(name), unquote(source),
-        join_through:
-          Keyword.get(
-            opts,
-            :edge,
-            ArangoXEcto.edge_module(__MODULE__, unquote(source), create: false)
-          ),
-        join_keys: [_to: :__id__, _from: :__id__],
-        on_replace: :delete
-      )
+      graph(unquote(name), unquote(source), :inbound, unquote(opts))
     end
   end
 
