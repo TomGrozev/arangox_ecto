@@ -24,8 +24,63 @@ defmodule ArangoxEctoTest.Integration.RelationshipTest do
         |> Ecto.Changeset.cast_assoc(:posts_two, with: post_changeset)
         |> TestRepo.insert!()
 
-      assert %User{id: ^user_id, posts_two: [%Post{title: "abc"}]} =
+      assert %User{id: ^user_id, posts_two: [%{title: "abc"}]} =
                TestRepo.get(User, user_id) |> TestRepo.preload(:posts_two)
+
+      assert %User{id: ^user_id, posts_two: [%Post{title: "abc"}]} =
+               TestRepo.get(User, user_id) |> ArangoXEcto.preload(TestRepo, :posts_two)
+    end
+
+    test "cast edge polymorphic connection" do
+      user1_attrs = %{
+        first_name: "John",
+        last_name: "Smith",
+        my_content: [
+          %{text: "cba"},
+          %{title: "abc"}
+        ]
+      }
+
+      user2_attrs = %{
+        first_name: "Bob",
+        last_name: "Smith",
+        my_content: [
+          %{text: "abc"},
+          %{title: "cba"}
+        ]
+      }
+
+      %User{id: user_id} = insert_user(user1_attrs)
+
+      [post] = TestRepo.all(Post)
+      [comment] = TestRepo.all(Comment)
+
+      insert_user(user2_attrs)
+
+      assert %User{id: ^user_id, my_content: [%{title: "abc"}, %{text: "cba"}]} =
+               TestRepo.get(User, user_id) |> TestRepo.preload(:my_content)
+
+      assert %User{id: ^user_id, my_content: [^post, ^comment]} =
+               TestRepo.get(User, user_id) |> ArangoXEcto.preload(TestRepo, :my_content)
+    end
+
+    defp insert_user(attrs) do
+      post_changeset = fn struct, map ->
+        Ecto.Changeset.cast(struct, map, [:title])
+      end
+
+      comment_changeset = fn struct, map ->
+        Ecto.Changeset.cast(struct, map, [:text])
+      end
+
+      Ecto.Changeset.cast(%User{}, attrs, [:first_name, :last_name])
+      |> ArangoXEcto.Changeset.cast_graph(:my_content,
+        with: %{
+          Post => post_changeset,
+          Comment => comment_changeset
+        }
+      )
+      |> TestRepo.insert!()
     end
 
     test "put edge connection" do
@@ -40,7 +95,7 @@ defmodule ArangoxEctoTest.Integration.RelationshipTest do
       user =
         %User{__id__: user_id} =
         Ecto.Changeset.cast(%User{}, attrs, [:first_name, :last_name])
-        |> Ecto.Changeset.put_assoc(:posts_two, [post])
+        |> ArangoXEcto.Changeset.put_graph(:posts_two, [post])
         |> TestRepo.insert!()
 
       assert [%{_from: ^user_id, _to: ^post_id}] = TestRepo.all(UserPosts)
@@ -112,8 +167,8 @@ defmodule ArangoxEctoTest.Integration.RelationshipTest do
       assert %{_from: ^user_id, _to: ^comment_id} =
                ArangoXEcto.create_edge(TestRepo, user, comment, edge: UserContent)
 
-      assert %{my_posts: [^post]} = TestRepo.preload(user, :my_posts)
-      assert %{my_comments: [^comment]} = TestRepo.preload(user, :my_comments)
+      assert %{my_posts: [^post]} = ArangoXEcto.preload(user, TestRepo, :my_posts)
+      assert %{my_comments: [^comment]} = ArangoXEcto.preload(user, TestRepo, :my_comments)
     end
   end
 

@@ -26,6 +26,15 @@ defmodule ArangoXEcto.Integration.User do
       edge: ArangoXEcto.Integration.UserContent
     )
 
+    outgoing(
+      :my_content,
+      %{
+        ArangoXEcto.Integration.Post => [:title],
+        ArangoXEcto.Integration.Comment => [:text]
+      },
+      edge: ArangoXEcto.Integration.UserContent
+    )
+
     one_outgoing(:best_post, ArangoXEcto.Integration.Post)
 
     timestamps()
