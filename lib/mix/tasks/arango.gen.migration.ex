@@ -1,14 +1,19 @@
-defmodule Mix.Tasks.Ecto.Gen.Migration.Arango do
+defmodule Mix.Tasks.Arango.Gen.Migration do
   @moduledoc """
-  Generates a migration.
+  Generates a ArangoXEcto migration.
+
+  Unlike the default `ecto_sql` implementation, this will only generated migrations for repos that
+  use the ArangoXEcto.Adapter. This prevents it trying to run ArangoDB migrations on 
+  non-ArangoXEcto repos. This is particularly useful for when using multiple database providers in
+  one app, e.g. ArangoXEcto and PostgreSQL (through `ecto_sql`).
 
   The repository must be set under `:ecto_repos` in the current app
   configuration or given via the `-r` option.
 
   ## Examples
 
-      mix ecto.gen.migration create_users
-      mix ecto.gen.migration create_users -r Custom.Repo
+      mix arango.gen.migration create_users
+      mix arango.gen.migration create_users -r Custom.Repo
 
   The generated migration filename will be prefixed with the current timestamp
   in UTC which is used for versioning and ordering.
@@ -61,43 +66,49 @@ defmodule Mix.Tasks.Ecto.Gen.Migration.Arango do
   def run(args) do
     repos = parse_repo(args)
 
-    for repo <- repos do
+    repos
+    |> Stream.map(&ensure_repo(&1, args))
+    |> Stream.filter(&(&1.__adapter__() == ArangoXEcto.Adapter))
+    |> Enum.each(fn repo ->
       case OptionParser.parse!(args, strict: @switches, aliases: @aliases) do
         {opts, [name]} ->
-          ensure_repo(repo, args)
-          path = opts[:migrations_path] || Path.join(source_repo_priv(repo), "migrations")
-          base_name = "#{underscore(name)}.exs"
-          file = Path.join(path, "#{timestamp()}_#{base_name}")
-          unless File.dir?(path), do: create_directory(path)
-
-          fuzzy_path = Path.join(path, "*_#{base_name}")
-
-          if Path.wildcard(fuzzy_path) != [] do
-            Mix.raise(
-              "Migration can't be created since there is already a migration file with the name #{name}"
-            )
-          end
-
-          assigns = [
-            mod: Module.concat([repo, Migrations, camelize(name)]),
-            change: opts[:change]
-          ]
-
-          create_file(file, migration_template(assigns))
-
-          if open?(file) and Mix.shell().yes?("Do you want to run this migration?") do
-            Mix.Task.run("ecto.migrate", ["-r", inspect(repo), "--migrations-path", path])
-          end
-
-          file
+          generate_migration(repo, opts, name)
 
         {_, _} ->
           Mix.raise(
-            "expected ecto.gen.migration.arango to receive the migration file name, " <>
+            "expected arango.gen.migration to receive the migration file name, " <>
               "got: #{inspect(Enum.join(args, " "))}"
           )
       end
+    end)
+  end
+
+  defp generate_migration(repo, opts, name) do
+    path = opts[:migrations_path] || Path.join(source_repo_priv(repo), "migrations")
+    base_name = "#{underscore(name)}.exs"
+    file = Path.join(path, "#{timestamp()}_#{base_name}")
+    unless File.dir?(path), do: create_directory(path)
+
+    fuzzy_path = Path.join(path, "*_#{base_name}")
+
+    if Path.wildcard(fuzzy_path) != [] do
+      Mix.raise(
+        "Migration can't be created since there is already a migration file with the name #{name}"
+      )
     end
+
+    assigns = [
+      mod: Module.concat([repo, Migrations, camelize(name)]),
+      change: opts[:change]
+    ]
+
+    create_file(file, migration_template(assigns))
+
+    if open?(file) and Mix.shell().yes?("Do you want to run this migration?") do
+      Mix.Task.run("arango.migrate", ["-r", inspect(repo), "--migrations-path", path])
+    end
+
+    file
   end
 
   defp timestamp do

@@ -1,29 +1,22 @@
-defmodule Mix.Tasks.Ecto.Migrate.Arango do
+defmodule Mix.Tasks.Arango.Rollback do
   @moduledoc """
-  Runs the pending migrations for the given repository.
+  Reverts applied migrations for the given repository.
 
-  Migrations are expected at "priv/YOUR_REPO/migrations" directory
-  of the current application, where "YOUR_REPO" is the last segment
-  in your repository name. For example, the repository `MyApp.Repo`
-  will use "priv/repo/migrations". The repository `Whatever.MyRepo`
-  will use "priv/my_repo/migrations".
+  Unlike the default `ecto_sql` implementation, the rollbacks will only be run for repos that use
+  the ArangoXEcto.Adapter. This prevents it trying to rollback ArangoDB migrations on 
+  non-ArangoXEcto repos. This is particularly useful for when using multiple database providers 
+  in one app, e.g. ArangoXEcto and PostgreSQL (through `ecto_sql`).
 
-  You can configure a repository to use another directory by specifying
-  the `:priv` key under the repository configuration. The "migrations"
-  part will be automatically appended to it. For instance, to use
-  "priv/custom_repo/migrations":
+  This task rolls back the last applied migration by default. To roll
+  back to a version number, supply `--to version_number`. To roll
+  back a specific number of times, use `--step n`. To undo all applied
+  migrations, provide `--all`.
 
-      config :my_app, MyApp.Repo, priv: "priv/custom_repo"
-
-  This task runs all pending migrations by default. To migrate up to a
-  specific version number, supply `--to version_number`. To migrate a
-  specific number of times, use `--step n`.
-
-  The repositories to migrate are the ones specified under the
+  The repositories to rollback are the ones specified under the
   `:ecto_repos` option in the current app configuration. However,
   if the `-r` option is given, it replaces the `:ecto_repos` config.
 
-  Since Ecto tasks can only be executed once, if you need to migrate
+  Since ArangoXEcto tasks can only be executed once, if you need to migrate
   multiple repositories, set `:ecto_repos` accordingly or pass the `-r`
   flag multiple times.
 
@@ -32,13 +25,13 @@ defmodule Mix.Tasks.Ecto.Migrate.Arango do
 
   ## Examples
 
-      $ mix ecto.migrate.arango
-      $ mix ecto.migrate.arango -r Custom.Repo
-                              
-      $ mix ecto.migrate.arango -n 3
-      $ mix ecto.migrate.arango --step 3
-                              
-      $ mix ecto.migrate.arango --to 20080906120000
+      $ mix arango.rollback
+      $ mix arango.rollback -r Custom.Repo
+            
+      $ mix arango.rollback -n 3
+      $ mix arango.rollback --step 3
+            
+      $ mix arango.rollback --to 20080906120000
 
   ## Command line options
 
@@ -151,9 +144,9 @@ defmodule Mix.Tasks.Ecto.Migrate.Arango do
 
   defp migrator_func(pool, migrator, paths, opts) do
     if Code.ensure_loaded?(pool) and function_exported?(pool, :unboxed_run, 2) do
-      &pool.unboxed_run(&1, fn -> migrator.(&1, paths, :up, opts) end)
+      &pool.unboxed_run(&1, fn -> migrator.(&1, paths, :down, opts) end)
     else
-      &migrator.(&1, paths, :up, opts)
+      &migrator.(&1, paths, :down, opts)
     end
   end
 
