@@ -1,10 +1,376 @@
 defmodule ArangoXEcto do
   @moduledoc """
-  Methods for interacting with ArangoDB that aren't through Ecto.
+  The ArangoDB adapter for Ecto.
 
-  This allows for easy interaction with graph functions of Arango. Using Ecto's relations for edge relations was tried
-  but it was found to be too much of a 'hacky' solution. Using separate functions that still utilise Ecto document
-  queries was found to be the optimal solution.
+  ArangoXEcto is provides the following functionality:
+
+    * Full Ecto compatability
+
+    * ArangoDB anonymous graphs
+
+    * Geographic data
+
+    * ArangoSearch (views) and Analyzers
+
+  The functions in this module are the base functions for interacting with ArangoDB that aren't through Ecto.
+  All the Ecto functionality hindges on the functions in this module. For example, queries throuh 
+  Ecto will use on the `aql_query/4` function in this module.
+
+  ## Ecto compatibility
+
+  To use the ArangoDB with Ecto you will need to use the `ArangoXEcto.Adapter` module in your repo.
+
+      defmodule MyApp.Repo do
+        use Ecto.Repo,
+          otp_app: :my_app,
+          adapter: ArangoXEcto.Adapter
+      end
+
+  You will also have to set the configuration as below. You can set either static or dynamic mode,
+  the default is static mode and the option can be omitted. Find out more in the next section.
+
+      config :my_app, MyApp.Repo,
+        database: "my_db",
+        endpoints: "http://1.2.3.4:8529",
+        username: "my_user,
+        password: "my_password",
+        static: true
+
+  ### Static or Dynamic Mode
+  In addition to default config variables, the `static` boolean config option controls the use of
+  migrations. By default the value is `true` and will act as other Ecto adapters whereby migrations
+  are needed to create the collections. Any collections that do not exist on insert or query will 
+  result in an error being raised.
+
+  If you set it to `false`, then you will operate in dynamic mode, therefore collections that don't
+  exist will be created on insert and on query no error will be raised.
+
+  Whether static (default) or dynamic is chosen depends on the database design of the project. 
+  For a production setup where lots of control is required, it is recommended to have `static` set 
+  to `true`, hence this is the default. Sometimes in dev it can be easier to work in dynamic mode
+  for smaller projects, however this can cause database inconsistencies in larger projects.
+
+  ### Schemas
+
+  Instead of using the `Ecto.Schema` module the `ArangoXEcto.Schema` module needs to be used. This
+  is to enable the use of a `binary_id` that ArangoDB requires.
+
+      defmodule MyApp.Accounts.User do
+        use ArangoXEcto.Schema
+        import Ecto.Changeset
+
+        schema "users" do
+          field :first_name, :string
+          field :last_name, :string
+
+          timestamps()
+        end
+
+        @doc false
+        def changeset(app, attrs) do
+          app
+          |> cast(attrs, [:first_name, :last_name])
+          |> validate_required([:first_name, :last_name])
+        end
+      end
+
+  When using dynamic mode you can define `options/1` and `indexes/1` can be optionally called inside
+  the schema to set options and indexes to be created in dynamic mode. These options will have no
+  effect in static mode.
+
+  For example, if you wanted to use a uuid as the key type and create an index on the email the
+  following can be used.
+
+      defmodule MyApp.Accounts.User do
+          use ArangoXEcto.Schema
+          import Ecto.Changeset
+
+          options [
+            keyOptions: %{type: :uuid}
+          ]
+
+          indexes [
+            [fields: [:email]]
+          ]
+
+          schema "users" do
+            field :email, :string
+
+            timestamps()
+          end
+
+          @doc false
+          def changeset(app, attrs) do
+            app
+            |> cast(attrs, [:first_name, :last_name])
+            |> validate_required([:first_name, :last_name])
+          end
+      end
+
+  Please refer to `ArangoXEcto.Schema` for more information on the available options.
+
+  ### Migrations
+
+  Migrations in ArangoXEcto operate just like in other Ecto adapters. However, ArangoXEcto uses its
+  own migration commands to allow for interoperability between databases.
+
+  For example, you might want to create a users collection with an index and use ArangoSearch with a
+  custom analyzer to make querying more efficient. The below migration could be used to do just that.
+
+      defmodule MyProject.Repo.Migrations.CreateUsers do
+        use ArangoXEcto.Migration
+
+        def change do
+          create analyzer(:norm_en, :norm, [:frequency, :position], %{
+             locale: "en",
+             accent: false,
+             case: :lower
+           })
+
+          create collection(:users) do
+            add :first_name, :string, comment: "first_name column"
+            add :last_name, :string
+            add :gender, :integer
+            add :age, :integer
+            add :location, :map
+
+            timestamps()
+          end
+
+          create index(:users, [:age])
+          create unique_index(:users, [:location])
+
+          create view(:user_search, commitIntervalMsec: 1, consolidationIntervalMsec: 1) do
+            add_sort(:created_at, :desc)
+            add_sort(:first_name)
+
+            add_store([:first_name, :last_name], :none)
+
+            add_link("users", %Link{
+              includeAllFields: true,
+              fields: %{
+                last_name: %Link{
+                  analyzers: [:identity, :norm_en]
+                }
+              }
+            })
+          end
+        end
+      end
+
+  You can find more information about how migrations are implemented in the `ArangoXEcto.Migration`
+  module.
+
+  ### Sandbox
+
+  Sandbox for concurrent tests is implemented similar to the implementation in `ecto_sql`. See
+  `ArangoXEcto.Sandbox` for more info.
+
+  ## Graphs
+
+  Ecto traditionally is made for relational databases and hence relations between schemas is
+  represented in such a way. A graph relation (edges) can be thought of as many-to-many relations in
+  the relational database world. When it comes to representing graph relations in Ecto, that is
+  exactly how it works in ArangoXEcto.
+
+  To use a graph relation you define an `outgoing` and an `incoming` relation on the two schemas,
+  for example the following will create a graph relationship between `User -> UserPost -> Post`.
+  The `UserPost` edge module will be created automatically.
+
+      defmodule MyApp.User do
+        schema "users" do
+          field :first_name, :string
+          field :last_name, :string
+          
+          outgoing :posts, MyApp.Post
+        end
+      end
+
+      defmodule MyApp.Post do
+        schema "posts" do
+          field :title, :string
+          
+          incoming :users, MyApp.User
+        end
+      end
+
+  Behind the scenes this works very similar to a `many_to_many` relationships but has a few key
+  differences. As you may know, in a graph an edge can have multiple different node types that it 
+  connects to/from. ArangoXEcto uses a special relation type that is based on the principal of
+  many-to-many but modified to allow such relationships.
+
+  For example, you may have a `User` schema that you want to connect to `Post` and `Comment`. You
+  may not want to have two seperate relationships (e.g. `:posts` and `:comments`) and want to
+  combine it all under one (e.g. `:content`). This is what the ArangoXEcto adapter enables. You can
+  read more about this type of relationship below.
+
+  ### Edge Modules
+
+  The ArangoXEcto adapter dynamically creates and manages edge collections. Each edge collection
+  will be created as an Ecto schema when they are first used. This means that you don't need to
+  create edge collections manually. This will happen when in either static or dynamic mode.
+
+  The edge module will be created under the closest common parent module of the passed modules
+  plus the `Edges` alias. The order of the edge name will always be alphabetical to prevent 
+  duplicate edges. For example, if the modules were `MyApp.Apple.User` and `MyApp.Apple.Banana.Post`
+  then the edge would be created at `MyApp.Apple.Edges.PostUser`. This assumes that the edge 
+  collection name was generated and not explicitly defined, if it was `PostUser` would be replaced 
+  with the camel case of that collection name (i.e. `address_people` would be `AddressPeople`).
+
+  ### Multiple edge schemas
+
+  Creating a graph relation that has multiple schemas through the same edge is possible in
+  ArangoXEcto. For example, take the following.
+
+  ```mermaid
+  graph TD
+  User --> edge(UsersContent)
+  edge(UsersContent) --> Post
+  edge(UsersContent) --> Comment
+  ```
+
+  Users can have posts or comments through the same edge. This works because edges can have multiple
+  from and to schemas. For example if we were to define the `UsersContent` edge it would look like
+  this:
+
+      defmodule MyApp.Edges.UsersContent do
+        use ArangoXEcto.Edge,
+            from: User,
+            to: [Post, Comment]
+
+        schema "users_content" do
+          edge_fields()
+        end
+      end
+
+  We can then define our outgoing definition for the User schema like the following.
+
+      defmodule MyApp.User do
+        schema "users" do
+          field :first_name, :string
+          field :last_name, :string
+          
+          outgoing(
+            :my_content,
+            %{
+              Post => &Post.changeset/2,
+              Comment => &Comment.changeset/2
+            },
+            edge: ArangoXEcto.Edges.UsersContents
+          )
+        end
+      end
+
+  The definition of outgoing here is slightly different from above. Instead of specifying a single
+  schema module we specify a map where the keys are schema modules and the values are a list of
+  field names to check if it exists in a result to match it with the module. This is an OR
+  condition, so if you had `[:a, :b]` that would mean if a result had `:a` it would match or if it
+  had `:b` it would match. If a result had both it would match.
+
+  Notice that the edge here was explicitly defined. This is not necessary if you aren't doing
+  anything custom on the edge and not including this would just generate an edge like the one
+  above.
+
+  #### Preloading
+
+  Due to how graph relations work the regular `Ecto.Repo.preload/3` function will only return maps
+  instead of structs. If you want to preload the structs you can use the `ArangoXEcto.preload/4`
+  function.
+
+      iex> Repo.all(User) |> ArangoXEcto.preload(Repo, [:my_content])
+      [%User{id: 123, my_content: [%Post{...}, %Comment{...}]}]
+
+  ## Geodata
+
+  GeoJSON is supported through the `Geo` module and a handy wrapper is provided in the
+  `ArangoXEcto.GeoData` module. This module will just verify and create Geo structs that can then be
+  used in geojson fields. The `ArangoXEcto.Types.GeoJSON` module defines the GeoJSON type that can
+  be used when defining fields, for example below.
+
+      schema "users" do
+        field :location, ArangoXEcto.Types.GeoJSON
+      end
+
+  You can define a geoJson index on the field using either migrations or dynamic index creation.
+
+      # Migration
+      create index(:users, [:location], type: :geo, geoJson: true)
+
+      # Dynamic creation
+      indexes [
+        [fields: [:location], type: :geo, geoJson: true]
+      ]
+
+  You can use `Geo` structs to query the database.
+
+  ## ArangoSearch
+
+  ArangoDB uses ArangoSearch to index collections to improve the searchability of them. With this
+  you can do things like have multiple collections in one "view". A view is a concept that is
+  essentially take one or more collections and indexes it using whatever "analyzer(s)" you choose to
+  apply.
+
+  To query a View you just use it as if you were using any other collection schema. It will return
+  the results the same as if you were querying that schema.
+
+  To create a View it is very similar to how you create a collection schema. The following will
+  create a view that has primary sorts on :created_at and :name, it will store the :email and the
+  :first_name & :last_name fields. Most importantly it will create a link to the `MyApp.Users`
+  schema and set the analyzer for the `:name` field to `:text_en`. Some options can be set also.
+
+    defmodule MyApp.UserSearch do
+      use ArangoXEcto.View
+
+      alias ArangoXEcto.View.Link
+
+      view "user_search" do
+        primary_sort :created_at, :desc
+        primary_sort :name
+
+        store_value [:email], :lz4
+        store_value [:first_name, :last_name], :none
+
+        link MyApp.Users, %Link{
+          includeAllFields: true,
+          fields: %{
+            name: %Link{
+              analyzers: [:text_en]
+            }
+          }
+        }
+
+        options  [
+          primarySortCompression: :lz4
+        ]
+      end
+    end
+
+  Querying is done exactly the same as a normal schema except the result will not be a struct.
+
+      iex> Repo.all(MyApp.UsersView)
+      [%{first_name: "John", last_name: "Smith"}, _]
+
+  You can find out more info in the `ArangoXEcto.View` module.
+
+  To query using the search function you can use the `ArangoXEcto.Query.search/3` and
+  `ArangoXEcto.Query.or_search/3` functions. For example, if we wanted to search using the text
+  analyzer we could do the following.
+
+      import ArangoXEcto.Query
+
+      from(UsersView)
+      |> search([uv], fragment("ANALYZER(? == ?, \\"text_en\\")", uv.first_name, "John"))
+      |> Repo.all()
+
+  ## Mix Tasks
+
+  ArangoXEcto supplies multiple mix tasks for use with migrations. They are:
+
+    * `mix arango.migrate` - Runs forward through migrations
+    * `mix arango.rollback` - Rolls back migrations
+    * `mix arango.gen.migration` - Generates a migration file
+
+  More information on their usage can be found in their various documentation.
   """
 
   import Ecto.Query, only: [from: 2]
@@ -27,18 +393,20 @@ defmodule ArangoXEcto do
 
   ## Parameters
 
-  - `repo` - The Ecto repo module to use for queries
-  - `query` - The AQL query string to execute
-  - `vars` - A keyword list or a map with the values for variables in the query
-  - `opts` - Options to be passed for the transaction
+    * `repo` - The Ecto repo module to use for queries
+    * `query` - The AQL query string to execute
+    * `vars` - A keyword list or a map with the values for variables in the query
+    * `opts` - Options to be passed for the transaction
+
+  ## Options
 
   Accepts any of the options accepted by DBConnection.transaction/3, as well as any of the following:
 
-    :prefix - The prefix to use for the database. Defaults to the repo database.
-    :read - An array of collection names or a single collection name as a binary to mark as read-only.
-    :write - An array of collection names or a single collection name as a binary to mark as writable. If not set then no writes will be stored.
-    :exclusive - An array of collection names or a single collection name as a binary.
-    :properties - A list or map of additional body attributes to append to the request body when beginning a transaction.
+    * :prefix - The prefix to use for the database. Defaults to the repo database.
+    * :read - An array of collection names or a single collection name as a binary to mark as read-only.
+    * :write - An array of collection names or a single collection name as a binary to mark as writable. If not set then no writes will be stored.
+    * :exclusive - An array of collection names or a single collection name as a binary.
+    * :properties - A list or map of additional body attributes to append to the request body when beginning a transaction.
 
   If doing a write operation, the `:write` operation must be passed. This is not explicitly required for read operations.
 
@@ -64,7 +432,7 @@ defmodule ArangoXEcto do
   @spec aql_query(Ecto.Repo.t() | Ecto.Adapter.adapter_meta(), query(), vars(), [
           DBConnection.option()
         ]) ::
-          {:ok, {non_neg_integer(), list(map)}} | {:error, any()}
+          {:ok, {non_neg_integer(), list(map())}} | {:error, any()}
   def aql_query(
         repo_or_meta,
         query,
@@ -146,7 +514,7 @@ defmodule ArangoXEcto do
   @spec aql_query!(Ecto.Repo.t() | Ecto.Adapter.adapter_meta(), query(), vars(), [
           DBConnection.option()
         ]) ::
-          {non_neg_integer(), list(map)}
+          {non_neg_integer(), list(map())}
   def aql_query!(repo_or_meta, query, vars \\ [], opts \\ []) do
     case aql_query(repo_or_meta, query, vars, opts) do
       {:ok, res} -> res
@@ -157,40 +525,42 @@ defmodule ArangoXEcto do
   @doc """
   Runs an Arangox function using a repo
 
-  This is simply a helper function that extracts the connection from the repo and runs a regular query.
+  This is simply a helper function that extracts the connection from the repo and runs a regular 
+  query. It is mainly for internal use but since it can be useful for some custom usecases it is
+  included in the documentation.
 
   ## Parameters
 
-  - `repo` - The Ecto repo module used for connection
-  - `function` - An atom of the Arangox function to run
-  - `path` - The path of the query
-  - `body` - The body of the request
-  - `headers` - The headers of the request
-  - `opts` - The last opts arg passed to the function
+    * `repo` - The Ecto repo module used for connection
+    * `function` - An atom of the Arangox function to run
+    * `path` - The path of the query
+    * `body` - The body of the request
+    * `headers` - The headers of the request
+    * `opts` - The last opts arg passed to the function
 
   ## Supported Functions
 
-  - `:abort`
-  - `:cursor`
-  - `:delete`
-  - `:delete!`
-  - `:get`
-  - `:get!`
-  - `:head`
-  - `:head!`
-  - `:options`
-  - `:options!`
-  - `:patch`
-  - `:patch!`
-  - `:post`
-  - `:post!`
-  - `:put`
-  - `:put!`
-  - `:request`
-  - `:request!`
-  - `:run`
-  - `:status`
-  - `:transaction` (use built in `Ecto.Repo.transaction/2` instead)
+    * `:abort`
+    * `:cursor`
+    * `:delete`
+    * `:delete!`
+    * `:get`
+    * `:get!`
+    * `:head`
+    * `:head!`
+    * `:options`
+    * `:options!`
+    * `:patch`
+    * `:patch!`
+    * `:post`
+    * `:post!`
+    * `:put`
+    * `:put!`
+    * `:request`
+    * `:request!`
+    * `:run`
+    * `:status`
+    * `:transaction` (use built in `c:Ecto.Repo.transaction/2` instead)
 
   ## Examples
 
@@ -273,29 +643,29 @@ defmodule ArangoXEcto do
   @doc """
   Creates an edge between two modules
 
-  This can create an edge collection dynamically if no additional fields are required,
-  otherwise an edge schema needs to be specified.
+  If in dynamic mode, the edge collection will be created dynamically if no additional fields are
+  required, otherwise an edge schema needs to be specified.
 
-  The collection name can be passed as an option or is obtained from the provided schema,
-  otherwise it is generated dynamically.
+  Either an edge module or a collection name is required to create the edge, otherwise one will be
+  generated automatically using the from and two schemas.
 
   The order of the `from` and `to` matters. A changeset validation error will be raised if
-  the `from` is not defined in the `from` definition of the edge. The same goes for the `to`.
+  the `from` is not defined in the `from` definition of a provided edge. The same goes for the `to`.
 
   ## Parameters
 
-  - `repo` - The Ecto repo module to use for queries
-  - `from` - The Ecto Schema struct to use for the from vertex
-  - `to` - The Ecto Schema struct to use for the to vertex
-  - `opts` - Options to use
+    * `repo` - The Ecto repo module to use for queries
+    * `from` - The Ecto Schema struct to use for the from vertex
+    * `to` - The Ecto Schema struct to use for the to vertex
+    * `opts` - Options to use
 
   ## Options
 
   Accepts the following options:
 
-  - `:edge` - A specific edge module to use for the edge. This is required for any additional fields on the edge. Overrides `collection_name`.
-  - `:fields` - The values of the fields to set on the edge. Requires `edge` to be set otherwise it is ignored.
-  - `:collection_name` - The name of the collection to use.
+    * `:edge` - A specific edge module to use for the edge. This is required for any additional fields on the edge. Overrides `collection_name`.
+    * `:collection_name` - The name of the collection to use when generating an edge module.
+    * `:fields` - The values of the fields to set on the edge. Requires `edge` to be set otherwise it is ignored.
 
   ## Examples
 
@@ -346,23 +716,22 @@ defmodule ArangoXEcto do
   @doc """
   Creates a view defined by some view schema
 
-  When in dynamic mode this will automatically create analyzers 
-  and linked collections. If in static mode these need to be done 
-  seperately in the migrations.
+  This function is only to be used in dynamic mode and will raise an error if called in static mode.
+  Instead use migrations if in static mode.
 
-  For the analyzers to be automatically created in dynamic mode 
-  the analyzers module needs to be passed as an option into the view
+  This will automatically create analyzers and linked collections. For the analyzers to be 
+  automatically created the analyzers module needs to be passed as an option into the view
   module definition. See `ArangoXEcto.View` for more info.
 
   ## Parameters
 
-  - `repo` - The Ecto repo module to use for queries
-  - `view` - The View Schema to be created
-  - `opts` - Additional options to use for analyzer creation
+    * `repo` - The Ecto repo module to use for queries
+    * `view` - The View Schema to be created
+    * `opts` - Additional options to use for analyzer creation
 
   ## Options
 
-  - `:prefix` - The prefix for the tenant to create analyzers for
+    * `:prefix` - The prefix for the tenant to create analyzers for
 
   ## Examples
 
@@ -383,21 +752,22 @@ defmodule ArangoXEcto do
       raise ArgumentError, "not a valid view schema"
     end
 
-    # check if is dynamic mode
-    if not Keyword.get(repo.config(), :static, true) do
-      analyzer_module = view.__analyzer_module__()
-
-      # create the analyzers if in dynamic mode
-      if not is_nil(analyzer_module) do
-        create_analyzers(repo, analyzer_module, opts)
-      end
-
-      # Create link collections if they don't exist in dynamic mode
-      view.__view__(:links)
-      |> Enum.each(fn {collection, _} ->
-        maybe_create_collection(repo, collection)
-      end)
+    if Keyword.get(repo.config(), :static, true) do
+      raise("This function cannot be called in static mode. Please use migrations instead.")
     end
+
+    analyzer_module = view.__analyzer_module__()
+
+    # create the analyzers
+    unless is_nil(analyzer_module) do
+      create_analyzers(repo, analyzer_module, opts)
+    end
+
+    # Create link collections if they don't exist
+    view.__view__(:links)
+    |> Enum.each(fn {collection, _} ->
+      maybe_create_collection(repo, collection)
+    end)
 
     name = view.__view__(:name)
     options = view.__view__(:options)
@@ -425,25 +795,24 @@ defmodule ArangoXEcto do
   @doc """
   Creates analyzers in a module
 
+  This function is only to be used in dynamic mode and will raise an error if called in static mode.
+  Instead use migrations if in static mode.
+
+  When operating in dynamic mode the analyzers are automatically created on view create,
+  see `ArangoXEcto.create_view/2` for more info.
+
   This will first force delete any analyzers with the same name before creating
   the ones defined.
 
-  In production you should be using migrations in static mode. This function 
-  will be called when an analyzer module is passed to the `ArangoXEcto.Migration.create/2`
-  function.
-
-  When operating in dynamic mode the analyzers ae automatically created on view create,
-  see `ArangoXEcto.create_view/2` for more info.
-
   ## Parameters
 
-  - `repo` - The Ecto repo module to use for queries
-  - `analyzer_module` - The Analyzer module
-  - `opts` - Additional options to use for analyzer creation
+    * `repo` - The Ecto repo module to use for queries
+    * `analyzer_module` - The Analyzer module
+    * `opts` - Additional options to use for analyzer creation
 
   ## Options
 
-  - `:prefix` - The prefix for the tenant to create analyzers for
+    * `:prefix` - The prefix for the tenant to create analyzers for
 
   ## Examples
 
@@ -460,6 +829,10 @@ defmodule ArangoXEcto do
   @spec create_analyzers(Ecto.Repo.t(), ArangoXEcto.Analyzer.t(), Keyword.t()) ::
           :ok | {:error, [atom()], [{atom(), Arangox.Error.t()}]}
   def create_analyzers(repo, analyzer_module, opts \\ []) do
+    if Keyword.get(repo.config(), :static, true) do
+      raise("This function cannot be called in static mode. Please use migrations instead.")
+    end
+
     analyzers = analyzer_module.__analyzers__()
 
     remove_existing_analyzers(repo, analyzers, opts)
@@ -480,19 +853,18 @@ defmodule ArangoXEcto do
   @doc """
   Creates a collection defined by some schema
 
-  This function is only to be used in dynamic mode and will raise
-  an error if called in static mode. Instead use migrations if
-  in static mode.
+  This function is only to be used in dynamic mode and will raise an error if called in static mode.
+  Instead use migrations if in static mode.
 
   ## Parameters
 
-  - `repo` - The Ecto repo module to use for queries
-  - `schema` - The Collection Schema to be created
-  - `opts` - Additional options to pass
+    * `repo` - The Ecto repo module to use for queries
+    * `schema` - The Collection Schema to be created
+    * `opts` - Additional options to pass
 
   ## Options 
 
-  - `:prefix` - The prefix to use for database tenant collection creation
+    * `:prefix` - The prefix to use for database tenant collection creation
 
   ## Examples
 
@@ -505,7 +877,7 @@ defmodule ArangoXEcto do
       {:error, %Arangox.Error{}}
 
   """
-  @spec create_collection(Ecto.Repo.t(), ArangoXEcto.Schema.t(), Keyword.t()) ::
+  @spec create_collection(Ecto.Repo.t(), Ecto.Schema.t(), Keyword.t()) ::
           :ok | {:error, any()}
   def create_collection(repo, schema, opts \\ []) do
     if Keyword.get(repo.config(), :static, true) do
@@ -531,6 +903,28 @@ defmodule ArangoXEcto do
     end
   end
 
+  @doc """
+  Preloads all associations on the given struct or structs.
+
+  This is similar to `Ecto.Repo.preload/3` except it loads graph associations. It functions the same
+  as `Ecto.Repo.preload/3` but has a slight syntax change.
+
+  This is needed because graph associations use a fake relation module to simulate the required
+  behaviour. This means that due to a check in Ecto preloads, it won't match the queried structs.
+  Therefore this function applies some logic to preload the data properly.
+
+  ## Parameters
+
+    * `structs_or_struct_or_nil` - A singular or list of structs to preload (if nil will return nil)
+    * `repo` - the Ecto repo to use
+    * `preloads` - the preload fields (see `Ecto.Repo.preload/3` for more info)
+    * `opts` - the options to use (same as `Ecto.Repo.preload/3`
+
+  ## Example
+
+      iex> Repo.all(User) |> ArangoXEcto.preload(Repo, [:my_content])
+      [%User{id: 123, my_content: [%Post{...}, %Comment{...}]}]
+  """
   @spec preload(structs_or_struct_or_nil, Ecto.Repo.t(), preloads :: term, opts :: Keyword.t()) ::
           structs_or_struct_or_nil
         when structs_or_struct_or_nil: [Ecto.Schema.t()] | Ecto.Schema.t() | nil
@@ -597,18 +991,16 @@ defmodule ArangoXEcto do
 
   ## Parameters
 
-  - `repo` - The Ecto repo module to use for queries
-  - `from` - The Ecto Schema struct to use for the from vertex
-  - `to` - The Ecto Schema struct to use for the to vertex
-  - `opts` - Options to use
+    * `repo` - The Ecto repo module to use for queries
+    * `from` - The Ecto Schema struct to use for the from vertex
+    * `to` - The Ecto Schema struct to use for the to vertex
+    * `opts` - Options to use
 
   ## Options
 
-  Accepts the following options:
-
-  - `:edge` - A specific edge module to use for the edge. This is required for any additional fields on the edge. Overrides `:collection_name`.
-  - `:collection_name` - The name of the collection to use.
-  - `:conditions` - A keyword list of conditions to filter for edge deletion
+    * `:edge` - A specific edge module to use for the edge. Overrides `:collection_name`.
+    * `:collection_name` - The name of the collection to use.
+    * `:conditions` - A keyword list of conditions to filter for edge deletion
 
   ## Examples
 
@@ -641,9 +1033,12 @@ defmodule ArangoXEcto do
   @doc """
   Gets an ID from a schema struct
 
+  If the struct has been queried from the database it will have the `:__id__` field with the id
+  which is used. Otherwise it is generated using the schema name and the id (the `_key`).
+
   ## Parameters
 
-  - `struct` - The Ecto struct
+    * `struct` - The Ecto struct
 
   ## Example
 
@@ -663,8 +1058,8 @@ defmodule ArangoXEcto do
 
   ## Parameters
 
-  - `module` - Module to get the collection name from
-  - `key` - The `_key` to use in the id
+    * `module` - Module to get the collection name from
+    * `key` - The `_key` to use in the id
 
   ## Example
 
@@ -690,8 +1085,8 @@ defmodule ArangoXEcto do
 
   ## Parameters
 
-  - `maps` - List of maps or singular map to convert to a struct
-  - `module` - Module to use for the struct
+    * `maps` - List of maps or singular map to convert to a struct
+    * `module` - Module to use for the struct
 
   ## Example
 
@@ -719,6 +1114,7 @@ defmodule ArangoXEcto do
         }
       ]
   """
+  # TODO: remove this func before release
   @deprecated "Use load/2 instead"
   @spec raw_to_struct(map() | [map()], Ecto.Schema.t()) :: struct()
   def raw_to_struct(map, module) when is_list(map) and is_atom(module) do
@@ -739,15 +1135,15 @@ defmodule ArangoXEcto do
   def raw_to_struct(_, _), do: raise(ArgumentError, "Invalid input map or module")
 
   @doc """
-  Loads raw map into ecto structs
+  Loads raw map into Ecto structs
 
-  Uses `Ecto.Repo.load/2` to load a deep map result into ecto structs
+  Uses `c:Ecto.Repo.load/2` to load a deep map result into Ecto structs.
 
   If a list of maps are passed then the maps are enumerated over.
 
   A list of modules can also be passes for possible types. The `_id`
   field is used to check against the module schemas. This is especially
-  useful for querying against arango views where there may be multiple
+  useful for querying against Arango views where there may be multiple
   schema results returned.
 
   If a module is passed that isn't a Ecto Schema then an error will be
@@ -755,8 +1151,8 @@ defmodule ArangoXEcto do
 
   ## Parameters
 
-  - `maps` - List of maps or singular map to convert to a struct
-  - `module` - Module(s) to use for the struct
+    * `maps` - List of maps or singular map to convert to a struct
+    * `module` - Module(s) to use for the struct
 
   ## Example
 
@@ -784,6 +1180,7 @@ defmodule ArangoXEcto do
         }
       ]
   """
+  # TODO: check if this is the same as the preload logic
   @spec load(map() | [map()], Ecto.Schema.t() | [Ecto.Schema.t()]) :: struct()
   def load(map, module) when is_list(map),
     do: Enum.map(map, &load(&1, module))
@@ -824,7 +1221,7 @@ defmodule ArangoXEcto do
   Generates an edge schema dynamically
 
   If a collection name is not provided one will be dynamically generated. The naming convention
-  is the names of the modules is alphabetical order. E.g. `User` and `Post` will combine for a collection
+  is the names of the modules in alphabetical order. E.g. `User` and `Post` will combine for a collection
   name of `posts_users` (uses the collection names of the modules) and an edge module name of `PostUser`. 
   This order is used to prevent duplicates if the from and to orders are switched.
 
@@ -840,13 +1237,13 @@ defmodule ArangoXEcto do
 
   ## Parameters
 
-  - `from_modules` - Ecto Schema modules for the from part of the edge
-  - `to_modules` - Ecto Schema modules for the to part of the edge
-  - `opts` - Options passed for module generation
+    * `from_modules` - Ecto Schema modules for the from part of the edge
+    * `to_modules` - Ecto Schema modules for the to part of the edge
+    * `opts` - Options passed for module generation
 
   ## Options
 
-  - `:collection_name` - The name of collection to use instead of generating it
+    * `:collection_name` - The name of collection to use instead of generating it
 
   ## Examples
 
@@ -877,8 +1274,8 @@ defmodule ArangoXEcto do
 
   ## Parameters
 
-  - `repo` - The Ecto repo module to use for the query
-  - `prefix` - The prefix to get the database name for
+    * `repo` - The Ecto repo module to use for the query
+    * `prefix` - The prefix to get the database name for
   """
   @spec get_prefix_database(Ecto.Repo.t(), String.t() | atom()) :: String.t()
   def get_prefix_database(repo, nil), do: get_repo_db(repo)
@@ -892,14 +1289,14 @@ defmodule ArangoXEcto do
 
   ## Parameters
 
-  - `repo` - The Ecto repo module to use for the query
-  - `collection_name` - Name of the collection to check
-  - `type` - The type of collection to check against, defaults to a regular document
-  - `opts` - Options to be used, available options shown below, defaults to none
+    * `repo` - The Ecto repo module to use for the query
+    * `collection_name` - Name of the collection to check
+    * `type` - The type of collection to check against, defaults to a regular document
+    * `opts` - Options to be used, available options shown below, defaults to none
 
   ## Options
 
-  - `:prefix` - The prefix to use for database collection checking
+    * `:prefix` - The prefix to use for database collection checking
 
   ## Examples
 
@@ -923,12 +1320,7 @@ defmodule ArangoXEcto do
       iex> ArangoXEcto.collection_exists?(Repo, "test", "tenant1")
       true
   """
-  @spec collection_exists?(
-          Ecto.Repo.t(),
-          binary() | atom(),
-          atom() | integer(),
-          Keyword.t()
-        ) ::
+  @spec collection_exists?(Ecto.Repo.t(), binary() | atom(), atom() | integer(), Keyword.t()) ::
           boolean()
   def collection_exists?(repo, collection_name, type \\ :document, opts \\ [])
       when is_binary(collection_name) or is_atom(collection_name) do
@@ -964,8 +1356,8 @@ defmodule ArangoXEcto do
 
   ## Parameters
 
-  - `repo` - The Ecto repo module to use for the query
-  - `view_name` - Name of the collection to check
+    * `repo` - The Ecto repo module to use for the query
+    * `view_name` - Name of the collection to check
 
   ## Examples
 
@@ -987,9 +1379,13 @@ defmodule ArangoXEcto do
   end
 
   @doc """
-  Returns if a Schema is an edge or not
+  Returns true if a Schema is an edge
 
   Checks for the presence of the `__edge__/0` function on the module.
+
+  ## Parameters
+
+    * `module` - the module to check
   """
   @spec edge?(atom()) :: boolean()
   def edge?(module) when is_atom(module),
@@ -998,9 +1394,13 @@ defmodule ArangoXEcto do
   def edge?(_), do: false
 
   @doc """
-  Returns if a Schema is a document schema or not
+  Returns true if a Schema is a document schema
 
   Checks for the presence of the `__schema__/1` function on the module and not an edge.
+
+  ## Parameters
+
+    * `module` - the module to check
   """
   @spec document?(atom()) :: boolean()
   def document?(module) when is_atom(module) do
@@ -1011,9 +1411,13 @@ defmodule ArangoXEcto do
   def document?(_), do: false
 
   @doc """
-  Returns if a Schema is a view schema or not
+  Returns true if a Schema is a view schema
 
   Checks for the presence of the `__view__/1` function on the module.
+
+  ## Parameters
+
+    * `module` - the module to check
   """
   @doc since: "1.3.0"
   @spec view?(atom()) :: boolean()
@@ -1026,6 +1430,10 @@ defmodule ArangoXEcto do
   Returns the type of a module
 
   This is just a shortcut to using `edge?/1`, `document?/1` and `view?/1`. If it is none of them nil is returned.
+
+  ## Parameters
+
+    * `module` - the module to check
 
   ## Examples
 
@@ -1058,6 +1466,10 @@ defmodule ArangoXEcto do
   Same as schema_type/1 but throws an error on none
 
   This is just a shortcut to using `is_edge/1`, `is_document/1` and `is_view/1`. If it is none of them nil is returned.
+
+  ## Parameters
+
+    * `module` - the module to check
 
   ## Examples
 
@@ -1214,8 +1626,8 @@ defmodule ArangoXEcto do
       contents =
         quote do
           use ArangoXEcto.Edge,
-            from: unquote(List.first(from_modules)),
-            to: unquote(List.first(to_modules))
+            from: unquote(from_modules),
+            to: unquote(to_modules)
 
           schema unquote(collection_name) do
             edge_fields()
@@ -1272,6 +1684,8 @@ defmodule ArangoXEcto do
   defp source_name(module) do
     module.__schema__(:source)
   end
+
+  defp struct_id(%{__id__: id}) when not is_nil(id), do: id
 
   defp struct_id(%{id: id} = struct) when is_struct(struct) do
     source = source_name(struct)
