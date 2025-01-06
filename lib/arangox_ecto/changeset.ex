@@ -2,10 +2,46 @@ defmodule ArangoXEcto.Changeset do
   @moduledoc """
   Methods to manipulate an Ecto Changeset
 
-  The methods within the module are specific to ArangoXEcto and
-  only exist here if there isn't an adequite function available
-  already in the `Ecto.Changeset` module.
+  The methods within the module are specific to ArangoXEcto and only exist here if there isn't an 
+  adequite function available already in the `Ecto.Changeset` module.
+
+  When working with changesets you need to cast or put assocs, well you need to do that for graph
+  relations to. However, you need to use a special version of the function called
+  `ArangoXEcto.Changeset.cast_graph/3`. This works like the following.
+
+      defmodule MyApp.User do
+        import Ecto.Changeset
+        import ArangoXEcto.Changeset
+
+        ...
+
+        def changeset(user, attrs \\ %{}) do
+          user
+          |> cast(attrs, [...])
+          |> cast_graph(:my_content, with: %{
+            Post => [:title],
+            Comment => [:text]
+          })
+        end
+      end
+
+  You can also use the put version (`ArangoXEcto.Changeset.put_graph/4`) just like you would use
+  `put_assoc/4`.
+
+  ## cast_graph vs cast_assoc
+
+  `cast_graph` and `cast_assoc` (also the put versions) are very similar in functionality but with 
+  some key differences. Firstly, the syntax. You would have seen above that `cast_graph/3` allows
+  for a module or a mapper. Secondly, `cast_graph/3` allows for the special multiple nodes to edges
+  behaviour as seen above.
+
+  > #### Note {: .error}
+  >
+  > `cast_assoc/3` and `put_assoc/4` will **NOT** work properly because of how the graph relations
+  > work. So you will need to make sure to use the `cast_graph/3` and `put_graph/4` functions.
   """
+  @moduledoc since: "2.0.0"
+
   require Logger
 
   alias Ecto.Changeset
@@ -15,16 +51,54 @@ defmodule ArangoXEcto.Changeset do
   Casts the given graph association with the changeset parameters.
 
   This operates simarly to `Ecto.Changeset.cast_assoc/3` (and indeed was based
-  off of the implementation) but allows for a relation to represent multiple 
+  on the implementation) but allows for a relation to represent multiple 
   possible options. For example, in the following `:my_content` can represent 
   either a post or a comment.
 
-    ArangoXEcto.Changeset.cast_graph(changeset, :my_content, with: %{
-      Post => &Post.changeset/2,
-      Comment => &Comment.changeset/2,
-    })
+      # Implicit use the module changesets
+      ArangoXEcto.Changeset.cast_graph(changeset, :my_content)
 
-  TODO: More content
+      # Explicit use the module changesets
+      ArangoXEcto.Changeset.cast_graph(changeset, :my_content, with: %{
+        Post => &Post.changeset/2,
+        Comment => &Comment.changeset/2,
+      })
+
+  Like with `Ecto.Changeset.cast_assoc/3`, the changeset must have explicitly preloaded the graph
+  association before being cast. Refer to the Ecto docs for more info.
+
+  ## Parameters
+
+    * `changeset` - The Ecto changeset to cast
+    * `name` - The name of the field to cast
+    * `opts` - Options to use (described below)
+
+  ## Options
+
+    * `:required` - if the graph association is a required field. A non-empty list is 
+      satisfactory.
+
+    * `:required_message` - the message on failure, defaults to "can't be blank"
+
+    * `:invalid_message` - the message on failure, defaults to "is invalid"
+
+    * `:force_update_on_change` - force the parent record to be updated in the
+      repository if there is a change, defaults to `true`
+
+    * `:with` - can either be a function or a map where the keys are a schema module and the values
+      is the function to use. The function is used to build the changeset from params. Defaults to
+      the `changeset/2` function of the associated module. It can be an anonymous function that 
+      expects two arguments: the associated struct to be cast and its parameters. It must return a
+      changeset. Functions with arity 3 are accepted, and the third argument will be the position
+      of the associated element in the list, or `nil`, if the association is being replaced.
+
+    * `:drop_param` - the parameter name which keeps a list of indexes to drop from the relation
+      parameters
+
+    * `:sort_param` - the parameter name which keeps a list of indexes to sort from the relation
+      parameters. Unknown indexes are considered to be new entries. Non-listed indexes will come 
+      before any sorted ones.
+
   """
   @spec cast_graph(Ecto.Changeset.t(), atom(), Keyword.t()) :: Ecto.Changeset.t()
   def cast_graph(changeset, name, opts \\ [])
@@ -146,10 +220,10 @@ defmodule ArangoXEcto.Changeset do
   defp identified_by_fields(%{mapping: mod}, _params) when is_atom(mod), do: mod
 
   defp identified_by_fields(%{mapping: mapper}, params) when is_map(mapper) do
-    param_keys = Map.keys(params) |> Enum.map(&Atom.to_string/1) |> MapSet.new()
+    param_keys = Map.keys(params) |> Enum.map(&to_string/1) |> MapSet.new()
 
     Enum.find_value(mapper, fn {mod, fields} ->
-      map_set_fields = Enum.map(fields, &Atom.to_string/1) |> MapSet.new()
+      map_set_fields = Enum.map(fields, &to_string/1) |> MapSet.new()
 
       if MapSet.subset?(map_set_fields, param_keys) do
         mod
@@ -379,13 +453,17 @@ defmodule ArangoXEcto.Changeset do
             case __STACKTRACE__ do
               [{^mod, :changeset, args_or_arity, _}]
               when args_or_arity == 2 or length(args_or_arity) == 2 ->
-                reraise ArgumentError, """
-                the module #{inspect(mod)} does not define a changeset/2 function,
-                which is used by cast_graph/3. You need to either:
-                  
-                  1. implement the changeset/2 function
-                  2. pass the :with option to cast_graph/3 with an anonymous function of arity 2
-                """
+                reraise ArgumentError,
+                        [
+                          message: """
+                          the module #{inspect(mod)} does not define a changeset/2 function,
+                          which is used by cast_graph/3. You need to either:
+                            
+                            1. implement the changeset/2 function
+                            2. pass the :with option to cast_graph/3 with an anonymous function of arity 2
+                          """
+                        ],
+                        __STACKTRACE__
 
               stacktrace ->
                 reraise e, stacktrace
@@ -430,17 +508,37 @@ defmodule ArangoXEcto.Changeset do
   end
 
   @doc """
-  Puts the given struct into a graph association.
+  Puts the given graph association entry or entries into a graph association.
 
   This operates simarly to `Ecto.Changeset.put_assoc/4` (and indeed was based
   off of the implementation) but allows for a relation to represent multiple 
   possible options. For example, in the following `:my_content` can represent 
   either a post or a comment.
 
-    ArangoXEcto.Changeset.put_graph(changeset, :my_content, %Post{title: "abc"})
-    ArangoXEcto.Changeset.put_graph(changeset, :my_content, %Comment{text: "cba"})
+      ArangoXEcto.Changeset.put_graph(changeset, :my_content, [
+        %Post{title: "abc"},
+        %Comment{text: "cba"}
+      ])
 
-  TODO: More content
+  This operates on the graph association as a whole. So for example the above will replace the
+  `:my_content` edges between the nodes. This works exactly the same as
+  `Ecto.Changeset.put_assoc/4`. Therefore, if you want to update the content you will have to
+  preload the value and update from there. The `:on_replace` value for the field applies here.
+
+  An empty list can be given too.
+
+  The data provided is the same as the available options in `Ecto.Changeset.put_assoc/4`. I.e. you
+  can provide a map, a keyword list, a changeset or a struct as the options in the list.
+
+  Although it accepts an `opts` argument, there are no options currently supported by 
+  `put_graph/4`.
+
+  ## Parameters
+
+    * `changeset` - The Ecto changeset to apply the change to
+    * `name` - The name of the field to put the value to
+    * `value` - The value of the field to apply
+    * `opts` - none available currently
   """
   @spec put_graph(Ecto.Changeset.t(), atom(), term(), Keyword.t()) :: Ecto.Changeset.t()
   def put_graph(changeset, name, value, opts \\ [])
@@ -481,7 +579,7 @@ defmodule ArangoXEcto.Changeset do
     end
   end
 
-  def change(%{related: mod} = relation, value, current) do
+  defp change(%{related: mod} = relation, value, current) do
     get_pks = data_pk(mod.__schema__(:primary_key))
 
     with :error <-

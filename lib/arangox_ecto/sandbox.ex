@@ -261,6 +261,8 @@ defmodule ArangoXEcto.Sandbox do
   `ArangoXEcto.Sandbox.checkout/2` instead of setting a longer timeout
   globally in your config.
   """
+  @moduledoc since: "2.0.0"
+
   defmodule Connection do
     @moduledoc false
 

@@ -206,9 +206,10 @@ defmodule ArangoXEcto do
 
   ### Edge Modules
 
-  The ArangoXEcto adapter dynamically creates and manages edge collections. Each edge collection
-  will be created as an Ecto schema when they are first used. This means that you don't need to
-  create edge collections manually. This will happen when in either static or dynamic mode.
+  When in dynamic mode the ArangoXEcto adapter dynamically creates and manages edge collections. 
+  Each edge collection will be created as an Ecto schema when they are first used. This means that 
+  you don't need to create edge collections manually. When in static mode you need to define edges
+  manually.
 
   The edge module will be created under the closest common parent module of the passed modules
   plus the `Edges` alias. The order of the edge name will always be alphabetical to prevent 

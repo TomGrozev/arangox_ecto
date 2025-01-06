@@ -7,14 +7,14 @@ defmodule ArangoXEcto.View.Link do
 
   ## Example
 
-    %ArangoXEcto.View.Link{
-      includeAllFields: true,
-      fields: %{
-        name: %ArangoXEcto.View.Link{
-          analyzers: [:text_en]
+      %ArangoXEcto.View.Link{
+        includeAllFields: true,
+        fields: %{
+          name: %ArangoXEcto.View.Link{
+            analyzers: [:text_en]
+          }
         }
       }
-    }
 
   """
   @moduledoc since: "1.3.0"

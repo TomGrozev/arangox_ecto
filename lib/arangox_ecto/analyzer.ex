@@ -2,6 +2,9 @@ defmodule ArangoXEcto.Analyzer do
   @moduledoc """
   Defines an analyzer for use in views
 
+  This is only used when in dynamic mode. When using static mode you will need to define migrations
+  for analyzers and any Analyzer definitions using this module will be ignored.
+
   Since analyzer defintions are short and you may have many of them, you can just define multiple
   analyzer modules in one file, e.g. named analyzers.ex.
 
@@ -38,6 +41,8 @@ defmodule ArangoXEcto.Analyzer do
       * `:position` - (boolean) - enumerate the tokens for position-dependent queries.
   """
   @moduledoc since: "1.3.0"
+
+  @type t :: module()
 
   alias ArangoXEcto.Migration.Analyzer
 

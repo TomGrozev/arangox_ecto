@@ -244,9 +244,10 @@ defmodule ArangoXEcto.Adapter do
   @doc """
   Receives a DDL command and executes it
   """
+  @doc since: "2.0.0"
   @spec execute_ddl(
           Ecto.Repo.t() | Ecto.Adapter.adapter_meta(),
-          ArangoXEcto.Migration.command(),
+          tuple(),
           Keyword.t()
         ) ::
           {:ok, [{Logger.level(), any(), Keyword.t()}]}

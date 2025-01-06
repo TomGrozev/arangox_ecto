@@ -220,9 +220,9 @@ defmodule ArangoXEcto.Migration.Runner do
   end
 
   @doc """
-  Qubes a command tuple for execution
+  Queues a command tuple for execution
 
-  Ecto.MigrationError will be raised when the server
+  `Ecto.MigrationError` will be raised when the server
   is in `:backward` direction and `command` is irreversible.
   """
   def execute(command) do

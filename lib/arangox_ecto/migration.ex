@@ -1,83 +1,377 @@
 defmodule ArangoXEcto.Migration do
   @moduledoc """
-  Defines Ecto Migrations for ArangoDB
+  Modify the database through static migrations.
 
-  > ## NOTE {: .info}
+  > #### NOTE {: .info}
   >
-  > ArangoXEcto dynamically creates collections for you by default. Depending on your project
-  > architecture you may decide to use static migrations instead in which case this module will be useful.
+  > ArangoXEcto can dynamically create collections for you and can be enabled by setting `static:
+  > false` in your app config. Refer to `ArangoXEcto` for more info. However, this is primarily
+  useful for dev applications and migrations should be used for production level applications.
 
-  Migrations must use this module, otherwise migrations will not work. To do this, replace
-  `use Ecto.Migration` with `use ArangoXEcto.Migration`.
+  Each migrations typically have an `up` and `down` function or just a `change` function. If using
+  separate `up` and `down` functions, these will allow for the database to migrated forward or
+  rolled back. If using the `change` function then the migrations for going forward are defined and
+  automatically reversed in the case of a rollback.
 
-  Since ArangoDB is schemaless, no fields need to be provided, only the collection name. First create
-  a collection struct using the `collection/3` function. Then pass the collection struct to the
-  `create/1` function. To create indexes it is a similar process using the `index/3` function.
+  Migrations that have been executed in a database for ArangoXEcto are stored in a system collection
+  called `_migrations` (this is a hidden system collection). This allows ArangoXEcto to track what
+  has already been run so that it knows what migrations can be run or rolled back. You can configure
+  the name of this table with the `:migration_source` configuration option and the name of the
+  repository that manages migrations can be configured with `:migration_repo`.
 
-  **Order matters!!** Make sure you create collections before indexes and views, and analyzers before
-  views if they are used. In general this is a good order to follow:
+  ## Two (or more) servers, one DB, oh no!!
 
-      Analyzers > Collections > Indexes > Views
+  You might be wondering what happens when there are two or more applications trying to run
+  migrations on the database at once. If two or more instances of the database try to write to the
+  database at the same time this could be a huge problem, causing unpredictable results. A lot of
+  databases use locking as a mechanism to solve this. I.e. one connection will lock writing to the
+  database so others cannot write. ArangoDB doesn't do this, so how can we solve this? 
 
-  To drop the collection on a migration down, do the same as creation except use the `drop/1` function
-  instead of the `create/1` function. Indexes are automatically removed when the collection is removed
-  and cannot be deleted using the `drop/1` function.
+  Luckily we don't have to worry about this as ArangoDB handles this for us through dynamic locks.
+  Essentially if two connections try to write on the same part of the database then one of them will
+  just fail as the first has acquired an exclusive lock.
+
+  ## Migration creation
+
+  Migration files are stored in the "priv/MY_REPO/migrations" (where MY_REPO is a lowercase
+  underscored name of your repository. For example, if you repo module was `MyApp.MyRepo` then the
+  path would be "priv/my_repo/migrations" or if your repo module was `MyApp.ThisIsTheCoolestRepo`
+  then your migrations would be in "priv/this_is_the_coolest_repo/migrations". The directory can
+  be overridden when running the mix tasks or in the configuration.
+
+  Each migration filename will have a timestamp number followed by a unique name seperated by an
+  underscore. For example if you wanted to add a users collection could put the migration in a file
+  at "priv/repo/migrations/20240928200000_add_users_collection.exs, with contents:
+
+      defmodule Repo.Migrations.AddUsersCollection do
+        use ArangoXEcto.Migration
+
+        def up do
+          create collection(:users) do
+            add :first_name, :string, comment: "first_name column"
+            add :last_name, :string
+            add :gender, :integer
+            add :age, :integer
+            add :location, :map
+
+            timestamps()
+          end
+        end
+
+        def down do
+          drop collection("users")
+        end
+      end
+
+  The `up/0` function is responsible for migrating the database forward, while the `down/0` function
+  is responsible for rolling back this migration. The `down/0` function must always reverse the
+  `up/0` action. Inside both of these functions we use various API methods defined in this module to
+  perform actions on the database. We can manage collections, indexes, views, analyzers and run
+  custom AQL commands.
+
+  Now that our migration is setup, all that is left is to execute it. While migrations can be run
+  using code (and there are valid use cases for this, e.g. generating releases for production) we
+  generally will use mix tasks. To do this run the following from the root directory of your
+  project:
+
+      $ mix arango.migrate
+
+  If we wanted to reverse the migration we could run:
+
+      $ mix arango.rollback -n 1
+
+  We must always specify how many migrations to rollback. Whereas `mix arango.migrate` will always
+  run all pending migrations
+
+  There is one other mix task that is used regularly and it saves us a lot of time. That is the `mix
+  arango.gen.migration` task. This task will generate a blank migration with boilerplate contents
+  and use the proper timestamps of when it was generated.
+
+      $ mix arango.gen.migration add_users_collection
+
+  You can now generate and run migrations successfully. You may be pretty proud of yourself, and
+  you should be, but there is some more parts to it. You can learn all about migrations in
+  ArangoXEcto in this module documentation.
+
+  > #### IMPORTANT {: .warning}
+  > **Order matters!!** Make sure you create collections before indexes and views, and analyzers 
+  > before views if they are used. In general this is a good order to follow:
+  >
+  >    Analyzers > Collections > Indexes > Views
+
+  ## ArangoDB Schemas
+
+  ArangoDB can take a schema, but it is not strictly required, hence no fields _need_ to be 
+  provided. The only required thing is the collection name. More info below on how to define
+  fields. For example, the example provided in the previous section can be provided without defining
+  the fields.
+
+      defmodule Repo.Migrations.AddUsersCollection do
+        use ArangoXEcto.Migration
+
+        def up do
+          create collection(:users)
+        end
+
+        def down do
+          drop collection("users")
+        end
+      end
+
+  This will work perfectly fine, however there is one caveat, documents in the collection will not
+  be validated. This means that the migration will only create the collection and not define a
+  JSONSchema for the collection. Schemas a generated using the `ArangoXEcto.Migration.JsonSchema`
+  module, however all documentation on how to use it can be found in this module.
+
+  ## Mix tasks
+
+  As seen in the example above, ArangoXEcto has a few built in mix tasks that can be used to help
+  with the development workflow. These tasks are similar to the ones found in `ecto_sql` but are
+  adapted for the `ArangoXEcto` context. To allow for using multiple database adapters together they
+  follow a similar but slightly different pattern, as seen below.
+
+    * `mix arango.gen.migration` - generates a migration that the user can fill in with particular
+      commands
+    * `mix arango.migrate` - migrates a repository
+    * `mix arango.rollback` - rolls back a particular migration
+
+  For additional help on how to use these tasks you can run `mix help COMMAND` where `COMMAND` is
+  the command you need assistance with.
+
+  As mentioned previously, you can also run migrations using code using this module. If you think
+  you're pretty cool and know what you're doing you can also use the lower level APIs in
+  `ArangoXEcto.Migrator`.
+
+  ## Change (combining up and down)
+
+  I know what you're thinking, "Ugh, do I really have to write an `up/0` and `down/0` function for
+  every single migration? Surely you could have just written some code the generate the `down/0`
+  version for me". Well yes, yes I did. That's what `change/0` is for. You just write your regular
+  `up/0` action and it will do some fancy footwork and figure out what the `down/0` version would
+  be. For example, this would operate the same as seen above:
+
+      defmodule Repo.Migrations.AddUsersCollection do
+        use ArangoXEcto.Migration
+
+        def change do
+          create collection(:users) do
+            add :first_name, :string, comment: "first_name column"
+            add :last_name, :string
+            add :gender, :integer
+            add :age, :integer
+            add :location, :map
+
+            timestamps()
+          end
+        end
+      end
+
+  Like a good salesman I only gave you half the story, there is one caveat when using this. Not all
+  commands are reversible and will raise an `Ecto.MigrationError`.
+
+  A great example of a command that cannot be reversed is `execute/1` but can easily be made
+  reversible by calling `execute/2` instead. The first argument will be run on `up/0` and the second
+  will be run on `down/0`.
+
+  If you implement `up/0` and `down/0` they will take precedence over `change/0` which won't be
+  invoked.
+
+  ## Field Types
+
+  The field types provided must match one of the types available in
+  `ArangoXEcto.Migration.JsonSchema`. Any other option will raise an error. There is one caveat to
+  this, the `sub_command` option is used through `add_embed` and `add_embed_many` (essentially a
+  shortcut for an array of many embeds).
+
+  The options that can be passed to each of the types can be found in the
+  `ArangoXEcto.Migration.JsonSchema` docs.
+
+  ## Executing and flushing
+
+  Most functions won't be executed until the end of the relevant `up`, `change` or `down` callback.
+  However, if you call any `Ecto.Repo` function they will be executed immediately, unless called
+  inside an anonymous function passed to `execute/1`.
+
+  You may want to ensure that all the previous steps have been executed before continuing. To do
+  this you can call the `flush/0` function to execute everything before.
+
+  However `flush/0` will raise if it would be called from `change` function when doing a rollback.
+  To avoid that we recommend to use `execute/2` with anonymous functions instead.
+  For more information and example usage please take a look at `execute/2` function.
+
+  ## Repo configuration
+
+  ### Migrator configuration
+
+  The following options are not required but can be used to adjust how your migrations are stored
+  and run.
+
+    * `:migration_source` - The name of the collection to store the migrations that have already
+      been run. Only the version numbers (timestamps) are stored. The default is `_migrations`.
+      Whatever is specified it will be set as a system collection in ArangoDB. The convention is to
+      prefix the collection name with an underscore (_). You can configure this as follows:
+
+          config :my_app, MyApp.Repo, migration_source: "_custom_migrations"
+
+    * `:migration_repo` - This configures which repository the migrations will be stored in. By
+      default this will be the given repository but it can be overridden. A possible use case of
+      this is if you wanted all migrations to be stored in a particular database in ArangoDB.
+
+          config :my_app, MyApp.Repo, migration_repo: MyApp.MigrationRepo
+
+    * `:priv` - the location where to store important assets, such as migrations. By default this
+      will be "priv/my_reoo" for a repository module of `MyApp.MyRepo` and migrations would be
+      placed in "priv/my_repo/migrations".
+
+    * `:start_apps_before_migration` - A list of applications to be started before migrations are
+      run. Used by `ArangoXEcto.Migrator.with_repo/3` and hence the migration task.
+
+          config :my_app, MyApp.Repo, start_apps_before_migration: [:ssl, :some_custom_logger]
+
+  ### Migrations configuration
+
+  The previous section's options were focused on how migrations are run and stored, whereas the
+  following options are focused on adjusting what values are stored. If you change these after your
+  app goes into production it will cause unexpected behaviour.
+
+    * `:migration_timestamps` - Modifies the type and field names of `:inserted_at` and
+      `:updated_at`. By default timestamps will be stored as `:naive_datetime` but this, and the
+      field names can be configured as seen below:
+
+          config :my_app, MyApp.Repo, migration_timestamps: [
+            type: :utc_datetime,
+            inserted_at: :created_at,
+            updated_at: :changed_at
+          ]
+
+    * `:migration_default_prefix` - By default no prefix is used, but you might want to. You can
+      configure it using this option. This will be overriden by a prefix being passed at the command
+      level.
+
+          config :my_app, MyApp.Repo, migration_default_prefix: "my_migrations_prefix"
+
+  ## Comments
+
+  The schema stored in ArangoDB supports storing comments on the fields. You can specify this by
+  passing the `:comment` option when using the `add/3`, `add_embed/3`, `add_embed_many/3` and the
+  modify equivalents.
+
+        def up do
+          create collection(:users) do
+            add :name, :string, comment: "full name column"
+            add_embed :facts, comment: "my facts" do
+              add :statement, :string, comment: "represents the fact statement"
+              add :falsehood, :boolean, comment: "is the fact false?"
+            end
+
+            timestamps()
+          end
+        end
+
+  ## Prefixes
+
+  ArangoXEcto fully supports prefixes, which includes in migrations. Unlike in a database provider
+  like PostgreSQL, ArangoDB doesn't have the notion of prefixes, hence prefixes actually create a
+  separate database to create the separation.
+
+        def up do
+          create collection(:users, prefix: "base_app") do
+            add :first_name, :string, comment: "first_name column"
+            add :last_name, :string
+            add :gender, :integer
+            add :age, :integer
+            add :location, :map
+
+            timestamps()
+          end
+
+          create index(:users, [:age], prefix: "base_app")
+        end
+
+  Notice here how the same prefix must be specified on both the collection creation and the index
+  creation. If you don't do this then they simply won't be created in the same database and will
+  likely result in an error. You can specify a default prefix, as mentioned above, using the
+  `:migration_default_prefix` in your configuration.
+
+  ## Transaction Callbacks
+
+  Migrations are run in transactions. You may need to perform some actions after beginning a
+  transaction or before committing the migration. You can do this with the `c:after_begin/0` and
+  `c:before_commit/0` callbacks to your migration.
+
+  Sometimes you may want to use these callbacks for every migration and doing so can be quite
+  repetitive. You can solve this by implementing your own migration module that extends the
+  `ArangoXEcto.Migration` module:
+
+      defmodule MyApp.Migration do
+        defmacro __using__(_) do
+          quote do
+            use ArangoXEcto.Migration
+
+            def after_begin() do
+              repo().query! "SOME ARANGO QUERY"
+            end
+          end
+        end
+      end
+
+  Then in your migrations you can replace `use ArangoXEcto.Migration` with `use MyApp.Migration`.
 
   ## Example
 
       defmodule MyProject.Repo.Migrations.CreateUsers do
         use ArangoXEcto.Migration
 
-        def up do
-          create(MyProject.Analyzers)
+        def change do
+          create analyzer(:norm_en, :norm, [:frequency, :position], %{
+             locale: "en",
+             accent: false,
+             case: :lower
+           })
 
-          create(collection(:users))
+          create collection(:users) do
+            add :first_name, :string, comment: "first_name column"
+            add :last_name, :string
+            add :gender, :integer
+            add :age, :integer
+            add :location, :map
 
-          create(index("users", [:email]))
+            timestamps()
+          end
 
-          create(MyProject.UsersView)
-        end
+          create index(:users, [:age])
+          create unique_index(:users, [:location])
 
-        def down do
-          drop(collection(:users))
+          create view(:user_search, commitIntervalMsec: 1, consolidationIntervalMsec: 1) do
+            add_sort(:created_at, :desc)
+            add_sort(:first_name)
+
+            add_store([:first_name, :last_name], :none)
+
+            add_link("users", %Link{
+              includeAllFields: true,
+              fields: %{
+                last_name: %Link{
+                  analyzers: [:identity, :norm_en]
+                }
+              }
+            })
+          end
         end
       end
   """
 
   require Logger
 
+  alias ArangoXEcto.Analyzer
   alias ArangoXEcto.Migration.Runner
   alias ArangoXEcto.View.Link
 
-  @typedoc "All migration commands"
-  @type command ::
-          raw ::
-          String.t()
-          | {:create, Collection.t(), [collection_subcommand]}
-          | {:create_if_not_exists, Collection.t(), [collection_subcommand]}
-          | {:alter, Collection.t(), [collection_subcommand]}
-          | {:drop, Collection.t()}
-          | {:drop_if_exists, Collection.t()}
-          | {:create, Index.t()}
-          | {:create_if_not_exists, Index.t()}
-          | {:drop, Index.t()}
-          | {:drop_if_exists, Index.t()}
-
-  @typedoc "All commands allowed within the block passed to `collection/2`"
-  @type collection_subcommand ::
-          {:add, field :: atom, type :: Ecto.Type.t() | Reference.t() | binary(), Keyword.t()}
-          | {:add_if_not_exists, field :: atom, type :: Ecto.Type.t() | Reference.t() | binary(),
-             Keyword.t()}
-          | {:modify, field :: atom, type :: Ecto.Type.t() | Reference.t() | binary(),
-             Keyword.t()}
-          | {:remove, field :: atom, type :: Ecto.Type.t() | Reference.t() | binary(),
-             Keyword.t()}
-          | {:remove, field :: atom}
-          | {:remove_if_exists, type :: Ecto.Type.t() | Reference.t() | binary()}
-
   defmodule View do
     @moduledoc """
-    Represents a view module in ArangoDB
+    Used internally by the `ArangoXEcto` migration.
+
+    To define a view in a migration, see `ArangoXEcto.Migration.view/2`.
     """
 
     @enforce_keys [:name]
@@ -98,7 +392,22 @@ defmodule ArangoXEcto.Migration do
       storedValues: []
     ]
 
-    @type t :: %__MODULE__{}
+    @type t :: %__MODULE__{
+            name: String.t(),
+            consolidationIntervalMsec: integer() | nil,
+            consolidationPolicy: String.t() | nil,
+            commitIntervalMsec: integer() | nil,
+            writebufferSizeMax: integer() | nil,
+            writebufferIdle: boolean() | nil,
+            writebufferActive: boolean() | nil,
+            cleanupIntervalStep: integer() | nil,
+            primarySortCompression: boolean(),
+            prefix: String.t() | nil,
+            type: String.t(),
+            links: map(),
+            primarySort: list(),
+            storedValues: list()
+          }
 
     @type view_option ::
             :consolidationIntervalMsec
@@ -127,10 +436,12 @@ defmodule ArangoXEcto.Migration do
 
   defmodule Analyzer do
     @moduledoc """
-    Represents a analyzer module in ArangoDB
+    Used internally by the `ArangoXEcto` migration.
+
+    To define an analyzer in a migration, see `ArangoXEcto.Migration.analyzer/4`.
     """
 
-    @enforce_keys [:name, :type, :features]
+    @enforce_keys [:name]
     defstruct [
       :name,
       :type,
@@ -138,8 +449,6 @@ defmodule ArangoXEcto.Migration do
       :prefix,
       properties: %{}
     ]
-
-    @type t :: %__MODULE__{}
 
     @type type ::
             :identity
@@ -162,25 +471,13 @@ defmodule ArangoXEcto.Migration do
 
     @type feature :: :frequency | :norm | :position
 
-    @valid_types [
-      :identity,
-      :delimiter,
-      :stem,
-      :norm,
-      :ngram,
-      :text,
-      :collation,
-      :aql,
-      :pipeline,
-      :stopwords,
-      :segmentation,
-      :minhash,
-      :classification,
-      :nearest_neighbors,
-      :geojson,
-      :geo_s2,
-      :geopoint
-    ]
+    @type t :: %__MODULE__{
+            name: String.t(),
+            type: type(),
+            features: feature(),
+            prefix: String.t() | nil,
+            properties: map()
+          }
 
     @doc """
     Creates a new Analyzer struct
@@ -201,6 +498,26 @@ defmodule ArangoXEcto.Migration do
 
       struct(__MODULE__, keys)
     end
+
+    @valid_types [
+      :identity,
+      :delimiter,
+      :stem,
+      :norm,
+      :ngram,
+      :text,
+      :collation,
+      :aql,
+      :pipeline,
+      :stopwords,
+      :segmentation,
+      :minhash,
+      :classification,
+      :nearest_neighbors,
+      :geojson,
+      :geo_s2,
+      :geopoint
+    ]
 
     @doc false
     @spec validate_type!(atom()) :: :ok
@@ -361,7 +678,9 @@ defmodule ArangoXEcto.Migration do
 
   defmodule Index do
     @moduledoc """
-    Represents a collection index in ArangoDB
+    Used internally by the `ArangoXEcto` migration.
+
+    To define an index in a migration, see `ArangoXEcto.Migration.index/3`.
 
     The attributes in this struct are directly passed to the
     ArangoDB API for creation. No validation is done on the
@@ -383,7 +702,19 @@ defmodule ArangoXEcto.Migration do
       type: :hash
     ]
 
-    @type t :: %__MODULE__{}
+    @type t :: %__MODULE__{
+            collection_name: String.t(),
+            fields: [atom()],
+            sparse: boolean() | nil,
+            unique: boolean() | nil,
+            deduplication: boolean() | nil,
+            minLength: integer() | nil,
+            geoJson: boolean() | nil,
+            expireAfter: integer() | nil,
+            prefix: String.t() | nil,
+            name: String.t(),
+            type: :hash
+          }
 
     @type index_option ::
             {:type, atom}
@@ -430,7 +761,9 @@ defmodule ArangoXEcto.Migration do
 
   defmodule Collection do
     @moduledoc """
-    Represent a collection in ArangoDB
+    Used internally by the `ArangoXEcto` migration.
+
+    To define a collection in a migration, see `ArangoXEcto.Migration.collection/2`.
 
     The attributes in this struct are directly passed to the
     ArangoDB API for creation. No validation is done on the
@@ -456,7 +789,23 @@ defmodule ArangoXEcto.Migration do
       type: 2
     ]
 
-    @type t :: %__MODULE__{}
+    @type t :: %__MODULE__{
+            name: String.t(),
+            waitForSync: boolean() | nil,
+            schema: map() | nil,
+            keyOptions: map() | nil,
+            isSystem: boolean() | nil,
+            prefix: String.t() | nil,
+            cacheEnabled: boolean() | nil,
+            numberOfShards: integer() | nil,
+            shardKeys: String.t() | nil,
+            replicationFactor: integer() | nil,
+            writeConcern: integer() | nil,
+            distributeShardsLike: String.t() | nil,
+            shardingStrategy: String.t() | nil,
+            smartJoinAttribute: String.t() | nil,
+            type: 2 | 3
+          }
 
     @type collection_option ::
             {:waitForSync, boolean}
@@ -495,7 +844,11 @@ defmodule ArangoXEcto.Migration do
 
   defmodule Command do
     @moduledoc """
-    Represents the up and down of a reversible raw command.
+    Used internally by the `ArangoXEcto` migration.
+
+    Represents the up and down of a reversible raw command defined by
+    `ArangoXEcto.Migration.execute/1`. To make it reversible call `ArangoXEcto.Migration.execute/2`
+    instead.
     """
 
     defstruct up: nil, down: nil
@@ -540,11 +893,9 @@ defmodule ArangoXEcto.Migration do
   end
 
   @doc """
-  Creates a collection.
+  Creates a collection or view.
 
-  The collection `:id` type will be `:binary_id`.
-
-  ## Example
+  ## Collection Example
 
       create collection(:users) do
         add :first_name, :string
@@ -552,17 +903,37 @@ defmodule ArangoXEcto.Migration do
 
         timestamps()
       end
+
+  ## View Example
+
+      create view(:user_search) do
+        add_sort(:created_at, :desc)
+        add_sort(:first_name)
+
+        add_store([:first_name, :last_name], :none)
+
+        add_link("users", %Link{
+          includeAllFields: true,
+          fields: %{
+            last_name: %Link{
+              analyzers: [:identity, :text_en]
+            }
+          }
+        })
+      end
   """
+  @spec create(Collection.t() | View.t(), do: Macro.t()) :: Macro.t()
   defmacro create(object, do: block) do
     expand_create(object, :create, block)
   end
 
   @doc """
-  Creates a collection if it doesn't exist.
+  Creates a collection or view if it doesn't exist.
 
   Works just the same as `create/2` but will raise an error
   when the object already exists.
   """
+  @spec create_if_not_exists(Collection.t() | View.t(), do: Macro.t()) :: Macro.t()
   defmacro create_if_not_exists(object, do: block) do
     expand_create(object, :create_if_not_exists, block)
   end
@@ -585,9 +956,9 @@ defmodule ArangoXEcto.Migration do
   end
 
   @doc """
-  Alters a collection
+  Alters a collection or view.
 
-  ## Examples 
+  ## Collection Examples 
 
       alter collection(:users) do
         add :middle_name, :string
@@ -595,7 +966,23 @@ defmodule ArangoXEcto.Migration do
         rename :people, to: :num
         remove :last_name
       end
+
+  ## View Example
+
+      alter view(:user_search) do
+        add_link("new_test", %Link{
+          includeAllFields: true,
+          fields: %{
+            last_name: %Link{
+              analyzers: [:text_en]
+            }
+          }
+        })
+
+        remove_link("new_test")
+      end
   """
+  @spec alter(Collection.t() | View.t(), do: Macro.t()) :: Macro.t()
   defmacro alter(object, do: block) do
     quote do
       object = unquote(object)
@@ -612,27 +999,31 @@ defmodule ArangoXEcto.Migration do
   end
 
   @doc """
-  Creates on of the following: 
+  Creates one of the following: 
 
     * an index
     * a collection with no schema
+    * an analyzer
 
-  When reversing (in a `change/0` running backwards), indexes are only dropped
-  if they exist, and no errors are raised. To enforce dropping an index, use
+  When reversing (in a `change/0` running backwards), objects are only dropped
+  if they exist, and no errors are raised. To enforce dropping an object, use
   `drop/1`.
 
   ## Examples
 
       create index("users", [:name])
       create collection("posts")
+      create analyzer(:norm_en, :norm, [:frequency, :position], %{
+          locale: "en",
+          accent: false,
+          case: :lower
+        })
 
   """
+  @spec create(object) :: object
+        when object: Collection.t() | Index.t() | Analyzer.t()
   def create(%Collection{} = collection) do
     do_create(collection, :create)
-  end
-
-  def create(%View{} = view) do
-    do_create(view, :create)
   end
 
   def create(%Index{} = index) do
@@ -646,7 +1037,7 @@ defmodule ArangoXEcto.Migration do
   end
 
   @doc """
-  Creates a collection without a schema or an index if it doesn't exist already.
+  Same as `create/1` except it will only create the object if it doesn't exist already.
 
   ## Examples
 
@@ -654,17 +1045,32 @@ defmodule ArangoXEcto.Migration do
 
       create_if_not_exists collection("posts")
 
+      create_if_not_exists analyzer(:norm_en, :norm, [:frequency, :position], %{
+          locale: "en",
+          accent: false,
+          case: :lower
+        })
+
   """
+  @spec create_if_not_exists(object) :: object
+        when object: Collection.t() | Index.t() | Analyzer.t()
   def create_if_not_exists(%Index{} = index) do
     Runner.execute({:create_if_not_exists, __prefix__(index)})
+    index
   end
 
   def create_if_not_exists(%Collection{} = collection) do
     do_create(collection, :create_if_not_exists)
   end
 
-  defp do_create(collection_or_view, command) do
-    Runner.execute({command, __prefix__(collection_or_view), []})
+  def create_if_not_exists(%Analyzer{} = analyzer) do
+    Runner.execute({:create, __prefix__(analyzer)})
+    analyzer
+  end
+
+  defp do_create(collection, command) do
+    Runner.execute({command, __prefix__(collection), []})
+    collection
   end
 
   @doc """
@@ -672,13 +1078,19 @@ defmodule ArangoXEcto.Migration do
 
     * an index
     * a collection
+    * a view
+    * an analyzer
 
   ## Examples 
 
       drop index("users", [:name])
       drop collection("posts")
+      drop view("users_search")
+      drop analyzer("users_search")
 
   """
+  @spec drop(object) :: object
+        when object: Collection.t() | Index.t() | View.t() | Analyzer.t()
   def drop(%mod{} = object) when mod in [Collection, Index, View, Analyzer] do
     Runner.execute({:drop, __prefix__(object)})
 
@@ -686,7 +1098,7 @@ defmodule ArangoXEcto.Migration do
   end
 
   @doc """
-  Drops a collection or index if it exists
+  Same as `drop/1` except only drops if it exists.
 
   Does not raise an error if the specified collection or index does not exist.
 
@@ -694,8 +1106,12 @@ defmodule ArangoXEcto.Migration do
 
       drop_if_exists index("users", [:name])
       drop_if_exists collection("posts")
+      drop_if_exists view("users_search")
+      drop_if_exists analyzer("users_search")
 
   """
+  @spec drop_if_exists(object) :: object
+        when object: Collection.t() | Index.t() | View.t() | Analyzer.t()
   def drop_if_exists(%mod{} = object)
       when mod in [Collection, Index, View, Analyzer] do
     Runner.execute({:drop_if_exists, __prefix__(object)})
@@ -727,17 +1143,18 @@ defmodule ArangoXEcto.Migration do
   end
 
   @doc """
-  Creates a collection struct
-
-  Used to in functions that perform actions on the database.
-
-  Accepts a collection type parameter that can either be `:document` or `:edge`, otherwise it will
-  raise an error. The default option is `:document`.
+  Creates a collection struct that can be provided to one of the action functions.
 
 
   ## Options
 
-  Accepts an options parameter as the third argument. For available keys please refer to the [ArangoDB API doc](https://www.arangodb.com/docs/stable/http/collection-creating.html).
+  Accepts an options parameter as the third argument. For available keys please refer to the
+  [ArangoDB API doc](https://www.arangodb.com/docs/stable/http/collection-creating.html).
+  The following options differ slightly:
+
+    * `:type` - accepts either `:document` or `:edge`. Default is `:document`.
+    * `:prefix` - the prefix for the collection. This will be the prefix database used for the
+      collection.
 
   ## Examples
 
@@ -763,7 +1180,7 @@ defmodule ArangoXEcto.Migration do
   def edge(edge_name, opts \\ []), do: collection(edge_name, Keyword.put(opts, :type, :edge))
 
   @doc """
-  Creates an index struct
+  Creates an index struct that can be passed to an action function.
 
   Default index type is a hash. To change this pass the `:type` option in options.
 
@@ -774,16 +1191,19 @@ defmodule ArangoXEcto.Migration do
 
   Options only apply to the creation of indexes and has no effect when using the `drop/1` function.
 
-  - `:type` - The type of index to create
-    - Accepts: `:fulltext`, `:geo`, `:hash`, `:persistent`, `:skiplist` or `:ttl`
-  - `:unique` - If the index should be unique, defaults to false (hash, persistent & skiplist only)
-  - `:sparse` - If index should be spares, defaults to false (hash, persistent & skiplist only)
-  - `:deduplication` - If duplication of array values should be turned off, defaults to true (hash & skiplist only)
-  - `:minLength` - Minimum character length of words to index (fulltext only)
-  - `:geoJson` -  If a geo-spatial index on a location is constructed and geoJson is true, then the order
+    * `:name` - The name of the index (usefull for phoenix constraints). Defaults to
+    "idx*_*<collection>*_*<fields_separated_by_underscore>".
+    * `:prefix` - the prefix for the collection. This will be the prefix database used for the
+        index collection.
+    * `:type` - The type of index to create
+      * Accepts: `:fulltext`, `:geo`, `:hash`, `:persistent`, `:skiplist` or `:ttl`
+    * `:unique` - If the index should be unique, defaults to false (hash, persistent & skiplist only)
+    * `:sparse` - If index should be spares, defaults to false (hash, persistent & skiplist only)
+    * `:deduplication` - If duplication of array values should be turned off, defaults to true (hash & skiplist only)
+    * `:minLength` - Minimum character length of words to index (fulltext only)
+    * `:geoJson` -  If a geo-spatial index on a location is constructed and geoJson is true, then the order
   within the array is longitude followed by latitude (geo only)
-  - `:expireAfter` - Time in seconds after a document's creation it should count as `expired` (ttl only)
-  - `:name` - The name of the index (usefull for phoenix constraints)
+    * `:expireAfter` - Time in seconds after a document's creation it should count as `expired` (ttl only)
 
   ## Examples
 
@@ -792,15 +1212,21 @@ defmodule ArangoXEcto.Migration do
       iex> index("users", [:email])
       %ArangoXEcto.Migration.Index{collection_name: "users", fields: [:email]}
 
-  Create dual index on email and ph_number fields
+  Create dual index on email and ph_number fields with a specified name
 
-      iex> index("users", [:email, :ph_number])
-      %ArangoXEcto.Migration.Index{collection_name: "users", fields: [:email, :ph_number]}
+      iex> index("users", [:email, :ph_number], name: "my_cool_index")
+      %ArangoXEcto.Migration.Index{collection_name: "users", fields: [:email, :ph_number], name:
+      "my_cool_index"}
 
   Create unique email index
 
       iex> index("users", [:email], unique: true)
       %ArangoXEcto.Migration.Index{collection_name: "users", fields: [:email], unique: true}
+
+  Create a geo index
+
+      iex> index("users", [:coordinates], type: :geo)
+      %ArangoXEcto.Migration.Index{collection_name: "users", fields: [:coordinates], type: :geo}
   """
   @spec index(String.t(), [atom() | String.t()], [Index.index_option()]) :: Index.t()
   def index(collection_name, fields, opts \\ []), do: Index.new(collection_name, fields, opts)
@@ -808,7 +1234,7 @@ defmodule ArangoXEcto.Migration do
   @doc """
   Shortcut for creating a unique index.
 
-  See `index/3` for more information.
+  Same as passing :unique as true to `index/3`. See `index/3` for more information.
   """
   @spec unique_index(String.t(), [atom() | String.t()], [Index.index_option()]) :: Index.t()
   def unique_index(collection, fields, opts \\ []) when is_list(opts) do
@@ -816,29 +1242,76 @@ defmodule ArangoXEcto.Migration do
   end
 
   @doc """
-  Represents a view module
+  Creates a view struct that can be passed to an action function.
+
+  This is similar to the `collection/2` function except its representation is for a view.
+
+  ## Options
+
+  TODO: Add note about reading the docs for options.
+
+    * `:prefix` - the prefix for the view. This will be the prefix database used for the
+        Arango search view.
+
+  ## Examples
+
+      iex> view("users_search")
+      %ArangoXEcto.Migration.View{name: "users_search")
+
+      iex> view("users_search", primarySortCompression: :none)
+      %ArangoXEcto.Migration.View{name: "users_search", primarySortCompression: :none)
   """
+  @spec view(atom() | String.t(), [View.view_option()]) :: View.t()
   defdelegate view(name, opts \\ []), to: View, as: :new
 
   @doc """
-  Represents an analyzer module
+  Creates an analyzer struct that can be passed to an action function.
+
+  ## Parameters
+
+    * `:name` - the name of the analyzer to be created
+    * `:type` - the type of the analyzer, available options are
+      `t:ArangoXEcto.Migration.Analyzer.type/0`.
+    * `:features` - a list of enabled features, available options are
+      `t:ArangoXEcto.Migration.Analyzer.feature/0`.
+    * `:properties` - additional options for the analyzer, dependant on the type. Refer to the
+      `ArangoDB` docs. TODO: add link.
   """
+  @spec analyzer(atom() | String.t(), Analyzer.type(), [Analyzer.feature()], map(), Keyword.t()) ::
+          Analyzer.t()
   defdelegate analyzer(name, type, features, properties \\ %{}, opts \\ []),
     to: Analyzer,
     as: :new
+
+  @doc """
+  Represents an analyzer for deletion.
+
+  Creates an analyzer struct with only a name so that it can be used to delete an analyzer.
+  """
+  @spec analyzer(atom() | String.t()) :: Analyzer.t()
+  def analyzer(name) when is_binary(name) or is_atom(name) do
+    %Analyzer{name: name}
+  end
 
   @doc """
   Executes arbitrary AQL.
 
   The argument is typically a string, containing the AQL command to be executed.
 
+  You can also run arbitrary code as part of your migrations by supplying an anonymous function.
+  This is advantageous as it defers the execution of the anonymous function until after the
+  migration callback is terminated (see [Executing and flushing](#module-executing-and-flushing)).
+
   Reversible commands can be defined by calling `execute/2`.
 
   ## Examples
 
       execute "FOR u IN `users` RETURN u.name"
+
+      execute(fn -> repo().update_all("posts", set: [published: true]) end)
   """
-  def execute(command) when is_binary(command) or is_function(command, 0) or is_list(command) do
+  @spec execute(String.t() | function()) :: :ok
+  def execute(command) when is_binary(command) or is_function(command, 0) do
     Runner.execute(command)
   end
 
@@ -866,6 +1339,7 @@ defmodule ArangoXEcto.Migration do
         defp execute_down, do: repo().query!("'Down query …';", [], [log: :info])
       end
   """
+  @spec execute(String.t() | function(), String.t() | function()) :: :ok
   def execute(up, down)
       when (is_binary(up) or is_function(up, 0) or is_list(up)) and
              (is_binary(down) or is_function(down, 0) or is_list(down)) do
@@ -875,8 +1349,22 @@ defmodule ArangoXEcto.Migration do
   @doc """
   Adds a field when creating or altering a collection with subfields.
 
-  See `add/3` for options and more info.
+  This makes the field type an object in the JSON Schema with the sub fields and options. See
+  `add/3` for available options for an object.
+
+  ## Example
+
+      add_embed :fields do
+        add :name, :string
+        add :type, :string
+      end
+
+      add_embed :likes, comment: "my likes" do
+        add :type, :string
+        add :number, :integer
+      end
   """
+  @spec add_embed(atom(), Keyword.t(), do: Macro.t()) :: Macro.t()
   defmacro add_embed(field, opts \\ [], do: block) when is_atom(field) and is_list(opts) do
     quote do
       Runner.subcommand({:add_embed, unquote(field), [], unquote(opts)})
@@ -888,12 +1376,12 @@ defmodule ArangoXEcto.Migration do
   end
 
   @doc """
-  Adds a field when creating or altering multiple collection with subfields.
+  Adds a field that has multiple instances of the object.
 
-  This represents a list of objects.
-
-  See `add_embed/3` for options and more info.
+  This represents a list of objects. This essentially wraps `add_embed/3`'s JSON Schema output with
+  an array so that multiple instances of the object is represented.
   """
+  @spec add_embed_many(atom(), Keyword.t(), do: Macro.t()) :: Macro.t()
   defmacro add_embed_many(field, opts \\ [], do: block) when is_atom(field) and is_list(opts) do
     quote do
       Runner.subcommand({:add_embed_many, unquote(field), [], unquote(opts)})
@@ -907,64 +1395,67 @@ defmodule ArangoXEcto.Migration do
   @doc """
   Adds a field when creating or altering a collection.
 
-  TODO: Add note about what types are accepted
+  This function accepts certain JSON Schema types and depending on the type it will accept certain
+  options. The available types and options can be found in the
+  `ArangoXEcto.Migration.JsonSchema.convert/2` function.
 
-  TODO: Update examples and options
   ## Examples
 
       create collection("posts") do
-        add :title, :string, default: "Untitled"
+        add :title, :string, comment: "Some comment"
       end
 
-  ## Options
-
-    * `:primary_key` - when `true`, marks this field as the primary key.
-      If multiple fields are marked, a composite primary key will be created.
-    * `:default` - the column's default value. It can be a string, number, empty
-      list, list of strings, list of numbers, or a fragment generated by
-      `fragment/1`.
-    * `:null` - determines whether the column accepts null values. When not specified,
-      the database will use its default behaviour (which is to treat the column as nullable
-      in most databases).
-    * `:size` - the size of the type (for example, the number of characters).
-      The default is no size, except for `:string`, which defaults to `255`.
-    * `:precision` - the precision for a numeric type. Required when `:scale` is
-      specified.
-    * `:scale` - the scale of a numeric type. Defaults to `0`.
-    * `:comment` - adds a comment to the added column.
-    * `:after` - positions field after the specified one. Only supported on MySQL,
-      it is ignored by other databases.
-    * `:generated` - a string representing the expression for a generated column. See
-      above for a comprehensive set of examples for each of the built-in adapters. If
-      specified alongside `:start_value`/`:increment`, those options will be ignored.
-    * `:start_value` - option for `:identity` key, represents initial value in sequence
-      generation. Default is defined by the database.
-    * `:increment` - option for `:identity` key, represents increment value for
-      sequence generation. Default is defined by the database.
-
+      alter collection("posts") do
+        add :summary, :string
+        add :object, :map
+        add :age, :integer, min: 18, max: 99
+      end
   """
+  @spec add(atom(), ArangoXEcto.Migration.JsonSchema.field(), Keyword.t()) :: :ok
   def add(field, type, opts \\ []) when is_atom(field) and is_list(opts) do
-    validate_precision_opts!(opts, field)
     validate_type!(type)
     Runner.subcommand({:add, field, type, opts})
   end
 
+  @doc """
+  Adds a field if it does not exist yet when altering a collection.
+
+  This is identical to `add/3` except only creates it if it hasn't been already.
+
+  This is not reversible as existence can't be known beforehand.
+
+  ## Examples
+
+      alter collection("posts") do
+        add_if_not_exists :title, :string, comment: "Some comment"
+      end
+  """
+  @spec add_if_not_exists(atom(), ArangoXEcto.Migration.JsonSchema.field(), Keyword.t()) :: :ok
   def add_if_not_exists(field, type, opts \\ []) when is_atom(field) and is_list(opts) do
-    validate_precision_opts!(opts, field)
     validate_type!(type)
     Runner.subcommand({:add_if_not_exists, field, type, opts})
   end
 
   @doc """
   Adds a primary sort to a view.
+
+  This adds a sort to the view. TODO: add a description of it.
+
+  This accepts a field name and a sort direction (either `:asc` or `:desc`), defaults to `:asc`.
   """
+  @spec add_sort(atom(), :asc | :desc) :: :ok
   def add_sort(field, direction \\ :asc) when is_atom(field) and direction in [:asc, :desc] do
     Runner.subcommand({:add_sort, field, direction})
   end
 
   @doc """
   Adds a stored value to a view.
+
+  This adds a stored value to the view. TODO: add a description of it.
+
+  This accepts a field name and a compression (either `:lz4` or `:none`), defaults to `:lz4`.
   """
+  @spec add_store(atom(), :none | :lz4) :: :ok
   def add_store(fields, compression \\ :lz4) when compression in [:none, :lz4] do
     Runner.subcommand({:add_store, List.wrap(fields), compression})
   end
@@ -972,8 +1463,20 @@ defmodule ArangoXEcto.Migration do
   @doc """
   Adds a link to a view.
 
-  Uses a `ArangoXEcto.View.Link` struct to define the link
+  Uses a `ArangoXEcto.View.Link` struct to define the link. See the module for more information.
+
+  ## Example
+
+      link "users", %Link{
+        includeAllFields: true,
+        fields: %{
+          name: %Link{
+            analyzers: [:text_en]
+          }
+        }
+      }
   """
+  @spec add_link(atom() | String.t(), ArangoXEcto.View.Link.t()) :: :ok
   def add_link(schema_name, link) when is_atom(schema_name),
     do: add_link(Atom.to_string(schema_name), link)
 
@@ -998,6 +1501,7 @@ defmodule ArangoXEcto.Migration do
       end
 
   """
+  @spec rename(object, to: object) :: object when object: Collection.t() | View.t() | atom()
   def rename(%Collection{} = collection_current, to: %Collection{} = collection_new) do
     Runner.execute({:rename, __prefix__(collection_current), __prefix__(collection_new)})
     collection_new
@@ -1010,6 +1514,76 @@ defmodule ArangoXEcto.Migration do
 
   def rename(current_field, to: new_field) when is_atom(current_field) and is_atom(new_field) do
     Runner.subcommand({:rename, current_field, new_field})
+    new_field
+  end
+
+  @doc """
+  Modifies the type of a field when altering a collection.
+
+  This command is not reversible unless the `:from` option is provided. You want to specify all the
+  necessary options and types so that it can be rolled back properly.
+
+  See `add/3` for more information on supported types.
+
+  ## Examples
+
+      alter collection("users") do
+        modify :name, :string
+      end
+
+      # Self rollback when using the :from option
+      alter collection("users") do
+        modify :name, :string, from: :integer
+      end
+
+      # Modify field with rollback options
+      alter collection("users") do
+        modify :name, :string, null: true, from: {:integer, null: false}
+      end
+
+  ## Options
+
+  Options are the same as `add/3` but with the additional following option.
+
+    * `:from` - specifies the current type and options of the field.
+  """
+  @spec modify(atom(), ArangoXEcto.Migration.JsonSchema.field(), Keyword.t()) :: :ok
+  def modify(field, type, opts \\ []) when is_atom(field) and is_list(opts) do
+    validate_type!(type)
+    Runner.subcommand({:modify, field, type, opts})
+  end
+
+  @doc """
+  Modifies a field when creating or altering a collection with subfields.
+
+  See `modify/3` for options and more info.
+  """
+  @spec modify_embed(atom(), Keyword.t(), do: Macro.t()) :: Macro.t()
+  defmacro modify_embed(field, opts \\ [], do: block) when is_atom(field) and is_list(opts) do
+    quote do
+      Runner.subcommand({:modify_embed, unquote(field), [], unquote(opts)})
+      unquote(block)
+      Runner.end_subcommand()
+
+      :ok
+    end
+  end
+
+  @doc """
+  Modifies a field when creating or altering many objects with subfields.
+
+  See `modify_embed/3` for options and more info.
+  """
+  @spec modify_embed_many(atom(), Keyword.t(), do: Macro.t()) :: Macro.t()
+  defmacro modify_embed_many(field, opts \\ [], do: block)
+           when is_atom(field) and is_list(opts) do
+    quote do
+      Runner.subcommand({:modify_embed_many, unquote(field), [], unquote(opts)})
+      unquote(block)
+      Runner.end_subcommand()
+
+      :ok
+    end
   end
 
   @doc """
@@ -1027,6 +1601,7 @@ defmodule ArangoXEcto.Migration do
       end
 
   """
+  @spec remove(atom()) :: :ok
   def remove(field) when is_atom(field) do
     Runner.subcommand({:remove, field})
   end
@@ -1044,6 +1619,7 @@ defmodule ArangoXEcto.Migration do
       end
 
   """
+  @spec remove(atom(), ArangoXEcto.Migration.JsonSchema.field(), Keyword.t()) :: :ok
   def remove(field, type, opts \\ []) when is_atom(field) do
     validate_type!(type)
     Runner.subcommand({:remove, field, type, opts})
@@ -1062,70 +1638,10 @@ defmodule ArangoXEcto.Migration do
       end
 
   """
+  @spec remove_if_exists(atom(), ArangoXEcto.Migration.JsonSchema.field(), Keyword.t()) :: :ok
   def remove_if_exists(field, type, opts \\ []) when is_atom(field) do
     validate_type!(type)
     Runner.subcommand({:remove_if_exists, field, type, opts})
-  end
-
-  @doc """
-  Modifies the type of a field when altering a collection.
-
-  This command is not reversible unless the `:from` option is provided.
-
-  See `add/3` for more information on supported types.
-
-  ## Examples
-
-      alter collection("users") do
-        modify :name, :string
-      end
-
-      # Self rollback when using the :from option
-      alter collection("users") do
-        modify :name, :string, from: :integer
-      end
-
-  ## Options
-
-    * `:default` - changes the default value of the column.
-    * `:from` - specifies the current type and options of the field.
-    * `:comment` - adds a comment to the modified column.
-  """
-  def modify(field, type, opts \\ []) when is_atom(field) and is_list(opts) do
-    validate_precision_opts!(opts, field)
-    validate_type!(type)
-    Runner.subcommand({:modify, field, type, opts})
-  end
-
-  @doc """
-  Modifies a field when creating or altering a collection with subfields.
-
-  See `modify/3` for options and more info.
-  """
-  defmacro modify_embed(field, opts \\ [], do: block) when is_atom(field) and is_list(opts) do
-    quote do
-      Runner.subcommand({:modify_embed, unquote(field), [], unquote(opts)})
-      unquote(block)
-      Runner.end_subcommand()
-
-      :ok
-    end
-  end
-
-  @doc """
-  Modifies a field when creating or altering many collections with subfields.
-
-  See `modify_embed/3` for options and more info.
-  """
-  defmacro modify_embed_many(field, opts \\ [], do: block)
-           when is_atom(field) and is_list(opts) do
-    quote do
-      Runner.subcommand({:modify_embed_many, unquote(field), [], unquote(opts)})
-      unquote(block)
-      Runner.end_subcommand()
-
-      :ok
-    end
   end
 
   @doc """
@@ -1143,6 +1659,7 @@ defmodule ArangoXEcto.Migration do
       end
 
   """
+  @spec remove_link(atom() | String.t()) :: :ok
   def remove_link(schema_name) when is_binary(schema_name) or is_atom(schema_name) do
     Runner.subcommand({:remove_link, "#{schema_name}"})
   end
@@ -1166,6 +1683,7 @@ defmodule ArangoXEcto.Migration do
       end
 
   """
+  @spec remove_link(atom() | String.t(), ArangoXEcto.View.Link.t()) :: :ok
   def remove_link(schema_name, link) when is_atom(schema_name),
     do: remove_link(Atom.to_string(schema_name), link)
 
@@ -1191,9 +1709,8 @@ defmodule ArangoXEcto.Migration do
       Setting it to `false` disables the column.
     * `:type` - the type of the `:inserted_at` and `:updated_at` columns.
       Defaults to `:naive_datetime`.
-    * `:default` - the columns' default value. It can be a string, number, empty
-      list, list of strings, list of numbers, or a fragment generated by
-      `fragment/1`.
+
+    The rest of the options are passed to the fields
 
   """
   def timestamps(opts \\ []) when is_list(opts) do
@@ -1287,11 +1804,5 @@ defmodule ArangoXEcto.Migration do
     Types defined through Ecto.Type or Ecto.ParameterizedType aren't allowed,
     use their underlying types instead.
     """
-  end
-
-  defp validate_precision_opts!(opts, field) when is_list(opts) do
-    if opts[:scale] && !opts[:precision] do
-      raise ArgumentError, "field #{Atom.to_string(field)} is missing precision option"
-    end
   end
 end

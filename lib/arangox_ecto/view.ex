@@ -46,7 +46,7 @@ defmodule ArangoXEcto.View do
 
   ### Defining the analyzer module 
 
-  **When in dynamic mode only** the analyzer module needs to be passed to the view so that 
+  **When in dynamic mode** the analyzer module needs to be passed to the view so that 
   the analyzers will be automatically created. This option will be ignored in static mode. 
   You can pass the analyzer module by passing the module to the `:analyzer_module` option on 
   the use statement.
@@ -137,6 +137,7 @@ defmodule ArangoXEcto.View do
 
   alias ArangoXEcto.View.Link
 
+  @type t :: module()
   @type name :: String.t()
   @type compression :: :lz4 | :none
 

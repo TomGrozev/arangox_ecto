@@ -32,6 +32,7 @@ defmodule ArangoXEcto.Association do
       * `relationship` - The relationship to the specified schema, default `:parent`
       * `on_replace` - The action taken on associations when schema is replaced
     """
+    @moduledoc since: "2.0.0"
 
     @behaviour Ecto.Association
     @on_replace_opts [:raise, :mark_as_invalid, :delete, :delete_if_exists, :nilify, :update]
@@ -136,10 +137,8 @@ defmodule ArangoXEcto.Association do
     end
 
     @impl true
-    def build(refl, owner, attributes) do
-      refl
-      |> build(owner)
-      |> struct(attributes)
+    def build(refl, owner, _attributes) do
+      build(refl, owner)
     end
 
     @impl true
@@ -223,16 +222,16 @@ defmodule ArangoXEcto.Association do
 
     This allows for multiple related schemas through the same edge. E.g.
 
-      graph :friends, [Person, Pet], edge: Friends, on_replace: :delete
+        graph :friends, [Person, Pet], edge: Friends, on_replace: :delete
 
-    Use the fields on the schema to identify which schema to use. If the fields in the list
+    Use the fields on the schema to identify which schema to use. If any of the fields in the list
     exists then it will use the key as the module.
 
-      graph :friends, %{
-          Person => [:first_name],
-          Pet => [:name]
-        },
-        edge: ArangoXEcto.Integration.UserContent
+        graph :friends, %{
+            Person => [:first_name],
+            Pet => [:name]
+          },
+          edge: Friends
       
 
     The available fields are:
@@ -248,6 +247,7 @@ defmodule ArangoXEcto.Association do
       * `relationship` - The relationship to the specified schema, default `:parent`
       * `on_replace` - The action taken on associations when schema is replaced
     """
+    @moduledoc since: "2.0.0"
 
     import Ecto.Query
     import ArangoXEcto.Query, only: [graph: 5]
@@ -447,13 +447,35 @@ defmodule ArangoXEcto.Association do
       raise RuntimeError, "joins not supported by graph relations, use AQL graph traversal"
     end
 
+    defp graph_direction(:inbound, maps, select_fields, edge_source, collections) do
+      from(
+        p in fragment("[?]", splice(^maps)),
+        join:
+          g in graph(1..1, :inbound, p._id, ^edge_source, vertexCollections: splice(^collections)),
+        on: true,
+        select: map(g, ^select_fields)
+      )
+    end
+
+    defp graph_direction(:outbound, maps, select_fields, edge_source, collections) do
+      from(
+        p in fragment("[?]", splice(^maps)),
+        join:
+          g in graph(1..1, :outbound, p._id, ^edge_source,
+            vertexCollections: splice(^collections)
+          ),
+        on: true,
+        select: map(g, ^select_fields)
+      )
+    end
+
     def assoc_query(%{queryables: queryables} = refl, values) do
       assoc_query(refl, queryables, values)
     end
 
     @impl true
     def assoc_query(assoc, _, ids) do
-      %{queryables: queryables, edge: edge} = assoc
+      %{queryables: queryables, edge: edge, direction: direction} = assoc
 
       edge_source = edge.__schema__(:source)
 
@@ -469,15 +491,7 @@ defmodule ArangoXEcto.Association do
 
       maps = Enum.map(ids, &%{_id: &1})
 
-      from(
-        p in fragment("[?]", splice(^maps)),
-        join:
-          g in graph(1..1, :outbound, p._id, ^edge_source,
-            vertexCollections: splice(^collections)
-          ),
-        on: true,
-        select: map(g, ^select_fields)
-      )
+      graph_direction(direction, maps, select_fields, edge_source, collections)
     end
 
     @impl true
@@ -638,7 +652,7 @@ defmodule ArangoXEcto.Association do
     @doc false
     def delete_all(%{edge: edge}, parent, repo_name, opts) do
       if value = Map.get(parent, :__id__) do
-        query = from e in edge, where: e._from == type(^value, :binary_id)
+        query = from(e in edge, where: e._from == type(^value, :binary_id))
 
         Queryable.delete_all(repo_name, query, opts)
       end

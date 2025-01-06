@@ -17,9 +17,9 @@ defmodule ArangoXEcto.Migrator do
   tasks but are appended with `.arango` to allow for both `ecto_sql`
   and `arangox_ecto` to be used side by side.
 
-    * `mix ecto.migrate.arango` - migrates an arango repository
-    * `mix ecto.rollback.arango` - rolls back a particular migration
-    * `mix ecto.gen.migration.arango` - generates a migration file
+    * `mix arango.migrate` - migrates an arango repository
+    * `mix arango.rollback` - rolls back a particular migration
+    * `mix arango.gen.migration` - generates a migration file
 
   ## Example: Running an individual migration
 
@@ -81,7 +81,28 @@ defmodule ArangoXEcto.Migrator do
       $ bin/my_app eval "MyApp.Release.migrate"
       $ bin/my_app eval "MyApp.Release.rollback(MyApp.Repo, 20231225190000)"
 
+  ## Example: Running migrations on application startup
+
+  Add the following to the top of your application child spec:
+
+      {ArangoXEcto.Migrator, 
+        repos: Application.fetch_env!(:my_app, :ecto_repos), 
+        skip: System.get_env("SKIP_MIGRATIONS") == "true")}
+
+  This will allow you to use the environment variable `SKIP_MIGRATIONS` to skip running the
+  migrations on startup.
+
+  Additionally, the other options specified in `up/4` can be passed. For example, if you wanted to
+  log the migrations and run them in a specific prefix you could do the following:
+
+      {ArangoXEcto.Migrator, 
+        repos: Application.fetch_env!(:my_app, :ecto_repos), 
+        log_migrator: true,
+        prefix: "super_cool_user"}
+
+  Rolling back would be done normally using the `mix arango.rollback` mix task.
   """
+  @moduledoc since: "2.0.0"
 
   use GenServer
 
@@ -109,6 +130,7 @@ defmodule ArangoXEcto.Migrator do
 
   See "Example: Running migrations on application startup" for more info.
   """
+  @spec start_link(Keyword.t()) :: GenServer.on_start()
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
@@ -206,7 +228,7 @@ defmodule ArangoXEcto.Migrator do
   end
 
   @doc """
-  Gets the migrations path for a repostiory.
+  Gets the migrations path for a repository.
 
   Accepts a second option allowing to specify the name of / path to the 
   directory for the migrations.
@@ -224,17 +246,16 @@ defmodule ArangoXEcto.Migrator do
   @doc """
   Gets all migrated versions.
 
-  Ensures the migrations collection exists if it 
-  doesn't exist yet.
+  Ensures the migrations collection exists if it doesn't exist yet.
 
   ## Options 
 
     * `:prefix` - the prefix to run the migrations on
     * `:dynamic_repo` - the name of the Repo supervisor process.
       See `c:Ecto.Repo.put_dynamic_repo/1`.
-    * `:skip_table_creation` - skips any attempt to create the migration table
+    * `:skip_collection_creation` - skips any attempt to create the migration collection
       Useful for situations where user needs to check migrations but has
-      insufficient permissions to create the table.  Note that migrations
+      insufficient permissions to create the collection.  Note that migrations
       commands may fail if this is set to true. Defaults to `false`.  Accepts a
       boolean.
   """
@@ -404,6 +425,7 @@ defmodule ArangoXEcto.Migrator do
   This is a shortcut to
 
       ArangoXEcto.Migrator.migrations(repo, [ArangoXEcto.Migrator.migrations_path(repo)])
+
   """
   @spec migrations(Ecto.Repo.t()) :: [{:up | :down, id :: integer(), name :: String.t()}]
   def migrations(repo) do
@@ -432,14 +454,55 @@ defmodule ArangoXEcto.Migrator do
 
   @doc """
   Executes a command on a repo
+   
+  The commands are passed from the migration module. A command essentially is the action of a
+  migration, e.g. create, alter, rename, delete an object.
 
-  Available commands are in `t:command/0`.
+  `opts` is passed to the database query when the command is run. Available options are dependant on
+  the command being executed.
 
-  `opts` is passed to the adapter when the command is run
+  ## Available Commands
+
+  All commands are either a tuple or a string with AQL which is executed. The first element of the
+  tuple is the action to be performed, the second is the object of the action. For some commands
+  (such as creation of a collection) there is a third element of the tuple.
+
+  ### Creates (:create and :create_if_not_exists)
+
+  | 2nd element (Object) |              Third element            |
+  | -------------------- | ------------------------------------- |
+  | Collection           | Field commands passed to `JsonSchema` |
+  | Index                |                                       |
+  | View                 | View definition commands              |
+  | Analyzer             |                                       |
+
+  ### Alter (:alter)
+
+  | 2nd element (Object) |                              Third element                          |
+  | -------------------- | ------------------------------------------------------------------- |
+  | Existing Collection  | Field commands passed to `JsonSchema` (merged with existing schema) |
+  | Existing View        | View definition commands                                            |
+
+  ### Drops (:drop and :drop_if_exists)
+
+  | 2nd element (Object) | Third element |
+  | -------------------- | ------------- |
+  | Existing Collection  |               |
+  | Existing Index       |               |
+  | Existing View        |               |
+  | Existing Analyzer    |               |
+
+  ### Rename (:rename)
+
+  | 2nd element (Object) |       Third element      |
+  | -------------------- | ------------------------ |
+  | Existing Collection  | Collection with new name |
+  | Existing View        | View with new name       |
   """
   @spec execute_command(
           Ecto.Adapter.adapter_meta(),
-          {command(), Collection.t() | Index.t() | View.t() | Analyzer.t(), list()},
+          {command(), Collection.t() | Index.t() | View.t() | Analyzer.t(),
+           [JsonSchema.command()]},
           Keyword.t()
         ) :: log()
   # Collection

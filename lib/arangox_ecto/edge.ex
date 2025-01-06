@@ -2,37 +2,32 @@ defmodule ArangoXEcto.Edge do
   @moduledoc """
   Defines an Arango Edge collection as an Ecto Schema Module.
 
-  Edge modules are dynamically created in the environment if they don't already exist. For more on how edge modules
-  are dynamically generated, please read `ArangoXEcto.edge_module/3`.
   This will define the required fields of an edge (`_from` and `_to`) and will define the default changeset.
 
-  Edges utilise Ecto relationships so that the powerful Ecto features can be used. Each Node requires a relationship
-  to be set, either a `outgoing/3` or `incoming/3`. Behind the scenes this creates an Ecto many_to_many relationship
-  and generates (or uses the provided) edge module as the intermediary schema.
-  Since the edge collection uses the full `_id` instead of the `_key` for the `_from` and `_to` fields, once
-  using any of the previously specified relationships a `__id__` field will be added to structs that will store
-  the value of the `_id` field so that relations can be loaded by Ecto.
+  Edge modules are dynamically created in the environment if they don't already exist. For more on 
+  how edge modules are dynamically generated, please read `ArangoXEcto.edge_module/3`.
 
-  ## Extending Edge Schemas
+  Edges utilise Ecto relationships so that the powerful Ecto features can be used. Each Node 
+  requires a relationship to be set, either a `outgoing/3` or `incoming/3`. Behind the scenes this 
+  creates a relationship similar to an Ecto many_to_many relationship and generates (or uses the 
+  provided) edge module as the intermediary schema. 
 
-  If you need to add additional fields to an edge, you can do so by creating your own edge module
-  and defining the required fields as well as any additional fields. Luckily there are some helper macros
-  so you don't have to do this manually again.
+  Since the edge collection uses the full `_id` instead of the `_key` for the `_from` and `_to` 
+  fields, we can't use the `:id` field. Schemas actually have an additional field which is 
+  `:__id__` and stores the `_id` value. 
 
-  When using a custom edge module, it must be passed to the relationship macros in the nodes using the `:edge`
-  option, read more about these relationships at `ArangoXEcto.Schema`. Additionally, the `:edge` option must
-  also be passed to the `ArangoXEcto.create_edge/4` function.
+  ## Creating an edge
 
-  A custom schema module must use this module by adding `use ArangoXEcto.Edge, from: FromSchema, to: ToSchema`.
+  Defining an edge is similar to how you would define a collection.
 
-  When defining the fields in your schema, make sure to call `edge_fields/1`. This will add the `_from`
-  and `_to` foreign keys to the schema. It does not have to be before any custom fields but it good convention
-  to do so.
+  When defining an edge schema you must define the `:from` and `:to` fields on the schema. You can
+  use the `edge_fields/0` function as a shortcut to define these fields.
 
-  A `changeset/2` function is automatically defined on the custom schema module but this must be overridden
-  this so that you can cast and validate the custom fields. The `edges_changeset/2` method should be called
-  to automatically implement the casting and validation of the `_from` and `_to` fields. It does not have
-  to be before any custom field operations but it good convention to do so.
+  A `changeset/2` function is automatically defined on the custom schema module but this must be 
+  overridden this so that you can cast and validate the custom fields. The `edges_changeset/2` 
+  method should be called to automatically implement the casting and validation of the `_from` and 
+  `_to` fields. It does not have to be before any custom field operations but it good convention to 
+  do so.
 
   ### Example
 
@@ -54,6 +49,21 @@ defmodule ArangoXEcto.Edge do
           |> cast(attrs, [:type])
           |> validate_required([:type])
         end
+      end
+
+  ## Multiple from and to schemas
+
+  Unlike in a regular many-to-many relationship, edges in ArangoDB can have multiple schemas
+  associated with it in the same from/to fields. In ArangoXEcto this is represented by using a list
+  for the `from` and `to` options when defining an edge. For example, you could have an edge like
+  the following.
+
+      defmodule MyProject.MyContent do
+        use ArangoXEcto.Edge,
+            from: User,
+            to: [Post, Comment]
+
+        ...
       end
   """
   use ArangoXEcto.Schema

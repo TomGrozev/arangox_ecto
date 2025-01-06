@@ -2,13 +2,59 @@ import Kernel, except: [apply: 3]
 
 defmodule ArangoXEcto.Query do
   @moduledoc """
-  Converts `Ecto.Query` structs into AQL syntax.
+  ArangoDB specific `Ecto.Query` functions.
 
-  This module is copied from
-  https://github.com/ArangoDB-Community/arangodb_ecto/blob/master/lib/arangodb_ecto/query.ex.
-  All credit goes to `mpoeter`, the original author. Please go check out the original of this file.
+  The `all/1`, `delete_all/1` and `update_all/1` functions in this module convert `Ecto.Query` 
+  structs into AQL syntax.
 
-  This is an updated version for Ecto V3
+  The Arango specific functions are available to support ArangoSearch questions and perform graph
+  queries.
+
+  ## ArangoSearch queries
+
+  ArangoSearch queries can be performed through the `search/3` and `or_search/3` macros. For
+  example, if you wanted to do a wildcard search for the title of your favorite movie you can do the
+  following.
+
+      from(MoviesView)
+      |> search([mv], fragment("LIKE(?, ?)", mv.title, "%War%"))
+      |> Repo.all()
+
+  You can see that a fragment is used to incluse custom AQL. If you wanted to use a specific 
+  analyzer, for example for case-insensitive searches, you could so using a fragment also like 
+  below.
+
+      from(MoviesView)
+      |> search([mv], fragment("ANALYZER(LIKE(?, ?), \\"norm_en\\")", mv.title, "%war%"))
+      |> Repo.all()
+
+  ## Graph searches
+
+  You can do graph queries inside Ecto queries. To do this you just use the `graph/5` macro
+  provided. This will generate the required fragment to do graph queries.
+
+  For example, take the following AQL query.
+
+  ```
+  FOR u IN 1..3 OUTBOUND "user/bob" friends
+    RETURN u
+  ```
+
+  You can represent that using the following Ecto query. Note that a select is required since Ecto
+  needs to know what fields to get when querying on a fragment.
+
+      from(
+        u in graph(1..3, :outbound, "user/bob", "friends"), 
+          select: map(u, [:first_name, :last_name])
+      )
+      |> Repo.all()
+
+  > #### Credit {: .info}
+  >
+  > This initial code for this module was used from 
+  > https://github.com/ArangoDB-Community/arangodb_ecto/blob/master/lib/arangodb_ecto/query.ex.
+  > Credit for the initial code goes to `mpoeter`. Updates were made since to enable additional
+  > functionality and to work with the latest Ecto version.
   """
 
   alias Ecto.Query
@@ -98,13 +144,15 @@ defmodule ArangoXEcto.Query do
   Below is an example of how you can implement using a custom analyzer:
 
       from(UsersView)
-      |> search([uv], fragment("ANALYZER(? == ?, \"identity\")", uv.first_name, "John"))
+      |> search([uv], fragment("ANALYZER(? == ?, \\"identity\\")", uv.first_name, "John"))
       |> Repo.all()
 
   """
   @doc since: "1.3.0"
   defmacro search(query, binding \\ [], expr) do
-    build_search(:and, query, binding, expr, __CALLER__)
+    query = build_search(:and, query, binding, expr, __CALLER__)
+
+    query
   end
 
   @doc """
@@ -117,7 +165,9 @@ defmodule ArangoXEcto.Query do
   """
   @doc since: "1.3.0"
   defmacro or_search(query, binding \\ [], expr) do
-    build_search(:or, query, binding, expr, __CALLER__)
+    query = build_search(:or, query, binding, expr, __CALLER__)
+
+    query
   end
 
   @doc false
@@ -136,8 +186,60 @@ defmodule ArangoXEcto.Query do
 
   @doc """
   Query an ArangoDB graph
+
+  This is a helper around searching a graph. This essentially generates a fragment that is used in
+  the from or join part of the Ecto query.
+
+  You **MUST** provide a select in the query, otherwise an error be raised since Ecto can't work out
+  what fields to use when a fragment is used.
+
+  There is a limitiation that you can't use the `Ecto.Query.API.struct/2` function since the query
+  is a fragment. If you need to load your results into a struct then you can use the
+  `ArangoXEcto.load/2` function.
+
+  ## Example
+
+  For example, lets take the following query.
+
+  ```
+  FOR u IN 1..3 OUTBOUND "user/bob" friends
+    RETURN u
+  ```
+
+  You can represent that using the following Ecto query. Note that like you would in any other Ecto
+  query, you need to pin any variables used.
+
+      from(
+        u in graph(1..3, :outbound, "user/bob", "friends"), 
+          select: map(u, [:first_name, :last_name])
+      )
+      |> Repo.all()
+
+  ## Providing options
+
+  You can also provide a keyword list as options as the last parameter to the macro.
+
+  ```
+  FOR u IN 1..3 OUTBOUND "user/bob" friends OPTIONS { vertexCollections: ["users"] }
+    RETURN u
+  ```
+
+  This can be done using like the following.
+
+      from(u in graph(1..3, :outbound, "user/bob", "friends", vertexCollections: ["users"]))
+      |> select([u], map(u, [:first_name, :last_name]))
+      |> Repo.all()
+
+  ## Dynamically selecting fields
+
+  If you want to select all of the fields on a struct you can use the following code and pin the
+  `select_fields` variable. Replace the `User` schema with the schema in question.
+
+      select_fields = Enum.map(User.__schema__(:fields), &User.__schema__(:field_source, &1))
   """
-  @spec graph(Range.t(), :inbound | :outbound, Macro.t(), Macro.t(), Keyword.t()) :: Macro.t()
+  @doc since: "2.0.0"
+  @spec graph(Range.t(), :inbound | :outbound | :any, Macro.t(), Macro.t(), Keyword.t()) ::
+          Macro.t()
   defmacro graph(range, direction, source, edge_graph, opts \\ [])
 
   defmacro graph({:.., _, [min, max]}, direction, source, edge_graph, opts) do
@@ -146,17 +248,22 @@ defmodule ArangoXEcto.Query do
             "graph range min must be positive and max must be greater or equal to the min"
     end
 
-    unless direction in [:inbound, :outbound] do
+    if not match?({:^, _, _}, direction) and direction not in [:inbound, :outbound, :any] do
       raise ArgumentError,
-            "graph direction can only be :inbound or :outbound"
+            "graph direction can only be :inbound, :outbound or :any"
     end
 
-    direction = Atom.to_string(direction) |> String.upcase()
+    direction =
+      if is_atom(direction) do
+        Atom.to_string(direction) |> String.upcase()
+      else
+        direction
+      end
 
     query_string =
       [
         "#{min}..#{max}",
-        direction,
+        quote(do: unquote(direction)),
         "?",
         "?"
       ]

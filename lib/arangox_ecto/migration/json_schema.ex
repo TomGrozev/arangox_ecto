@@ -1,7 +1,85 @@
 defmodule ArangoXEcto.Migration.JsonSchema do
   @moduledoc """
-  Converts migration command to JSON Schema
+  Converts migration command to JSON Schema.
+
+  This will take a list of commands that are generated from a migration and convert it into a
+  JSON Schema representation.
+
+  ArangoDB takes a JSON schema that has 3 arguments:
+
+    * `:rule` - the actual JSON schema to be checked (this is where the commands get converted to)
+    * `:level` - how ArangoDB checks a document against the schema
+    * `:message` - a message that is returned when the schema doesn't match
+
+  For more info on how to change the `:level` and `:message`, see `generate_schema/2`.
+
+  This is based on the JSON Schema definition, more info can be found
+  [here](https://json-schema.org/). Note that not all of the JSON Schema attributes are implemented,
+  so check the documentation in this module for what is implemented.
+
+  For example, take the following migration.
+
+      create collection(:users) do
+        add :first_name, :string, comment: "first_name column"
+        add :last_name, :string
+        add :gender, :integer
+        add :age, :integer
+        add :location, :map
+
+        timestamps()
+      end
+
+  This will result in the following JSON Schema.
+
+      %{
+        rule: %{
+          type: "object",
+          properties: %{
+            first_name: %{
+              type: "string",
+              comment: "first_name column"
+            },
+            last_name: %{type: "string"},
+            gender: %{type: "integer"},
+            age: %{type: "integer"},
+            location: %{type: "map"},
+            inserted_at: %{
+              type: "string",
+              pattern: "<regex pattern>"
+            },
+            updated_at: %{
+              type: "string",
+              pattern: "<regex pattern>"
+            }
+          }
+        },
+        level: :strict,
+        message:
+          "The document does not match the schema. Please ensure the document matches the json schema."
+      }
   """
+  @moduledoc since: "2.0.0"
+
+  @type field ::
+          :string
+          | :integer
+          | :number
+          | :decimal
+          | :float
+          | :enum
+          | :const
+          | :date
+          | :datetime
+          | :utc_datetime
+          | :utc_datetime_usec
+          | :naive_datetime
+          | :naive_datetime_usec
+          | :uuid
+          | :boolean
+          | :map
+          | {:array, field()}
+
+  @type command :: {atom(), field() | [command()], Keyword.t()}
 
   @type level :: :none | :new | :moderate | :strict
 
@@ -12,11 +90,21 @@ defmodule ArangoXEcto.Migration.JsonSchema do
   @default_msg "The document does not match the schema. Please ensure the document matches the json schema."
 
   @doc """
-  Generates an arangodb schema.
+  Generates an ArangoDB schema.
 
   Takes in the field commands and generates a schema.
+
+  ## Options
+
+    * `:level` - the level to use for ArangoDB schema checking. Available options are:
+      #{Enum.map_join(@available_levels, ", ", &inspect/1)}. `:strict` is the default.
+      Please refer to the ArangoDB docs for what these mean.
+      
+    * `:message` - a message to be returned when a document doesn't match the schema.
+
+    Any other options are passed to `convert/2`.
   """
-  @spec generate_schema([tuple()], Keyword.t()) :: t()
+  @spec generate_schema([command()], Keyword.t()) :: t()
   def generate_schema(commands, opts \\ [])
   def generate_schema([], _opts), do: nil
 
@@ -29,8 +117,93 @@ defmodule ArangoXEcto.Migration.JsonSchema do
   end
 
   @doc """
-  Converts commands to a json schema
+  Converts commands to a JSON schema
+
+  This will take commands in the format of:
+
+      {name, type_or_sub_commands, options}
+
+  For example, take the following:
+
+      {:first_name, :string, comment: "Some comment"}
+
+  Will result in the following part of the JSONSchema.
+
+      %{"type" => "string", :"$comment" => "Some comment"}
+
+  The type and options passed are validated to ensure they are the right type.
+
+  ## Available types
+
+    * `:string` - represents a string with the following options available
+      * `:min_length` - Minimum length of the string
+      * `:max_length` - Maximum length of the string
+      * `:pattern` - A string regex pattern
+      * `:format` - A validator for the format, available ones can be found [here](https://json-schema.org/understanding-json-schema/reference/string#built-in-formats).
+      * `:content_encoding` - The content encoding to use, available values can be found [here](https://json-schema.org/understanding-json-schema/reference/non_json_data#contentencoding)
+      * `:content_media_type` - The content media type to use, available values can be found [here](https://json-schema.org/understanding-json-schema/reference/non_json_data#contentencoding)
+      * `:comment` - A comment to add to the object, it has no functional application
+      * `:null` - If the value can be null
+
+    * `:integer`, `:number`, `:decimal` or `:float` - represents a numeric value with the following options available
+      * `:minimum` - Minimum value of the number
+      * `:exclusive_minimum` - Minimum value of the number exclusive
+      * `:maximum` - Maximum value of the number
+      * `:exclusive_maximum` - Maximum value of the number exclusive
+      * `:multiple_of` - A value the number must be a multiple of
+      * `:comment` - A comment to add to the object, it has no functional application
+      * `:null` - If the value can be null
+
+    * `:enum` - a set of values
+      * `:values` - A list of possible values
+      * `:comment` - A comment to add to the object, it has no functional application
+      * `:null` - If the value can be null
+
+    * `:const` - a value
+      * `:value` - A list of possible values
+      * `:comment` - A comment to add to the object, it has no functional application
+
+    * `:date` - represents a date
+      * This essentially just calls `:string` with format=date. Accepts the same parameters as `:string`
+
+    * `:datetime`, `:utc_datetime` or `:utc_datetime_usec` - represents a datetime
+      * This essentially just calls `:string` with format=date-time. Accepts the same parameters as `:string`
+
+    * `:naive_datetime` or `:naive_datetime_usec` - represents a naive datetime
+      * This essentially just calls `:string` with a custom pattern to validate a naive datetime. Accepts the same parameters as `:string`
+
+    * `:uuid` - represents a uuid
+      * This essentially just calls `:string` with a custom pattern to validate a uuid. Accepts the same parameters as `:string`
+
+    * `:boolean` - represents a boolean with the following options available
+      * `:comment` - A comment to add to the object, it has no functional application
+
+    * `:map` - represents a map with the following options available
+      * `:comment` - A comment to add to the object, it has no functional application
+      * `:null` - If the value can be null
+
+    * `{:array, sub_type}` - represents an array with the specified `sub_type` which can be any type
+      * `:min_items` - Minimum number of items in the array
+      * `:max_items` - Maximum number of items in the array
+      * `:unique_items` - Boolean if each item must be unique
+      * `:comment` - A comment to add to the object, it has no functional application
+      * `:null` - If the value can be null
+
+    * `[sub_command]` - an object with sub properties where `sub_command` is a command
+      * `:pattern_properties` - A pattern for property keys, see [the docs](https://json-schema.org/understanding-json-schema/reference/object#patternProperties) for more info
+      * `:additional_properties` - The type of non-listed properties (or false to disallow), see [the docs](https://json-schema.org/understanding-json-schema/reference/object#additionalproperties) for more info
+      * `:required` - A list of required properties
+      * `:min_properties` - The minimum number of properties
+      * `:max_properties` - The maximum number of properties
+      * `:comment` - A comment to add to the object, it has no functional application
+      * `:null` - If the value can be null
+
+  ## Options
+
+    * `:schema` - the existing schema to apply the migrations to. This is useful so that a schema
+      isn't overwritten and is instead updated.
   """
+  @spec convert([command()], Keyword.t()) :: map()
   def convert(commands, opts) do
     opts =
       Keyword.update(opts, :schema, %{}, fn schema ->
@@ -65,12 +238,14 @@ defmodule ArangoXEcto.Migration.JsonSchema do
     |> apply_nullable(command_opts)
   end
 
-  defp command_to_schema({_name, :boolean, _command_opts}, _opts) do
+  defp command_to_schema({_name, :boolean, command_opts}, _opts) do
     %{type: "boolean"}
+    |> maybe_add_opt(command_opts, :"$comment", :comment)
   end
 
   defp command_to_schema({_name, :map, command_opts}, _opts) do
     %{type: "object"}
+    |> maybe_add_opt(command_opts, :"$comment", :comment)
     |> apply_nullable(command_opts)
   end
 
