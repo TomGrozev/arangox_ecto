@@ -274,7 +274,7 @@ defmodule ArangoXEcto do
 
   #### Preloading
 
-  Due to how graph relations work the regular `Ecto.Repo.preload/3` function will only return maps
+  Due to how graph relations work the regular `c:Ecto.Repo.preload/3` function will only return maps
   instead of structs. If you want to preload the structs you can use the `ArangoXEcto.preload/4`
   function.
 
@@ -907,8 +907,8 @@ defmodule ArangoXEcto do
   @doc """
   Preloads all associations on the given struct or structs.
 
-  This is similar to `Ecto.Repo.preload/3` except it loads graph associations. It functions the same
-  as `Ecto.Repo.preload/3` but has a slight syntax change.
+  This is similar to `c:Ecto.Repo.preload/3` except it loads graph associations. It functions the same
+  as `c:Ecto.Repo.preload/3` but has a slight syntax change.
 
   This is needed because graph associations use a fake relation module to simulate the required
   behaviour. This means that due to a check in Ecto preloads, it won't match the queried structs.
@@ -918,8 +918,8 @@ defmodule ArangoXEcto do
 
     * `structs_or_struct_or_nil` - A singular or list of structs to preload (if nil will return nil)
     * `repo` - the Ecto repo to use
-    * `preloads` - the preload fields (see `Ecto.Repo.preload/3` for more info)
-    * `opts` - the options to use (same as `Ecto.Repo.preload/3`
+    * `preloads` - the preload fields (see `c:Ecto.Repo.preload/3` for more info)
+    * `opts` - the options to use (same as `c:Ecto.Repo.preload/3`
 
   ## Example
 
