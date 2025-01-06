@@ -244,43 +244,6 @@ defmodule ArangoXEcto.Schema do
   end
 
   @doc """
-  Defines an outgoing relationship of one object
-
-  Unlike `outgoing/3`, this does not create a graph relation and instead places the `_id` in a field in the incoming
-  schema. This **MUST** be accompanied by a `one_incoming/3` definition in the other target schema.
-
-  Behind the scenes this injects the `__id__` field to store the `_id` value and uses the built-in Ecto `has_one/3`
-  function.
-
-  Options passed to the `opts` attribute are passed to the `has_many/3` definition. Refrain from overriding the
-  `:references` and `:foreign_key` attributes unless you know what you are doing.
-
-  ## Example
-
-      defmodule MyProject.User do
-        use ArangoXEcto.Schema
-
-        schema "users" do
-          field :name, :string
-
-          one_outgoing :best_post, MyProject.Post
-        end
-      end
-  """
-  # TODO: remove this
-  defmacro one_outgoing(name, target, opts \\ []) do
-    quote do
-      opts = unquote(opts)
-
-      has_one(unquote(name), unquote(target),
-        references: :__id__,
-        foreign_key: Ecto.Association.association_key(__MODULE__, "id"),
-        on_replace: :delete
-      )
-    end
-  end
-
-  @doc """
   Defines an incoming relationship
 
   This is almost exactly the same as `outgoing/3` except it defines that the relationship is
@@ -331,59 +294,5 @@ defmodule ArangoXEcto.Schema do
     quote do
       graph(unquote(name), unquote(source), :inbound, unquote(opts))
     end
-  end
-
-  @doc """
-  Defines an incoming relationship of one object
-
-  Unlike `incoming/3`, this does not create a graph relation and instead places the `_id` in a field. If the value
-  passed to the name attribute is `:user` then the foreign key created on this schema will be `:user_id` and will
-  store the full `_id` of that user. By storing the full `_id`, you are still able to perform full AQL queries.
-
-  This **MUST** be accompanied by a `one_outgoing/3` definition in the other target schema.
-
-  Behind the scenes this injects the `__id__` field to store the `_id` value and uses the built-in Ecto `belongs_to/3`
-  function.
-
-  Options passed to the `opts` attribute are passed to the `belongs_to/3` definition. Refrain from overriding the
-  `:references` and `:foreign_key` attributes unless you know what you are doing.
-
-  ## Example
-
-      defmodule MyProject.Post do
-        use ArangoXEcto.Schema
-
-        schema "posts" do
-          field :title, :string
-
-          one_incoming :user, MyProject.User
-        end
-      end
-  """
-  # TODO: remove this
-  defmacro one_incoming(name, source, opts \\ []) do
-    quote do
-      opts = unquote(opts)
-
-      belongs_to(unquote(name), unquote(source),
-        references: :__id__,
-        foreign_key: unquote(name) |> build_foreign_key(),
-        on_replace: :delete
-      )
-    end
-  end
-
-  @doc """
-  Creates a foreign key with correct format
-
-  Appends _id to the atom
-  """
-  # TODO: remove this
-  @spec build_foreign_key(atom()) :: atom()
-  def build_foreign_key(name) do
-    name
-    |> Atom.to_string()
-    |> Kernel.<>("_id")
-    |> String.to_atom()
   end
 end
