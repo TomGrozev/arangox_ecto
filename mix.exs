@@ -1,7 +1,7 @@
 defmodule ArangoXEcto.MixProject do
   use Mix.Project
 
-  @version "1.3.1"
+  @version "2.0.0"
   @source_url "https://github.com/TomGrozev/arangox_ecto"
 
   def project do
@@ -148,6 +148,10 @@ defmodule ArangoXEcto.MixProject do
 
   defp extras do
     [
+      "guides/introduction/Getting Started.md",
+      "guides/introduction/Testing with ArangoXEcto.md",
+      "guides/howtos/Graphing.md",
+      "guides/howtos/Arango Search.md",
       "CHANGELOG.md"
     ]
   end
@@ -157,7 +161,7 @@ defmodule ArangoXEcto.MixProject do
   defp groups_for_extras do
     [
       Introduction: ~r/guides\/introduction\/.?/,
-      Cheatsheets: ~r/cheetsheets\/.?/,
+      Cheatsheets: ~r/guides\/cheetsheets\/.?/,
       "How-To's": ~r/guides\/howtos\/.?/
     ]
   end
