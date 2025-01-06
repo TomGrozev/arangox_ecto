@@ -177,12 +177,12 @@ defmodule ArangoXEcto.MigratorTest do
 
     @disable_ddl_transaction true
 
-    @migrate_first "return 'This is a first part of ecto.migrate';"
-    @migrate_middle "return 'In the middle of ecto.migrate';"
-    @migrate_second "return 'This is a second part of ecto.migrate';"
-    @rollback_first "return 'This is a first part of ecto.rollback';"
-    @rollback_middle "return 'In the middle of ecto.rollback';"
-    @rollback_second "return 'This is a second part of ecto.rollback';"
+    @migrate_first "return 'This is a first part of arango.migrate';"
+    @migrate_middle "return 'In the middle of arango.migrate';"
+    @migrate_second "return 'This is a second part of arango.migrate';"
+    @rollback_first "return 'This is a first part of arango.rollback';"
+    @rollback_middle "return 'In the middle of arango.rollback';"
+    @rollback_second "return 'This is a second part of arango.rollback';"
 
     def change do
       execute(@migrate_first, @rollback_second)
@@ -195,10 +195,12 @@ defmodule ArangoXEcto.MigratorTest do
   end
 
   defmodule InvalidMigration do
+    @moduledoc false
     use ArangoXEcto.Migration
   end
 
   defmodule EmptyUpDownMigration do
+    @moduledoc false
     use ArangoXEcto.Migration
 
     def up, do: flush()
@@ -206,6 +208,7 @@ defmodule ArangoXEcto.MigratorTest do
   end
 
   defmodule EmptyChangeMigration do
+    @moduledoc false
     use ArangoXEcto.Migration
 
     def change, do: flush()

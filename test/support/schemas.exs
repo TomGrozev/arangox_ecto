@@ -18,7 +18,10 @@ defmodule ArangoXEcto.Integration.User do
 
     outgoing(:posts, ArangoXEcto.Integration.Post)
 
-    outgoing(:posts_two, ArangoXEcto.Integration.Post, edge: ArangoXEcto.Integration.UserPosts)
+    outgoing(:posts_two, ArangoXEcto.Integration.Post,
+      edge: ArangoXEcto.Integration.UserPosts,
+      on_replace: :delete
+    )
 
     outgoing(:my_posts, ArangoXEcto.Integration.Post, edge: ArangoXEcto.Integration.UserContent)
 

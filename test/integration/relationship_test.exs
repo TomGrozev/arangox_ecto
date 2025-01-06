@@ -85,11 +85,11 @@ defmodule ArangoxEctoTest.Integration.RelationshipTest do
 
     test "put edge connection" do
       post = %Post{__id__: post_id} = %Post{title: "abc"} |> TestRepo.insert!()
+      post2 = %Post{__id__: post2_id} = %Post{title: "cba"} |> TestRepo.insert!()
 
       attrs = %{
         first_name: "John",
-        last_name: "Smith",
-        posts: [post]
+        last_name: "Smith"
       }
 
       user =
@@ -101,6 +101,17 @@ defmodule ArangoxEctoTest.Integration.RelationshipTest do
       assert [%{_from: ^user_id, _to: ^post_id}] = TestRepo.all(UserPosts)
 
       assert %User{__id__: ^user_id, posts_two: [%Post{__id__: ^post_id, title: "abc"}]} =
+               TestRepo.preload(user, :posts_two)
+
+      user =
+        user
+        |> Ecto.Changeset.cast(%{}, [])
+        |> ArangoXEcto.Changeset.put_graph(:posts_two, [post2])
+        |> TestRepo.update!()
+
+      assert [%{_from: ^user_id, _to: ^post2_id}] = TestRepo.all(UserPosts)
+
+      assert %User{__id__: ^user_id, posts_two: [%Post{__id__: ^post2_id, title: "cba"}]} =
                TestRepo.preload(user, :posts_two)
     end
 
