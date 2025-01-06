@@ -153,6 +153,7 @@ defmodule ArangoXEcto.View do
       Module.register_attribute(__MODULE__, :view_links, accumulate: true)
       Module.put_attribute(__MODULE__, :view_primary_sort_compression, :lz4)
 
+      @doc false
       def __analyzer_module__ do
         Keyword.get(unquote(opts), :analyzer_module)
       end

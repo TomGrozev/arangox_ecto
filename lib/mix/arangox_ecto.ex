@@ -21,6 +21,7 @@ defmodule Mix.ArangoXEcto do
   @doc """
   Returns the private repository path relative to the source.
   """
+  @spec source_repo_priv(Ecto.Repo.t()) :: String.t()
   def source_repo_priv(repo) do
     config = repo.config()
     priv = config[:priv] || "priv/#{repo |> Module.split() |> List.last() |> Macro.underscore()}"
