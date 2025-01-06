@@ -75,12 +75,90 @@ defmodule ArangoXEcto.MixProject do
 
   defp docs do
     [
-      main: "readme",
-      logo: "images/logo.png",
-      extras: ["README.md"],
+      main: "ArangoXEcto",
       source_ref: "v#{@version}",
-      canonical: "http://hex.pm/arangox_ecto",
-      source_url: @source_url
+      logo: "images/logo.png",
+      extra_section: "GUIDES",
+      source_url: @source_url,
+      skip_undefined_reference_warnings_on: ["CHANGELOG.md"],
+      extras: extras(),
+      before_closing_head_tag: &before_closing_head_tag/1,
+      groups_for_extras: groups_for_extras(),
+      groups_for_docs: [
+        group_for_function("Migration")
+      ],
+      groups_for_modules: [
+        ArangoSearch: [
+          ArangoXEcto.Analyzer,
+          ArangoXEcto.View,
+          ArangoXEcto.View.Link
+        ],
+        Geo: [
+          ArangoXEcto.GeoData,
+          ArangoXEcto.Types.GeoJSON
+        ],
+        Migration: [
+          ArangoXEcto.Migration,
+          ArangoXEcto.Migration.Analyzer,
+          ArangoXEcto.Migration.Collection,
+          ArangoXEcto.Migration.Command,
+          ArangoXEcto.Migration.Index,
+          ArangoXEcto.Migration.JsonSchema,
+          ArangoXEcto.Migration.View,
+          ArangoXEcto.Migrator,
+          ArangoXEcto.Sandbox
+        ],
+        "Relation structs": [
+          ArangoXEcto.Association.EdgeMany,
+          ArangoXEcto.Association.Graph
+        ]
+      ],
+      canonical: "http://hex.pm/arangox_ecto"
+    ]
+  end
+
+  defp before_closing_head_tag(:html) do
+  """
+  <script>
+    function mermaidLoaded() {
+      mermaid.initialize({
+        startOnLoad: false,
+        theme: document.body.className.includes("dark") ? "dark" : "default"
+      });
+      let id = 0;
+      for (const codeEl of document.querySelectorAll("pre code.mermaid")) {
+        const preEl = codeEl.parentElement;
+        const graphDefinition = codeEl.textContent;
+        const graphEl = document.createElement("div");
+        const graphId = "mermaid-graph-" + id++;
+        mermaid.render(graphId, graphDefinition).then(({svg, bindFunctions}) => {
+          graphEl.innerHTML = svg;
+          bindFunctions?.(graphEl);
+          preEl.insertAdjacentElement("afterend", graphEl);
+          preEl.remove();
+        });
+      }
+    }
+  </script>
+  <script async src="https://cdn.jsdelivr.net/npm/mermaid@10.2.3/dist/mermaid.min.js" onload="mermaidLoaded();"></script>
+  """
+  end
+
+  defp before_closing_head_tag(:epub), do: ""
+
+  defp extras do
+    [
+      "CHANGELOG.md"
+    ]
+  end
+
+  defp group_for_function(group), do: {String.to_atom(group), &(&1[:group] == group)}
+
+  defp groups_for_extras do
+    [
+      Introduction: ~r/guides\/introduction\/.?/,
+      Cheatsheets: ~r/cheetsheets\/.?/,
+      "How-To's": ~r/guides\/howtos\/.?/
     ]
   end
 end
