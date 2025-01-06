@@ -1077,65 +1077,6 @@ defmodule ArangoXEcto do
   def get_id_from_module(_, _), do: raise(ArgumentError, "Invalid module or key")
 
   @doc """
-  Converts raw output of a query into a struct
-
-  Transforms string map arguments into atom key map, adds id key and drops `_id`, `_key` and `_rev` keys.
-  Then it creates a struct from filtered arguments using module.
-
-  If a list of maps are passed then the maps are enumerated over.
-
-  ## Parameters
-
-    * `maps` - List of maps or singular map to convert to a struct
-    * `module` - Module to use for the struct
-
-  ## Example
-
-      iex> {:ok, users} = ArangoXEcto.aql_query(
-            Repo,
-            "FOR user IN users RETURN user"
-          )
-      {:ok,
-      [
-        %{
-          "_id" => "users/12345",
-          "_key" => "12345",
-          "_rev" => "_bHZ8PAK---",
-          "first_name" => "John",
-          "last_name" => "Smith"
-        }
-      ]}
-
-      iex> ArangoXEcto.raw_to_struct(users, User)
-      [
-        %User{
-          id: "12345",
-          first_name: "John",
-          last_name: "Smith"
-        }
-      ]
-  """
-  # TODO: remove this func before release
-  @deprecated "Use load/2 instead"
-  @spec raw_to_struct(map() | [map()], Ecto.Schema.t()) :: struct()
-  def raw_to_struct(map, module) when is_list(map) and is_atom(module) do
-    Enum.map(map, &raw_to_struct(&1, module))
-  end
-
-  def raw_to_struct(%{"_id" => _id, "_key" => _key} = map, module)
-      when is_map(map) and is_atom(module) do
-    schema_type!(module)
-
-    args =
-      patch_map(map)
-      |> filter_keys_for_struct()
-
-    struct(module, args)
-  end
-
-  def raw_to_struct(_, _), do: raise(ArgumentError, "Invalid input map or module")
-
-  @doc """
   Loads raw map into Ecto structs
 
   Uses `c:Ecto.Repo.load/2` to load a deep map result into Ecto structs.
@@ -1181,7 +1122,6 @@ defmodule ArangoXEcto do
         }
       ]
   """
-  # TODO: check if this is the same as the preload logic
   @spec load(map() | [map()], Ecto.Schema.t() | [Ecto.Schema.t()]) :: struct()
   def load(map, module) when is_list(map),
     do: Enum.map(map, &load(&1, module))
@@ -1813,17 +1753,6 @@ defmodule ArangoXEcto do
 
   defp process_vars({query, vars}, {key, val}),
     do: {query, [{key, dump(val)} | vars]}
-
-  defp patch_map(map) do
-    for {k, v} <- map, into: %{}, do: {String.to_atom(k), v}
-  end
-
-  defp filter_keys_for_struct(map) do
-    key = Map.get(map, :_key)
-
-    Map.put(map, :id, key)
-    |> Map.drop([:_id, :_rev, :_key])
-  end
 
   defp collection_type_to_integer(:document), do: 2
 
