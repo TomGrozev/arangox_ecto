@@ -58,7 +58,7 @@ defmodule ArangoXEcto.Query do
   """
 
   alias Ecto.Query
-  alias Ecto.Query.{BooleanExpr, Builder, JoinExpr, QueryExpr}
+  alias Ecto.Query.{BooleanExpr, Builder, JoinExpr}
 
   @doc """
   Creates an AQL query to fetch all entries from the data store matching the given Ecto query.
@@ -386,7 +386,7 @@ defmodule ArangoXEcto.Query do
     [
       ?\s
       | intersperse_map(joins, ?\s, fn %JoinExpr{
-                                         on: %QueryExpr{expr: expr},
+                                         on: %{expr: expr},
                                          qual: qual,
                                          ix: ix,
                                          source: source
@@ -416,7 +416,7 @@ defmodule ArangoXEcto.Query do
   defp order_by(%Query{order_bys: order_bys} = query, sources) do
     [
       " SORT "
-      | intersperse_map(order_bys, ", ", fn %QueryExpr{expr: expr} ->
+      | intersperse_map(order_bys, ", ", fn %{expr: expr} ->
           intersperse_map(expr, ", ", &order_by_expr(&1, sources, query))
         end)
     ]
@@ -438,13 +438,13 @@ defmodule ArangoXEcto.Query do
     [" LIMIT " | expr(expr, sources, query)]
   end
 
-  defp offset_and_limit(%Query{offset: %QueryExpr{expr: _}, limit: nil} = query, _) do
+  defp offset_and_limit(%Query{offset: %{expr: _}, limit: nil} = query, _) do
     error!(query, "offset can only be used in conjunction with limit")
   end
 
   # limit can either be a QueryExpr or a LimitExpr
   defp offset_and_limit(
-         %Query{offset: %QueryExpr{expr: offset_expr}, limit: %{expr: limit_expr}} = query,
+         %Query{offset: %{expr: offset_expr}, limit: %{expr: limit_expr}} = query,
          sources
        ) do
     [" LIMIT ", expr(offset_expr, sources, query), ", ", expr(limit_expr, sources, query)]
@@ -572,10 +572,10 @@ defmodule ArangoXEcto.Query do
     do: error!(query, "Unknown update operation #{inspect(cmd)} for AQL")
 
   defp distinct(nil, _sources, _query), do: []
-  defp distinct(%QueryExpr{expr: true}, _sources, _query), do: "DISTINCT "
-  defp distinct(%QueryExpr{expr: false}, _sources, _query), do: []
+  defp distinct(%{expr: true}, _sources, _query), do: "DISTINCT "
+  defp distinct(%{expr: false}, _sources, _query), do: []
 
-  defp distinct(%QueryExpr{expr: exprs}, _sources, query) when is_list(exprs) do
+  defp distinct(%{expr: exprs}, _sources, query) when is_list(exprs) do
     error!(query, "DISTINCT with multiple fields is not supported by AQL")
   end
 

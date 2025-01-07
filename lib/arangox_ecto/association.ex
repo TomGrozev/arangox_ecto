@@ -810,7 +810,7 @@ defmodule ArangoXEcto.Association do
     put_struct_field(mod, name, nil)
 
     Module.put_attribute(mod, :ecto_query_fields, {name, type})
-    Module.put_attribute(mod, :ecto_fields, {name, type})
+    Module.put_attribute(mod, :ecto_fields, {name, {type, :always}})
   end
 
   defp put_struct_field(mod, name, assoc) do

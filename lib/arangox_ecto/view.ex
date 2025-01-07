@@ -191,6 +191,15 @@ defmodule ArangoXEcto.View do
 
     postlude =
       quote unquote: false do
+        fields =
+          Stream.flat_map(@view_links, fn {mod, _} ->
+            mod.__struct__() |> Map.keys()
+          end)
+          |> Stream.reject(&(&1 in [:__struct__, :__meta__]))
+          |> Enum.uniq()
+
+        defstruct fields
+
         def __view__(:name), do: unquote(name)
         def __view__(:primary_sort), do: @view_primary_sorts
         def __view__(:stored_values), do: @view_stored_values
@@ -207,6 +216,14 @@ defmodule ArangoXEcto.View do
               source: {unquote(name), __MODULE__}
             }
           }
+        end
+
+        def __schema__(:updatable_fields) do
+          unquote({fields, []})
+        end
+
+        def __schema__(:insertable_fields) do
+          unquote({fields, []})
         end
 
         for clauses <- ArangoXEcto.View.__schema__(@view_links),
@@ -419,7 +436,7 @@ defmodule ArangoXEcto.View do
     Enum.reduce(schema.__schema__(:fields), {fields, field_sources}, fn field,
                                                                         {a_fields,
                                                                          a_field_sources} ->
-      {Map.put_new(a_fields, field, schema.__schema__(:type, field)),
+      {Map.put_new(a_fields, field, {schema.__schema__(:type, field), :always}),
        Map.put_new(a_field_sources, field, schema.__schema__(:field_source, field))}
     end)
   end
