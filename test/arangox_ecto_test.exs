@@ -118,8 +118,8 @@ defmodule ArangoXEctoTest do
     end
 
     test "valid Arangox function" do
-      assert {:ok, %Arangox.Response{body: %{"version" => _, "error" => _, "code" => _}}} =
-               ArangoXEcto.api_query(TestRepo, :get, "/_admin/database/target-version")
+      assert {:ok, %Arangox.Response{body: %{"authorized" => true}}} =
+               ArangoXEcto.api_query(TestRepo, :get, "/_admin/echo")
     end
   end
 
@@ -216,6 +216,12 @@ defmodule ArangoXEctoTest do
 
     test "automatically creates analyzers in dynamic mode" do
       assert :ok = ArangoXEcto.create_view(DynamicRepo, ArangoXEcto.Integration.AnalyzerTestView)
+    end
+
+    test "cannot create view in static mode" do
+      assert_raise RuntimeError, ~r/This function cannot be called in static mode/, fn ->
+        ArangoXEcto.create_view(TestRepo, ArangoXEcto.Integration.AnalyzerTestView)
+      end
     end
   end
 
@@ -378,6 +384,28 @@ defmodule ArangoXEctoTest do
       for %{"name" => expected_name} = expected <- expected_responses do
         actual = Enum.find(analyzers, fn %{"name" => name} -> name == expected_name end)
         assert ^expected = actual
+      end
+    end
+
+    test "cannot create analyzers in static mode" do
+      assert_raise RuntimeError, ~r/This function cannot be called in static mode/, fn ->
+        ArangoXEcto.create_analyzers(TestRepo, ArangoXEcto.Integration.Analyzers)
+      end
+    end
+  end
+
+  describe "create_collection/3" do
+    test "create collection in dynamic mode" do
+      assert :ok =
+               ArangoXEcto.create_collection(DynamicRepo, ArangoXEcto.Integration.DynamicClass)
+    end
+
+    test "cannot create collection in static mode" do
+      assert_raise RuntimeError, ~r/This function cannot be called in static mode/, fn ->
+        ArangoXEcto.create_collection(
+          TestRepo,
+          ArangoXEcto.Integration.DynamicClass
+        )
       end
     end
   end

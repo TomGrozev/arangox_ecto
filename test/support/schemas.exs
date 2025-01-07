@@ -64,6 +64,20 @@ defmodule ArangoXEcto.Integration.Class do
   end
 end
 
+defmodule ArangoXEcto.Integration.DynamicClass do
+  use ArangoXEcto.Schema
+  import Ecto.Changeset
+
+  embedded_schema do
+    field(:name, :string)
+  end
+
+  def changeset(changeset, attrs) do
+    changeset
+    |> cast(attrs, [:name])
+  end
+end
+
 defmodule ArangoXEcto.Integration.Post do
   use ArangoXEcto.Schema
 

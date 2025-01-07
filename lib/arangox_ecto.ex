@@ -883,24 +883,26 @@ defmodule ArangoXEcto do
   def create_collection(repo, schema, opts \\ []) do
     if Keyword.get(repo.config(), :static, true) do
       raise("This function cannot be called in static mode. Please use migrations instead.")
+    end
+
+    # will throw if not a schema
+    type = ArangoXEcto.schema_type!(schema)
+    collection_name = source_name(schema)
+    collection_opts = schema.__collection_options__() |> Keyword.put(:type, type)
+    indexes = schema.__collection_indexes__()
+
+    collection = Migration.collection(collection_name, collection_opts)
+
+    meta = Ecto.Adapter.lookup_meta(repo)
+
+    with {:ok, [{:info, _, _}]} <-
+           repo.__adapter__().execute_ddl(meta, {:create, collection, []}, opts),
+         {:ok, [{:info, _, _}]} <-
+           maybe_create_indexes(repo, meta, collection_name, indexes, opts) do
+      :ok
     else
-      # will throw if not a schema
-      type = ArangoXEcto.schema_type!(schema)
-      collection_name = source_name(schema)
-      collection_opts = schema.__collection_options__() |> Keyword.put(:type, type)
-      indexes = schema.__collection_indexes__()
-
-      collection = Migration.collection(collection_name, collection_opts)
-
-      meta = Ecto.Adapter.lookup_meta(repo)
-
-      case repo.__adapter__().execute_ddl(meta, {:create, collection, []}, opts) do
-        :ok ->
-          maybe_create_indexes(meta, collection_name, indexes, opts)
-
-        error ->
-          error
-      end
+      {:ok, [{:error, reason, _}]} -> {:error, reason}
+      {:error, reason} -> {:error, reason}
     end
   end
 
@@ -1720,12 +1722,12 @@ defmodule ArangoXEcto do
     end
   end
 
-  defp maybe_create_indexes(_, _, [], _), do: :ok
+  defp maybe_create_indexes(_, _, _, [], _), do: {:ok, [{:info, "", []}]}
 
-  defp maybe_create_indexes(repo, collection_name, %{} = indexes, opts),
-    do: maybe_create_indexes(repo, collection_name, Map.to_list(indexes), opts)
+  defp maybe_create_indexes(repo, meta, collection_name, %{} = indexes, opts),
+    do: maybe_create_indexes(repo, meta, collection_name, Map.to_list(indexes), opts)
 
-  defp maybe_create_indexes(repo, collection_name, indexes, opts) when is_list(indexes) do
+  defp maybe_create_indexes(repo, meta, collection_name, indexes, opts) when is_list(indexes) do
     Enum.reduce(indexes, nil, fn
       _index, {:error, reason} ->
         {:error, reason}
@@ -1735,11 +1737,11 @@ defmodule ArangoXEcto do
 
         index_mod = Migration.index(collection_name, fields, index_opts)
 
-        repo.__adapter__().execute_ddl(repo, index_mod, opts)
+        repo.__adapter__().execute_ddl(meta, {:create, index_mod}, opts)
     end)
   end
 
-  defp maybe_create_indexes(_, _, _, _),
+  defp maybe_create_indexes(_, _, _, _, _),
     do: raise("Invalid indexes provided. Should be a list of keyword lists.")
 
   defp process_vars(query, vars) when is_list(vars),

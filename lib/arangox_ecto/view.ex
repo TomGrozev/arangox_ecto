@@ -238,6 +238,7 @@ defmodule ArangoXEcto.View do
     end
   end
 
+  # coveralls-ignore-start
   @doc false
   def __after_compile__(%{module: module} = env, _) do
     # If we are compiling code, we can validate associations now,
@@ -263,6 +264,8 @@ defmodule ArangoXEcto.View do
 
     :ok
   end
+
+  # coveralls-ignore-end
 
   @doc """
   Defines a primary sort field on the view.
