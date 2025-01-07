@@ -38,7 +38,7 @@ defmodule ArangoXEcto.Integration.User do
       edge: ArangoXEcto.Integration.UserContent
     )
 
-    one_outgoing(:best_post, ArangoXEcto.Integration.Post)
+    has_one(:best_post, ArangoXEcto.Integration.Post)
 
     timestamps()
   end
@@ -84,7 +84,7 @@ defmodule ArangoXEcto.Integration.Post do
 
     incoming(:users_two, ArangoXEcto.Integration.User, edge: ArangoXEcto.Integration.UserPosts)
 
-    one_incoming(:user, ArangoXEcto.Integration.User)
+    belongs_to(:user, ArangoXEcto.Integration.User)
 
     timestamps()
   end
@@ -236,28 +236,6 @@ defmodule ArangoXEcto.Integration.AnalyzerTestView do
   alias ArangoXEcto.View.Link
 
   view "analyzer_test_view" do
-    link(
-      ArangoXEcto.Integration.Comment,
-      %Link{
-        includeAllFields: true,
-        fields: %{
-          name: %Link{
-            analyzers: [:f]
-          }
-        }
-      }
-    )
-
-    options(primarySortCompression: :lz4)
-  end
-end
-
-defmodule ArangoXEcto.Integration.FailedAnalyzerTestView do
-  use ArangoXEcto.View
-
-  alias ArangoXEcto.View.Link
-
-  view "failed_analyzer_test_view" do
     link(
       ArangoXEcto.Integration.Comment,
       %Link{

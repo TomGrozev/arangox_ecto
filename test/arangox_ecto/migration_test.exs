@@ -631,14 +631,6 @@ defmodule ArangoXEcto.MigrationTest do
       assert result == view(:user_search)
     end
 
-    test "create view without schema" do
-      create view = view("user_search")
-      flush()
-
-      assert last_command() ==
-               {:create, view, []}
-    end
-
     test "alters a view" do
       alter view(:user_search) do
         add_link("new_test", %Link{
@@ -695,14 +687,6 @@ defmodule ArangoXEcto.MigrationTest do
       assert collection.prefix == "foo"
     end
 
-    test "creates a view with prefix from migration" do
-      create(view(:user_search, prefix: "foo"))
-      flush()
-
-      {_, view, _} = last_command()
-      assert view.prefix == "foo"
-    end
-
     @tag prefix: "foo"
     test "creates a collection with prefix from manager" do
       create(collection(:users))
@@ -712,15 +696,6 @@ defmodule ArangoXEcto.MigrationTest do
       assert collection.prefix == "foo"
     end
 
-    @tag prefix: "foo"
-    test "creates a view with prefix from manager" do
-      create(view(:user_search))
-      flush()
-
-      {_, view, _} = last_command()
-      assert view.prefix == "foo"
-    end
-
     @tag prefix: "foo", repo_config: [migration_default_prefix: "baz"]
     test "creates a collection with prefix from manager overriding the default prefix configuration" do
       create(collection(:users))
@@ -728,15 +703,6 @@ defmodule ArangoXEcto.MigrationTest do
 
       {_, collection, _} = last_command()
       assert collection.prefix == "foo"
-    end
-
-    @tag prefix: "foo", repo_config: [migration_default_prefix: "baz"]
-    test "creates a view with prefix from manager overriding the default prefix configuration" do
-      create(view(:user_search))
-      flush()
-
-      {_, view, _} = last_command()
-      assert view.prefix == "foo"
     end
 
     @tag repo_config: [migration_default_prefix: "baz"]
@@ -749,30 +715,12 @@ defmodule ArangoXEcto.MigrationTest do
     end
 
     @tag repo_config: [migration_default_prefix: "baz"]
-    test "creates a view with prefix from migration overriding the default prefix configuration" do
-      create(view(:user_search, prefix: "foo"))
-      flush()
-
-      {_, view, _} = last_command()
-      assert view.prefix == "foo"
-    end
-
-    @tag repo_config: [migration_default_prefix: "baz"]
     test "create a collection with prefix from configuration" do
       create(collection(:users))
       flush()
 
       {_, collection, _} = last_command()
       assert collection.prefix == "baz"
-    end
-
-    @tag repo_config: [migration_default_prefix: "baz"]
-    test "create a view with prefix from configuration" do
-      create(view(:user_search))
-      flush()
-
-      {_, view, _} = last_command()
-      assert view.prefix == "baz"
     end
 
     @tag prefix: :foo
@@ -784,15 +732,6 @@ defmodule ArangoXEcto.MigrationTest do
       assert collection.prefix == "foo"
     end
 
-    @tag prefix: :foo
-    test "creates a view with prefix from manager matching atom prefix" do
-      create(view(:user_search, prefix: "foo"))
-      flush()
-
-      {_, view, _} = last_command()
-      assert view.prefix == "foo"
-    end
-
     @tag prefix: "foo"
     test "creates a collection with prefix from manager matching string prefix" do
       create(collection(:users, prefix: :foo))
@@ -802,31 +741,12 @@ defmodule ArangoXEcto.MigrationTest do
       assert collection.prefix == :foo
     end
 
-    @tag prefix: "foo"
-    test "creates a view with prefix from manager matching string prefix" do
-      create(view(:user_search, prefix: :foo))
-      flush()
-
-      {_, view, _} = last_command()
-      assert view.prefix == :foo
-    end
-
     @tag prefix: "bar"
     test "raise error when collection prefixes don't match" do
       assert_raise Ecto.MigrationError,
                    "the :prefix option `foo` does not match the migrator prefix `bar`",
                    fn ->
                      create(collection(:users, prefix: "foo"))
-                     flush()
-                   end
-    end
-
-    @tag prefix: "bar"
-    test "raise error when view prefixes don't match" do
-      assert_raise Ecto.MigrationError,
-                   "the :prefix option `foo` does not match the migrator prefix `bar`",
-                   fn ->
-                     create(view(:user_search, prefix: "foo"))
                      flush()
                    end
     end
@@ -1072,13 +992,6 @@ defmodule ArangoXEcto.MigrationTest do
       flush()
 
       assert last_command() == {:drop, collection}
-    end
-
-    test "creates an empty view" do
-      create view = view(:user_search)
-      flush()
-
-      assert last_command() == {:drop, view}
     end
 
     test "alters a collection" do

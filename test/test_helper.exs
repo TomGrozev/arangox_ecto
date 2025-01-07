@@ -41,7 +41,7 @@ Code.require_file("./support/migration.exs", __DIR__)
 defmodule ArangoXEcto.Integration.Case do
   defmacro __using__(opts \\ []) do
     quote do
-      use ExUnit.Case, unquote(Keyword.drop(opts, [:read, :write]))
+      use ExUnit.Case, unquote(Keyword.drop(opts, [:read, :write, :sandbox]))
 
       setup do
         :ok = ArangoXEcto.Sandbox.checkout(TestRepo, unquote(opts))

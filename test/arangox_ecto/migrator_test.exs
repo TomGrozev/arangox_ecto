@@ -266,9 +266,9 @@ defmodule ArangoXEcto.MigratorTest do
       output = capture_log(fn -> :ok = apply(ArangoXEcto.Migrator, direction, args) end)
       lines = String.split(output, "\n")
       assert Enum.at(lines, 1) =~ "== Running #{num} #{inspect(module)}.change/0"
-      assert Enum.at(lines, 3) =~ ~s[execute "return 'This is a first part of ecto.#{name}';"]
-      assert Enum.at(lines, 7) =~ "return 'In the middle of ecto.#{name}';"
-      assert Enum.at(lines, 9) =~ ~s[execute "return 'This is a second part of ecto.#{name}';"]
+      assert Enum.at(lines, 3) =~ ~s[execute "return 'This is a first part of arango.#{name}';"]
+      assert Enum.at(lines, 7) =~ "return 'In the middle of arango.#{name}';"
+      assert Enum.at(lines, 9) =~ ~s[execute "return 'This is a second part of arango.#{name}';"]
       assert Enum.at(lines, 13) =~ ~r"Migrated #{num} in \d.\ds"
     end
   end

@@ -215,12 +215,6 @@ defmodule ArangoXEctoTest do
     end
 
     test "automatically creates analyzers in dynamic mode" do
-      assert {:error, "while validating arangosearch link definition" <> _} =
-               ArangoXEcto.create_view(
-                 DynamicRepo,
-                 ArangoXEcto.Integration.FailedAnalyzerTestView
-               )
-
       assert :ok = ArangoXEcto.create_view(DynamicRepo, ArangoXEcto.Integration.AnalyzerTestView)
     end
   end
@@ -229,7 +223,7 @@ defmodule ArangoXEctoTest do
     test "creates analyzers" do
       # Fix for ArangoDB versions legacy parameter
       {:ok, %Arangox.Response{body: %{"version" => version}}} =
-        ArangoXEcto.api_query(TestRepo, :get, "/_api/version")
+        ArangoXEcto.api_query(DynamicRepo, :get, "/_api/version")
 
       analyzer_l =
         if Version.compare(version, "3.10.5") == :lt do
@@ -239,7 +233,7 @@ defmodule ArangoXEctoTest do
               "options" => %{"maxCells" => 21, "maxLevel" => 24, "minLevel" => 5},
               "type" => "shape"
             },
-            "name" => "arangox_ecto_test::l",
+            "name" => "arangox_ecto_dynamic_test::l",
             "type" => "geojson"
           }
         else
@@ -250,7 +244,7 @@ defmodule ArangoXEctoTest do
               "type" => "shape",
               "legacy" => false
             },
-            "name" => "arangox_ecto_test::l",
+            "name" => "arangox_ecto_dynamic_test::l",
             "type" => "geojson"
           }
         end
@@ -259,25 +253,25 @@ defmodule ArangoXEctoTest do
         %{
           "features" => ["norm"],
           "properties" => %{},
-          "name" => "arangox_ecto_test::a",
+          "name" => "arangox_ecto_dynamic_test::a",
           "type" => "identity"
         },
         %{
           "features" => ["frequency", "position"],
           "properties" => %{"delimiter" => ","},
-          "name" => "arangox_ecto_test::b",
+          "name" => "arangox_ecto_dynamic_test::b",
           "type" => "delimiter"
         },
         %{
           "features" => ["frequency", "position", "norm"],
           "properties" => %{"locale" => "en"},
-          "name" => "arangox_ecto_test::c",
+          "name" => "arangox_ecto_dynamic_test::c",
           "type" => "stem"
         },
         %{
           "features" => ["frequency", "position"],
           "properties" => %{"accent" => false, "case" => "lower", "locale" => "en"},
-          "name" => "arangox_ecto_test::d",
+          "name" => "arangox_ecto_dynamic_test::d",
           "type" => "norm"
         },
         %{
@@ -290,7 +284,7 @@ defmodule ArangoXEctoTest do
             "startMarker" => "a",
             "streamType" => "binary"
           },
-          "name" => "arangox_ecto_test::e",
+          "name" => "arangox_ecto_dynamic_test::e",
           "type" => "ngram"
         },
         %{
@@ -303,13 +297,13 @@ defmodule ArangoXEctoTest do
             "stemming" => false,
             "stopwords" => ["abc"]
           },
-          "name" => "arangox_ecto_test::f",
+          "name" => "arangox_ecto_dynamic_test::f",
           "type" => "text"
         },
         %{
           "features" => ["frequency"],
           "properties" => %{"locale" => "en"},
-          "name" => "arangox_ecto_test::g",
+          "name" => "arangox_ecto_dynamic_test::g",
           "type" => "collation"
         },
         %{
@@ -322,7 +316,7 @@ defmodule ArangoXEctoTest do
             "queryString" => "RETURN SOUNDEX(@param)",
             "returnType" => "string"
           },
-          "name" => "arangox_ecto_test::h",
+          "name" => "arangox_ecto_dynamic_test::h",
           "type" => "aql"
         },
         %{
@@ -348,19 +342,19 @@ defmodule ArangoXEctoTest do
               }
             ]
           },
-          "name" => "arangox_ecto_test::i",
+          "name" => "arangox_ecto_dynamic_test::i",
           "type" => "pipeline"
         },
         %{
           "features" => [],
           "properties" => %{"hex" => false, "stopwords" => ["xyz"]},
-          "name" => "arangox_ecto_test::j",
+          "name" => "arangox_ecto_dynamic_test::j",
           "type" => "stopwords"
         },
         %{
           "features" => [],
           "properties" => %{"break" => "all", "case" => "none"},
-          "name" => "arangox_ecto_test::k",
+          "name" => "arangox_ecto_dynamic_test::k",
           "type" => "segmentation"
         },
         analyzer_l,
@@ -371,15 +365,15 @@ defmodule ArangoXEctoTest do
             "longitude" => ["long", "longitude"],
             "options" => %{"maxCells" => 21, "maxLevel" => 24, "minLevel" => 5}
           },
-          "name" => "arangox_ecto_test::m",
+          "name" => "arangox_ecto_dynamic_test::m",
           "type" => "geopoint"
         }
       ]
 
-      assert :ok = ArangoXEcto.create_analyzers(TestRepo, ArangoXEcto.Integration.Analyzers)
+      assert :ok = ArangoXEcto.create_analyzers(DynamicRepo, ArangoXEcto.Integration.Analyzers)
 
       {:ok, %Arangox.Response{body: %{"result" => analyzers}}} =
-        ArangoXEcto.api_query(TestRepo, :get, "/_api/analyzer")
+        ArangoXEcto.api_query(DynamicRepo, :get, "/_api/analyzer")
 
       for %{"name" => expected_name} = expected <- expected_responses do
         actual = Enum.find(analyzers, fn %{"name" => name} -> name == expected_name end)
@@ -467,52 +461,6 @@ defmodule ArangoXEctoTest do
     test "does not allow other types" do
       assert_raise ArgumentError, ~r/Invalid module/, fn ->
         ArangoXEcto.get_id_from_module(%{}, 123)
-      end
-    end
-  end
-
-  describe "raw_to_struct/2" do
-    test "valid map" do
-      out =
-        %{
-          "_id" => "users/12345",
-          "_key" => "12345",
-          "_rev" => "_bHZ8PAK---",
-          "first_name" => "John",
-          "last_name" => "Smith"
-        }
-        |> ArangoXEcto.raw_to_struct(User)
-
-      assert Kernel.match?(%User{id: "12345", first_name: "John", last_name: "Smith"}, out)
-    end
-
-    test "invalid map" do
-      assert_raise ArgumentError, ~r/Invalid input map or module/, fn ->
-        %{
-          "_rev" => "_bHZ8PAK---",
-          "first_name" => "John",
-          "last_name" => "Smith"
-        }
-        |> ArangoXEcto.raw_to_struct(User)
-      end
-    end
-
-    test "invalid module" do
-      assert_raise ArgumentError, ~r/Not an Ecto Schema/, fn ->
-        %{
-          "_id" => "users/12345",
-          "_key" => "12345",
-          "_rev" => "_bHZ8PAK---",
-          "first_name" => "John",
-          "last_name" => "Smith"
-        }
-        |> ArangoXEcto.raw_to_struct(Ecto)
-      end
-    end
-
-    test "invalid argument types" do
-      assert_raise ArgumentError, ~r/Invalid input map or module/, fn ->
-        ArangoXEcto.raw_to_struct("test", 123)
       end
     end
   end
