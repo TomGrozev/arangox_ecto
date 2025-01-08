@@ -749,7 +749,7 @@ defmodule ArangoXEcto do
   @spec create_view(Ecto.Repo.t(), ArangoXEcto.View.t(), Keyword.t()) ::
           :ok | {:error, Arangox.Error.t()}
   def create_view(repo, view, opts \\ []) do
-    unless view?(view) do
+    if !view?(view) do
       raise ArgumentError, "not a valid view schema"
     end
 
@@ -760,7 +760,7 @@ defmodule ArangoXEcto do
     analyzer_module = view.__analyzer_module__()
 
     # create the analyzers
-    unless is_nil(analyzer_module) do
+    if not is_nil(analyzer_module) do
       create_analyzers(repo, analyzer_module, opts)
     end
 
@@ -1700,8 +1700,8 @@ defmodule ArangoXEcto do
   end
 
   defp maybe_create_edges_collection(schema, repo) do
-    unless Keyword.get(repo.config(), :static, true) or
-             collection_exists?(repo, source_name(schema), :edge) do
+    if !(Keyword.get(repo.config(), :static, true) or
+           collection_exists?(repo, source_name(schema), :edge)) do
       create_collection(repo, schema)
     end
 
@@ -1712,7 +1712,7 @@ defmodule ArangoXEcto do
     type = ArangoXEcto.schema_type!(schema)
     collection_name = schema.__schema__(:source)
 
-    unless ArangoXEcto.collection_exists?(repo, collection_name, type) do
+    if !ArangoXEcto.collection_exists?(repo, collection_name, type) do
       ArangoXEcto.create_collection(repo, schema)
     end
   end

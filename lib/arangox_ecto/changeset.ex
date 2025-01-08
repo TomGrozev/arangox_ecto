@@ -487,7 +487,7 @@ defmodule ArangoXEcto.Changeset do
                 "the second being the attributes."
 
       {module, _fun} ->
-        unless module in related do
+        if module not in related do
           raise ArgumentError,
                 "the module #{inspect(module)} is not a valid related schema for this association."
         end

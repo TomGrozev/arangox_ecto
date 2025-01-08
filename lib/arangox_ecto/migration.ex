@@ -522,7 +522,7 @@ defmodule ArangoXEcto.Migration do
     @doc false
     @spec validate_type!(atom()) :: :ok
     def validate_type!(type) do
-      unless type in @valid_types do
+      if type not in @valid_types do
         raise ArgumentError,
               "the type for analyzer must be one of (#{inspect(@valid_types)}), got: #{inspect(type)}"
       end
@@ -535,7 +535,7 @@ defmodule ArangoXEcto.Migration do
     @doc false
     @spec validate_features!([atom()]) :: :ok
     def validate_features!(features) do
-      unless is_list(features) and Enum.all?(features, &Enum.member?(@valid_keys, &1)) do
+      if !(is_list(features) and Enum.all?(features, &Enum.member?(@valid_keys, &1))) do
         raise ArgumentError,
               "the features provided are invalid, only accepts keys [:frequency, :norm, :position], got: #{inspect(features)}"
       end
@@ -548,10 +548,10 @@ defmodule ArangoXEcto.Migration do
     def validate_properties!(properties, name, type) do
       keys = valid_keys(type)
 
-      Enum.all?(properties, fn {k, v} ->
+      !Enum.all?(properties, fn {k, v} ->
         Enum.member?(keys, k) and valid_key?(k, v)
       end)
-      |> unless do
+      |> if do
         raise ArgumentError,
               "the properties provided for analyzer '#{name}' are invalid, only accepts keys #{inspect(keys)}, got: #{inspect(properties)}"
       end
@@ -942,7 +942,7 @@ defmodule ArangoXEcto.Migration do
     quote do
       object = unquote(object)
 
-      unless object.__struct__ in [Collection, View] do
+      if object.__struct__ not in [Collection, View] do
         raise Ecto.MigrationError,
               "subcommands can only be passed when creating a Collection or a View, the following was passed: `#{object.__struct__}`"
       end
@@ -987,7 +987,7 @@ defmodule ArangoXEcto.Migration do
     quote do
       object = unquote(object)
 
-      unless object.__struct__ in [Collection, View] do
+      if object.__struct__ not in [Collection, View] do
         raise Ecto.MigrationError,
               "subcommands can only be passed when altering a Collection or a View, the following was passed: `#{object.__struct__}`"
       end

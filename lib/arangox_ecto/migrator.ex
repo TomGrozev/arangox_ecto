@@ -142,7 +142,7 @@ defmodule ArangoXEcto.Migrator do
     {migrator, opts} = Keyword.pop(opts, :migrator, &ArangoXEcto.Migrator.run/3)
     opts = Keyword.put(opts, :all, true)
 
-    unless skip? do
+    if !skip? do
       for repo <- repos do
         {:ok, _, _} = with_repo(repo, &migrator.(&1, :up, opts))
       end
@@ -1128,7 +1128,7 @@ defmodule ArangoXEcto.Migrator do
 
   defp do_direction(:up, repo, version, mod, opts) do
     ensure_migrations_collection(repo, opts, fn config, versions ->
-      unless version in versions do
+      if version not in versions do
         do_up(repo, config, version, mod, opts)
       end
     end)
@@ -1217,7 +1217,7 @@ defmodule ArangoXEcto.Migrator do
     try do
       config = repo.config()
 
-      unless skip_collection_creation do
+      if !skip_collection_creation do
         verbose_schema_migration(repo, "create _migrations collection", fn ->
           SchemaMigration.ensure_schema_migrations_collection!(repo, config, opts)
         end)

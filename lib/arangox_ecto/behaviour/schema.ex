@@ -43,7 +43,7 @@ defmodule ArangoXEcto.Behaviour.Schema do
 
     opts = Keyword.merge(opts, source: collection, type: "insert") |> Keyword.put(:prefix, prefix)
 
-    unless Keyword.get(repo.config(), :static, true) do
+    if !Keyword.get(repo.config(), :static, true) do
       maybe_create_collection(repo, schema, prefix)
     end
 
@@ -91,7 +91,7 @@ defmodule ArangoXEcto.Behaviour.Schema do
     opts =
       Keyword.merge(opts, source: collection, type: "insert_all") |> Keyword.put(:prefix, prefix)
 
-    unless Keyword.get(repo.config(), :static, true) do
+    if !Keyword.get(repo.config(), :static, true) do
       maybe_create_collection(repo, schema, prefix)
     end
 
@@ -211,7 +211,7 @@ defmodule ArangoXEcto.Behaviour.Schema do
 
     opts = Keyword.merge(opts, source: collection, type: "update") |> Keyword.put(:prefix, prefix)
 
-    unless Keyword.get(repo.config(), :static, true) do
+    if !Keyword.get(repo.config(), :static, true) do
       maybe_create_collection(repo, schema, prefix)
     end
 
@@ -308,7 +308,7 @@ defmodule ArangoXEcto.Behaviour.Schema do
     collection_name = schema.__schema__(:source)
     opts = [prefix: prefix]
 
-    unless ArangoXEcto.collection_exists?(repo, collection_name, type, opts) do
+    if !ArangoXEcto.collection_exists?(repo, collection_name, type, opts) do
       ArangoXEcto.create_collection(repo, schema, opts)
     end
   end

@@ -109,7 +109,7 @@ defmodule ArangoXEcto.Association do
 
       related_key = :__id__
 
-      unless on_replace in @on_replace_opts do
+      if on_replace not in @on_replace_opts do
         raise ArgumentError,
               "invalid `:on_replace` option for #{inspect(name)}. " <>
                 "The only valid options are: " <>
@@ -118,7 +118,7 @@ defmodule ArangoXEcto.Association do
 
       where = opts[:where] || []
 
-      unless is_list(where) do
+      if not is_list(where) do
         raise ArgumentError,
               "expected `:where` for #{inspect(name)} to be a keyword " <>
                 "list, got: #{inspect(where)}"
@@ -355,7 +355,7 @@ defmodule ArangoXEcto.Association do
 
       validate_edge(name, edge)
 
-      unless Module.get_attribute(module, :ecto_fields)[owner_key] do
+      if !Module.get_attribute(module, :ecto_fields)[owner_key] do
         raise ArgumentError,
               "schema does not have the field #{inspect(owner_key)} used by " <>
                 "association #{inspect(name)}, this means it is likely not using ArangoXEcto.Schema"
@@ -364,14 +364,14 @@ defmodule ArangoXEcto.Association do
       on_delete = Keyword.get(opts, :on_delete, :nothing)
       on_replace = Keyword.get(opts, :on_replace, :raise)
 
-      unless on_delete in @on_delete_opts do
+      if on_delete not in @on_delete_opts do
         raise ArgumentError,
               "invalid `:on_delete` option for #{inspect(name)}. " <>
                 "The only valid options are: " <>
                 Enum.map_join(@on_delete_opts, ", ", &"`#{inspect(&1)}`")
       end
 
-      unless on_replace in @on_replace_opts do
+      if on_replace not in @on_replace_opts do
         raise ArgumentError,
               "invalid `:on_replace` option for #{inspect(name)}. " <>
                 "The only valid options are: " <>
@@ -380,7 +380,7 @@ defmodule ArangoXEcto.Association do
 
       where = opts[:where] || []
 
-      unless Keyword.keyword?(where) do
+      if !Keyword.keyword?(where) do
         raise ArgumentError,
               "expected `:where` for #{inspect(name)} to be a keyword " <>
                 "list, got: #{inspect(where)}"

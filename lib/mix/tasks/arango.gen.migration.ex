@@ -87,7 +87,7 @@ defmodule Mix.Tasks.Arango.Gen.Migration do
     path = opts[:migrations_path] || Path.join(source_repo_priv(repo), "migrations")
     base_name = "#{underscore(name)}.exs"
     file = Path.join(path, "#{timestamp()}_#{base_name}")
-    unless File.dir?(path), do: create_directory(path)
+    if !File.dir?(path), do: create_directory(path)
 
     fuzzy_path = Path.join(path, "*_#{base_name}")
 

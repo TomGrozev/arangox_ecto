@@ -245,15 +245,15 @@ defmodule ArangoXEcto.View do
     # as the Elixir compiler will solve dependencies.
     if Code.can_await_module_compilation?() do
       for {schema, link} <- module.__view__(:links) do
-        unless is_atom(schema) and
-                 (ArangoXEcto.document?(schema) or ArangoXEcto.edge?(schema)) do
+        if !(is_atom(schema) and
+               (ArangoXEcto.document?(schema) or ArangoXEcto.edge?(schema))) do
           IO.warn(
             "the schema passed must be an Ecto schema, got: #{inspect(schema)}",
             Macro.Env.stacktrace(env)
           )
         end
 
-        unless Link.valid?(link) do
+        if !Link.valid?(link) do
           IO.warn(
             "the link is invalid for field `#{schema}` got: #{inspect(link)}",
             Macro.Env.stacktrace(env)
@@ -284,12 +284,12 @@ defmodule ArangoXEcto.View do
       field = unquote(field)
       direction = unquote(direction)
 
-      unless is_atom(field) do
+      if not is_atom(field) do
         raise ArgumentError,
               "the name for field must be an atom, got: #{inspect(field)}"
       end
 
-      unless is_atom(direction) and direction in [:asc, :desc] do
+      if !(is_atom(direction) and direction in [:asc, :desc]) do
         raise ArgumentError,
               "the direction for field `#{field}` must be an atom of either :asc or :desc, got: #{inspect(direction)}"
       end
@@ -315,12 +315,12 @@ defmodule ArangoXEcto.View do
       fields = unquote(fields)
       compression = unquote(compression)
 
-      unless is_list(fields) and Enum.all?(fields, &is_atom/1) do
+      if !(is_list(fields) and Enum.all?(fields, &is_atom/1)) do
         raise ArgumentError,
               "the fields must be a list of atoms, got: #{inspect(fields)}"
       end
 
-      unless is_atom(compression) and compression in [:none, :lz4] do
+      if !(is_atom(compression) and compression in [:none, :lz4]) do
         raise ArgumentError,
               "the compression for stored value field with fields `#{inspect(fields)}` must be an atom of either :none or :lz4, got: #{inspect(compression)}"
       end

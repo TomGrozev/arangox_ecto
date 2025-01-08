@@ -402,7 +402,7 @@ defmodule ArangoXEcto.Migration.JsonSchema do
   defp get_level(opts) do
     level = Keyword.get(opts, :level, :strict)
 
-    unless level in @available_levels do
+    if level not in @available_levels do
       raise(
         ArgumentError,
         "invalid schema level, must be one of [#{Enum.join(@available_levels, ",")}]"
