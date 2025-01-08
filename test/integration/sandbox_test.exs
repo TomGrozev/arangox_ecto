@@ -210,7 +210,7 @@ defmodule ArangoXEcto.Integration.SandboxTest do
       Sandbox.checkout(TestRepo, write: ["users"])
 
       {:ok, _} = TestRepo.insert(%User{}, skip_transaction: true)
-      {:error, _} = TestRepo.query("INVALID")
+      {:error, _} = ArangoXEcto.aql_query(TestRepo, "INVALID")
       {:ok, _} = TestRepo.insert(%User{}, skip_transaction: true)
 
       Sandbox.checkin(TestRepo)
