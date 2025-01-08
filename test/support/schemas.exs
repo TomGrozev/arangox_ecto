@@ -9,6 +9,9 @@ defmodule ArangoXEcto.Integration.User do
     field(:gender, Ecto.Enum, values: [male: 0, female: 1, other: 2], default: :male)
     field(:age, :integer, default: 0)
     field(:location, ArangoXEcto.Types.GeoJSON)
+    field(:uuid, Ecto.UUID)
+    field(:create_time, :time)
+    field(:create_datetime, :utc_datetime)
 
     embeds_one(:class, ArangoXEcto.Integration.Class, on_replace: :delete)
 

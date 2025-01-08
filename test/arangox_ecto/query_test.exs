@@ -20,7 +20,7 @@ defmodule ArangoXEctoTest.QueryTest do
   describe "create AQL query" do
     test "with select clause" do
       assert aql(from(u in User)) =~
-               "FOR u0 IN `users` RETURN [ u0.`_key`, u0.`_id`, u0.`first_name`, u0.`last_name`, u0.`gender`, u0.`age`, u0.`location`, u0.`class`, u0.`items`, u0.`inserted_at`, u0.`updated_at` ]"
+               "FOR u0 IN `users` RETURN [ u0.`_key`, u0.`_id`, u0.`first_name`, u0.`last_name`, u0.`gender`, u0.`age`, u0.`location`, u0.`uuid`, u0.`create_time`, u0.`create_datetime`, u0.`class`, u0.`items`, u0.`inserted_at`, u0.`updated_at` ]"
 
       assert aql(from(u in User, select: u.first_name)) =~
                "FOR u0 IN `users` RETURN [ u0.`first_name` ]"
@@ -47,13 +47,13 @@ defmodule ArangoXEctoTest.QueryTest do
       first_name = "Joe"
 
       assert aql(from(u in User, where: u.first_name == ^first_name)) =~
-               "FOR u0 IN `users` FILTER (u0.`first_name` == @1) RETURN [ u0.`_key`, u0.`_id`, u0.`first_name`, u0.`last_name`, u0.`gender`, u0.`age`, u0.`location`, u0.`class`, u0.`items`, u0.`inserted_at`, u0.`updated_at` ]"
+               "FOR u0 IN `users` FILTER (u0.`first_name` == @1) RETURN [ u0.`_key`, u0.`_id`, u0.`first_name`, u0.`last_name`, u0.`gender`, u0.`age`, u0.`location`, u0.`uuid`, u0.`create_time`, u0.`create_datetime`, u0.`class`, u0.`items`, u0.`inserted_at`, u0.`updated_at` ]"
 
       assert aql(from(u in User, where: u.first_name == "Joe" and u.gender == :male)) =~
-               "FOR u0 IN `users` FILTER ((u0.`first_name` == 'Joe') && (u0.`gender` == 0)) RETURN [ u0.`_key`, u0.`_id`, u0.`first_name`, u0.`last_name`, u0.`gender`, u0.`age`, u0.`location`, u0.`class`, u0.`items`, u0.`inserted_at`, u0.`updated_at` ]"
+               "FOR u0 IN `users` FILTER ((u0.`first_name` == 'Joe') && (u0.`gender` == 0)) RETURN [ u0.`_key`, u0.`_id`, u0.`first_name`, u0.`last_name`, u0.`gender`, u0.`age`, u0.`location`, u0.`uuid`, u0.`create_time`, u0.`create_datetime`, u0.`class`, u0.`items`, u0.`inserted_at`, u0.`updated_at` ]"
 
       assert aql(from(u in User, where: u.first_name == "Joe" or u.gender == :female)) =~
-               "FOR u0 IN `users` FILTER ((u0.`first_name` == 'Joe') || (u0.`gender` == 1)) RETURN [ u0.`_key`, u0.`_id`, u0.`first_name`, u0.`last_name`, u0.`gender`, u0.`age`, u0.`location`, u0.`class`, u0.`items`, u0.`inserted_at`, u0.`updated_at` ]"
+               "FOR u0 IN `users` FILTER ((u0.`first_name` == 'Joe') || (u0.`gender` == 1)) RETURN [ u0.`_key`, u0.`_id`, u0.`first_name`, u0.`last_name`, u0.`gender`, u0.`age`, u0.`location`, u0.`uuid`, u0.`create_time`, u0.`create_datetime`, u0.`class`, u0.`items`, u0.`inserted_at`, u0.`updated_at` ]"
     end
 
     test "with search clause" do
@@ -130,10 +130,10 @@ defmodule ArangoXEctoTest.QueryTest do
 
     test "with limit and offset clauses" do
       assert aql(from(u in User, limit: 10)) =~
-               "FOR u0 IN `users` LIMIT 10 RETURN [ u0.`_key`, u0.`_id`, u0.`first_name`, u0.`last_name`, u0.`gender`, u0.`age`, u0.`location`, u0.`class`, u0.`items`, u0.`inserted_at`, u0.`updated_at` ]"
+               "FOR u0 IN `users` LIMIT 10 RETURN [ u0.`_key`, u0.`_id`, u0.`first_name`, u0.`last_name`, u0.`gender`, u0.`age`, u0.`location`, u0.`uuid`, u0.`create_time`, u0.`create_datetime`, u0.`class`, u0.`items`, u0.`inserted_at`, u0.`updated_at` ]"
 
       assert aql(from(u in User, limit: 10, offset: 2)) =~
-               "FOR u0 IN `users` LIMIT 2, 10 RETURN [ u0.`_key`, u0.`_id`, u0.`first_name`, u0.`last_name`, u0.`gender`, u0.`age`, u0.`location`, u0.`class`, u0.`items`, u0.`inserted_at`, u0.`updated_at` ]"
+               "FOR u0 IN `users` LIMIT 2, 10 RETURN [ u0.`_key`, u0.`_id`, u0.`first_name`, u0.`last_name`, u0.`gender`, u0.`age`, u0.`location`, u0.`uuid`, u0.`create_time`, u0.`create_datetime`, u0.`class`, u0.`items`, u0.`inserted_at`, u0.`updated_at` ]"
 
       assert_raise Ecto.QueryError, ~r"offset can only be used in conjunction with limit", fn ->
         aql(from(u in User, offset: 2))
@@ -196,7 +196,7 @@ defmodule ArangoXEctoTest.QueryTest do
 
     test "with returning" do
       assert aql(from(u in User, where: u.first_name == "Joe", select: u), :delete_all) =~
-               "FOR u0 IN `users` FILTER (u0.`first_name` == 'Joe') REMOVE u0 IN `users` RETURN [ OLD.`_key`, OLD.`_id`, OLD.`first_name`, OLD.`last_name`, OLD.`gender`, OLD.`age`, OLD.`location`, OLD.`class`, OLD.`items`, OLD.`inserted_at`, OLD.`updated_at` ]"
+               "FOR u0 IN `users` FILTER (u0.`first_name` == 'Joe') REMOVE u0 IN `users` RETURN [ OLD.`_key`, OLD.`_id`, OLD.`first_name`, OLD.`last_name`, OLD.`gender`, OLD.`age`, OLD.`location`, OLD.`uuid`, OLD.`create_time`, OLD.`create_datetime`, OLD.`class`, OLD.`items`, OLD.`inserted_at`, OLD.`updated_at` ]"
 
       assert aql(
                from(u in User, where: u.first_name == "Joe", select: u.first_name),
@@ -230,7 +230,7 @@ defmodule ArangoXEctoTest.QueryTest do
                ),
                :update_all
              ) =~
-               "FOR u0 IN `users` FILTER (u0.`first_name` == 'Joe') UPDATE u0 WITH {`age`: 42} IN `users` RETURN [ NEW.`_key`, NEW.`_id`, NEW.`first_name`, NEW.`last_name`, NEW.`gender`, NEW.`age`, NEW.`location`, NEW.`class`, NEW.`items`, NEW.`inserted_at`, NEW.`updated_at` ]"
+               "FOR u0 IN `users` FILTER (u0.`first_name` == 'Joe') UPDATE u0 WITH {`age`: 42} IN `users` RETURN [ NEW.`_key`, NEW.`_id`, NEW.`first_name`, NEW.`last_name`, NEW.`gender`, NEW.`age`, NEW.`location`, NEW.`uuid`, NEW.`create_time`, NEW.`create_datetime`, NEW.`class`, NEW.`items`, NEW.`inserted_at`, NEW.`updated_at` ]"
 
       assert aql(
                from(u in User,

@@ -3,6 +3,7 @@ defmodule ArangoXEcto.Integration.RepoTest do
     write: ["users", "posts", "comments"]
 
   import Ecto.Query
+  import ExUnit.CaptureLog
 
   alias ArangoXEcto.Integration.{DynamicRepo, TestRepo}
   alias ArangoXEcto.Integration.{Comment, Post, User}
@@ -160,32 +161,45 @@ defmodule ArangoXEcto.Integration.RepoTest do
     test "creates collection if not exists" do
       comment = %Comment{text: "abc"}
 
-      assert {:ok, %Comment{}} = TestRepo.insert(comment)
+      ArangoXEcto.Sandbox.unboxed_run(DynamicRepo, fn ->
+        assert {:ok, %Comment{}} = DynamicRepo.insert(comment)
+
+        DynamicRepo.delete_all(Comment)
+      end)
     end
 
     test "creates collection if not exists with options" do
       comment = %Comment{text: "cba"}
 
-      assert {:ok, %Comment{}} = TestRepo.insert(comment)
+      ArangoXEcto.Sandbox.unboxed_run(DynamicRepo, fn ->
+        assert {:ok, %Comment{}} = DynamicRepo.insert(comment)
 
-      assert {:ok, %Arangox.Response{body: %{"type" => 2, "keyOptions" => %{"type" => "uuid"}}}} =
-               ArangoXEcto.api_query(TestRepo, :get, "/_api/collection/comments/properties")
+        assert {:ok, %Arangox.Response{body: %{"type" => 2, "keyOptions" => %{"type" => "uuid"}}}} =
+                 ArangoXEcto.api_query(DynamicRepo, :get, "/_api/collection/comments/properties")
+
+        DynamicRepo.delete_all(Comment)
+      end)
     end
 
     test "creates collection if not exists with indexes" do
       comment = %Comment{text: "def"}
 
-      assert {:ok, %Comment{}} = TestRepo.insert(comment)
+      ArangoXEcto.Sandbox.unboxed_run(DynamicRepo, fn ->
+        assert {:ok, %Comment{}} = DynamicRepo.insert(comment)
 
-      assert {:ok,
-              %Arangox.Response{
-                body: %{"indexes" => [_, %{"fields" => ["text"], "unique" => true}]}
-              }} = ArangoXEcto.api_query(TestRepo, :get, "/_api/index?collection=comments")
+        assert {:ok,
+                %Arangox.Response{
+                  body: %{"indexes" => [_, %{"fields" => ["text"], "unique" => true}]}
+                }} = ArangoXEcto.api_query(DynamicRepo, :get, "/_api/index?collection=comments")
 
-      assert {:ok,
-              %Arangox.Response{
-                body: %{"keyOptions" => %{"type" => "uuid"}}
-              }} = ArangoXEcto.api_query(TestRepo, :get, "/_api/collection/comments/properties")
+        assert {:ok,
+                %Arangox.Response{
+                  body: %{"keyOptions" => %{"type" => "uuid"}}
+                }} =
+                 ArangoXEcto.api_query(DynamicRepo, :get, "/_api/collection/comments/properties")
+
+        DynamicRepo.delete_all(Comment)
+      end)
     end
 
     test "can insert and fetch with timestamps" do
@@ -726,6 +740,32 @@ defmodule ArangoXEcto.Integration.RepoTest do
       end)
 
       refute TestRepo.checked_out?()
+    end
+  end
+
+  test "supports types" do
+    user = %User{
+      uuid: "db7af35b-5312-41d0-8a8f-350b515a2286",
+      create_time: Time.utc_now(),
+      create_datetime: DateTime.utc_now()
+    }
+
+    assert {:ok, %User{}} = TestRepo.insert(user)
+  end
+
+  describe "logging level" do
+    test "setting level" do
+      assert capture_log(fn -> TestRepo.all(User) end) == ""
+
+      assert capture_log(fn -> TestRepo.all(User, log: :info) end) =~ "[info] QUERY OK"
+      assert capture_log(fn -> TestRepo.all(User, log: :error) end) =~ "[error] QUERY OK"
+    end
+
+    test "setting true level" do
+      assert capture_log(fn -> TestRepo.all(User) end) == ""
+
+      # Won't log because debug level is false which it defaults back to
+      assert capture_log(fn -> TestRepo.all(User, log: true) end) == ""
     end
   end
 

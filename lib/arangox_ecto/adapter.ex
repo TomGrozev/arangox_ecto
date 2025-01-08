@@ -239,6 +239,7 @@ defmodule ArangoXEcto.Adapter do
   defdelegate rollback(adapter_meta, value),
     to: ArangoXEcto.Behaviour.Transaction
 
+  # coveralls-ignore-next-line
   def lock_with_migrations(_, _, _), do: []
 
   @doc """
@@ -339,20 +340,6 @@ defmodule ArangoXEcto.Adapter do
       :database,
       ArangoXEcto.get_prefix_database(repo, Keyword.get(opts, :prefix))
     )
-  end
-
-  @doc false
-  def get_conn_from_repo(repo_or_conn) do
-    case repo_or_conn do
-      pid when is_pid(pid) ->
-        pid
-
-      repo ->
-        %{pid: pool} = Ecto.Adapter.lookup_meta(repo)
-
-        pool
-    end
-    |> get_conn_or_pool()
   end
 
   @doc false
