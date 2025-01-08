@@ -68,7 +68,7 @@ defmodule ArangoXEcto.Integration.DynamicClass do
   use ArangoXEcto.Schema
   import Ecto.Changeset
 
-  embedded_schema do
+  schema "dynamic_class" do
     field(:name, :string)
   end
 
@@ -363,4 +363,38 @@ defmodule ArangoXEcto.Integration.Analyzers do
   })
 
   build()
+end
+
+defmodule ArangoXEcto.Integration.NonEcto do
+  defstruct [:id, :name, :__meta__]
+end
+
+defmodule ArangoXEcto.Integration.InvalidIndexes do
+  use ArangoXEcto.Schema
+
+  indexes(%{
+    indexes: [fields: [:name], unique: true, name: :invalid_idx]
+  })
+
+  schema "invalid_indexes" do
+    field(:name, :string)
+
+    timestamps()
+  end
+end
+
+defmodule ArangoXEcto.Integration.OneInvalidIndex do
+  use ArangoXEcto.Schema
+
+  indexes([
+    [fields: [:name], unique: true, name: :valid_idx],
+    [fields: [:name], name: :valid_idx],
+    [fields: [:name], unique: true, name: :valid_idx2]
+  ])
+
+  schema "one_invalid_index" do
+    field(:name, :string)
+
+    timestamps()
+  end
 end

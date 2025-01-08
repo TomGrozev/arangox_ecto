@@ -26,9 +26,32 @@ defmodule ArangoxEctoTest.Integration.RelationshipTest do
 
       assert %User{id: ^user_id, posts_two: [%{title: "abc"}]} =
                TestRepo.get(User, user_id) |> TestRepo.preload(:posts_two)
+    end
+
+    test "preload on graph connection" do
+      attrs = %{
+        first_name: "John",
+        last_name: "Smith",
+        posts_two: [
+          %{title: "abc"}
+        ]
+      }
+
+      post_changeset = fn struct, map ->
+        Ecto.Changeset.cast(struct, map, [:title])
+      end
+
+      %User{id: user_id} =
+        Ecto.Changeset.cast(%User{}, attrs, [:first_name, :last_name])
+        |> Ecto.Changeset.cast_assoc(:posts_two, with: post_changeset)
+        |> TestRepo.insert!()
 
       assert %User{id: ^user_id, posts_two: [%Post{title: "abc"}]} =
                TestRepo.get(User, user_id) |> ArangoXEcto.preload(TestRepo, :posts_two)
+
+      assert [%User{id: ^user_id, posts_two: [%Post{title: "abc"}]}] =
+               [TestRepo.get(User, user_id)]
+               |> ArangoXEcto.preload(TestRepo, :posts_two, timeout: 20_000)
     end
 
     test "cast edge polymorphic connection" do

@@ -2,7 +2,17 @@ defmodule ArangoXEctoTest do
   use ArangoXEcto.Integration.Case,
     write: ["users", "posts", "posts_users", "posts_users_options", "user_user"]
 
-  alias ArangoXEcto.Integration.{Class, Post, User, UserPosts, UserPostsOptions}
+  alias ArangoXEcto.Integration.{
+    Class,
+    DynamicClass,
+    NonEcto,
+    Post,
+    User,
+    UserPosts,
+    UserPostsOptions,
+    UsersView
+  }
+
   alias ArangoXEcto.Integration.{DynamicRepo, TestRepo}
 
   import Ecto.Query
@@ -134,6 +144,33 @@ defmodule ArangoXEctoTest do
       edge = ArangoXEcto.create_edge(TestRepo, user1, user2)
 
       assert %{_from: ^from, _to: ^to} = edge
+    end
+
+    test "can't create edge with non existant collection" do
+      user = %User{first_name: "John", last_name: "Smith"} |> TestRepo.insert!()
+      dynamic = %DynamicClass{name: "class1"}
+
+      assert_raise RuntimeError, ~r/Collection dynamic_class does not exist/, fn ->
+        ArangoXEcto.create_edge(TestRepo, user, dynamic)
+      end
+    end
+
+    test "can't create edge with non ecto edge" do
+      user1 = %User{first_name: "John", last_name: "Smith"} |> TestRepo.insert!()
+      user2 = %User{first_name: "Jane", last_name: "Doe"} |> TestRepo.insert!()
+
+      assert_raise RuntimeError, ~r/NonEcto is not an Ecto Schema/, fn ->
+        ArangoXEcto.create_edge(TestRepo, user1, user2, edge: NonEcto)
+      end
+    end
+
+    test "can't create edge with non edge schema as edge" do
+      user1 = %User{first_name: "John", last_name: "Smith"} |> TestRepo.insert!()
+      user2 = %User{first_name: "Jane", last_name: "Doe"} |> TestRepo.insert!()
+
+      assert_raise RuntimeError, ~r/User is not an Edge/, fn ->
+        ArangoXEcto.create_edge(TestRepo, user1, user2, edge: User)
+      end
     end
 
     test "create edge with no fields and a custom name" do
@@ -398,6 +435,28 @@ defmodule ArangoXEctoTest do
     test "create collection in dynamic mode" do
       assert :ok =
                ArangoXEcto.create_collection(DynamicRepo, ArangoXEcto.Integration.DynamicClass)
+
+      assert {:error, "duplicate name"} =
+               ArangoXEcto.create_collection(DynamicRepo, ArangoXEcto.Integration.DynamicClass)
+    end
+
+    test "error on invalid index format" do
+      assert_raise RuntimeError,
+                   ~r/Invalid indexes provided. Should be a list of keyword lists./,
+                   fn ->
+                     ArangoXEcto.create_collection(
+                       DynamicRepo,
+                       ArangoXEcto.Integration.InvalidIndexes
+                     )
+                   end
+    end
+
+    test "error on one invalid index" do
+      assert {:error, "duplicate value for `id` or `name`"} =
+               ArangoXEcto.create_collection(
+                 DynamicRepo,
+                 ArangoXEcto.Integration.OneInvalidIndex
+               )
     end
 
     test "cannot create collection in static mode" do
@@ -682,6 +741,10 @@ defmodule ArangoXEctoTest do
 
     test "valid edge schema" do
       assert ArangoXEcto.schema_type(UserPosts) == :edge
+    end
+
+    test "valid view schema" do
+      assert ArangoXEcto.schema_type(UsersView) == :view
     end
 
     test "not an ecto schema" do

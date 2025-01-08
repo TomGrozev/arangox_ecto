@@ -1549,12 +1549,8 @@ defmodule ArangoXEcto do
   end
 
   defp collection_exists!(collection_name, repo, type \\ 2) do
-    case collection_exists?(repo, collection_name, type) do
-      true ->
-        true
-
-      false ->
-        raise "Collection #{collection_name} does not exist"
+    with false <- collection_exists?(repo, collection_name, type) do
+      raise "Collection #{collection_name} does not exist"
     end
   end
 
@@ -1594,10 +1590,9 @@ defmodule ArangoXEcto do
     |> Module.concat()
   end
 
-  defp parent_module_list(%module{}), do: parent_module_list(module)
-
   defp parent_module_list(module) do
-    Module.split(module)
+    module
+    |> Module.split()
     |> Enum.drop(-1)
   end
 
@@ -1724,12 +1719,12 @@ defmodule ArangoXEcto do
 
   defp maybe_create_indexes(_, _, _, [], _), do: {:ok, [{:info, "", []}]}
 
-  defp maybe_create_indexes(repo, meta, collection_name, %{} = indexes, opts),
-    do: maybe_create_indexes(repo, meta, collection_name, Map.to_list(indexes), opts)
-
   defp maybe_create_indexes(repo, meta, collection_name, indexes, opts) when is_list(indexes) do
     Enum.reduce(indexes, nil, fn
       _index, {:error, reason} ->
+        {:error, reason}
+
+      _index, {:ok, [{:error, reason, _}]} ->
         {:error, reason}
 
       index, _acc ->
