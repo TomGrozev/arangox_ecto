@@ -83,4 +83,4 @@ _ =
 ArangoXEcto.Sandbox.mode(TestRepo, :manual)
 Process.flag(:trap_exit, true)
 
-ExUnit.start()
+ExUnit.start(exclude: :mix)

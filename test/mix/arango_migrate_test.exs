@@ -1,14 +1,16 @@
 defmodule ArangoXEcto.Mix.ArangoMigrate do
   use ExUnit.Case
+  @moduletag :mix
 
   alias Mix.Tasks.Arango.{Migrate, Rollback}
 
   test "generates default path" do
-    assert :ok =
-             Migrate.run([
-               "-r",
-               "ArangoXEcto.Integration.TestRepo"
-             ])
+    assert_raise Mix.Error, ~r"Could not find migrations directory", fn ->
+      Migrate.run([
+        "-r",
+        "ArangoXEcto.Integration.TestRepo"
+      ])
+    end
   end
 
   test "create and rollback migration" do
