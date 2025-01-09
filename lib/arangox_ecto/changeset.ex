@@ -202,20 +202,37 @@ defmodule ArangoXEcto.Changeset do
   defp do_cast(relation, params, nil, allowed_actions, idx, on_cast) do
     mod = identified_by_fields(relation, params)
 
-    on_cast_fun =
-      get_cast(on_cast, mod) ||
-        raise ArgumentError,
-              "with for relation #{relation.field} must specify a changeset function for #{mod}"
-
     {:ok,
-     on_cast_fun
+     get_cast(on_cast, mod, relation)
      |> apply_on_cast(struct(mod), params, idx)
      |> put_new_action(:insert)
      |> check_action!(allowed_actions)}
   end
 
-  defp get_cast(on_cast, _mod) when is_function(on_cast), do: on_cast
-  defp get_cast(on_cast, mod), do: Map.get(on_cast, mod)
+  defp do_cast(relation, nil, struct, _allowed_actions, _idx, _on_cast) do
+    on_replace(relation, struct)
+  end
+
+  # this may never be called... maybe remove??
+  defp do_cast(relation, params, struct, allowed_actions, idx, on_cast) do
+    mod = identified_by_fields(relation, params)
+
+    {:ok,
+     get_cast(on_cast, mod, relation)
+     |> apply_on_cast(struct, params, idx)
+     |> put_new_action(:update)
+     |> check_action!(allowed_actions)}
+  end
+
+  defp get_cast(on_cast, _mod, _relation) when is_function(on_cast), do: on_cast
+  defp get_cast(on_cast, mod, _relation) when is_map(on_cast), do: Map.get(on_cast, mod)
+
+  defp get_cast(_, mod, relation),
+    do:
+      raise(
+        ArgumentError,
+        "with for relation #{relation.field} must specify a changeset function for #{mod}"
+      )
 
   defp identified_by_fields(%{mapping: mod}, _params) when is_atom(mod), do: mod
 
@@ -451,7 +468,7 @@ defmodule ArangoXEcto.Changeset do
         rescue
           e in UndefinedFunctionError ->
             case __STACKTRACE__ do
-              [{^mod, :changeset, args_or_arity, _}]
+              [{^mod, :changeset, args_or_arity, _} | _]
               when args_or_arity == 2 or length(args_or_arity) == 2 ->
                 reraise ArgumentError,
                         [
