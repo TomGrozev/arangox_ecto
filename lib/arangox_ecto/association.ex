@@ -69,6 +69,7 @@ defmodule ArangoXEcto.Association do
             ordered: false
           }
 
+    # coveralls-ignore-start
     @impl true
     def after_compile_validation(%{queryables: queryables, related_key: related_key}, env)
         when is_list(queryables) do
@@ -100,6 +101,8 @@ defmodule ArangoXEcto.Association do
           {:error, error}
       end
     end
+
+    # coveralls-ignore-stop
 
     @impl true
     def struct(module, name, opts) do
@@ -136,6 +139,7 @@ defmodule ArangoXEcto.Association do
       }
     end
 
+    # coveralls-ignore-start
     @impl true
     def build(refl, owner, _attributes) do
       build(refl, owner)
@@ -150,6 +154,8 @@ defmodule ArangoXEcto.Association do
     def assoc_query(_assoc, _query, _value) do
       raise RuntimeError, "Ecto.assoc/3 not supported by edges, use AQL graph traversal"
     end
+
+    # coveralls-ignore-stop
 
     @impl true
     def preload_info(%{related_key: related_key} = refl) do
@@ -206,10 +212,13 @@ defmodule ArangoXEcto.Association do
     ## Relation callbacks
     @behaviour Ecto.Changeset.Relation
 
+    # coveralls-ignore-start
     @impl true
     def build(_assoc, _owner) do
       raise RuntimeError, "building assoc not supported for edges, use AQL graph traversal"
     end
+
+    # coveralls-ignore-stop
   end
 
   defmodule Graph do
@@ -297,6 +306,7 @@ defmodule ArangoXEcto.Association do
             preload_order: list()
           }
 
+    # coveralls-ignore-start
     @impl true
     def after_compile_validation(%{queryables: queryables, edge: edge}, env) do
       case validate_queryables(queryables, edge, env) do
@@ -338,6 +348,8 @@ defmodule ArangoXEcto.Association do
         end
       end)
     end
+
+    # coveralls-ignore-stop
 
     @impl true
     def struct(module, name, opts) do
@@ -442,10 +454,13 @@ defmodule ArangoXEcto.Association do
               "an atom (representing an edge schema)"
     end
 
+    # coveralls-ignore-start
     @impl true
     def joins_query(_assoc) do
       raise RuntimeError, "joins not supported by graph relations, use AQL graph traversal"
     end
+
+    # coveralls-ignore-stop
 
     defp graph_direction(:inbound, maps, select_fields, edge_source, collections) do
       from(
@@ -744,6 +759,8 @@ defmodule ArangoXEcto.Association do
     * `:edge` - The edge schema to use, default will generate a new edge
     * `:on_replace` - The action taken on the association when the record is
                       replaced when casting or manipulating the parent changeset.
+    * `:on_delete` - The action taken on the association when the record is
+                      deleted when casting or manipulating the parent changeset.
     * `:where` - A filter for the association. See "Filtering associations" in 
                 `Ecto.Schema.has_many/3`.
   """
@@ -761,7 +778,7 @@ defmodule ArangoXEcto.Association do
     end
   end
 
-  @valid_graph_options [:edge, :on_replace, :on_delete]
+  @valid_graph_options [:edge, :on_replace, :on_delete, :where]
 
   @doc false
   def __graph__(mod, name, queryables, direction, opts)
