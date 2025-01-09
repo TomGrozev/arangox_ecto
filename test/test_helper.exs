@@ -83,4 +83,23 @@ _ =
 ArangoXEcto.Sandbox.mode(TestRepo, :manual)
 Process.flag(:trap_exit, true)
 
+defmodule CompileTimeAssertions do
+  defmodule DidNotRaise, do: defstruct(message: "")
+
+  defmacro assert_compile_time_raise(expected_exception, expected_message, fun) do
+    actual_exception =
+      try do
+        Code.eval_quoted(quote do: unquote(fun).())
+        %DidNotRaise{}
+      rescue
+        e -> e
+      end
+
+    quote do
+      assert unquote(actual_exception.__struct__) == unquote(expected_exception)
+      assert unquote(actual_exception.message) =~ unquote(expected_message)
+    end
+  end
+end
+
 ExUnit.start(exclude: :mix)

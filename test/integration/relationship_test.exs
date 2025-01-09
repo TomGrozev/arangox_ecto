@@ -1,6 +1,8 @@
-defmodule ArangoxEctoTest.Integration.RelationshipTest do
+defmodule ArangoXEctoTest.Integration.RelationshipTest do
   use ArangoXEcto.Integration.Case,
     write: ["users", "posts", "comments", "posts_users", "user_content"]
+
+  import CompileTimeAssertions
 
   alias ArangoXEcto.Integration.TestRepo
   alias ArangoXEcto.Integration.{Comment, Post, User, UserContent, UserPosts}
@@ -19,13 +21,41 @@ defmodule ArangoxEctoTest.Integration.RelationshipTest do
         Ecto.Changeset.cast(struct, map, [:title])
       end
 
-      %User{id: user_id} =
+      %User{id: user_id, posts_two: [%Post{id: post_id}]} =
         Ecto.Changeset.cast(%User{}, attrs, [:first_name, :last_name])
         |> Ecto.Changeset.cast_assoc(:posts_two, with: post_changeset)
         |> TestRepo.insert!()
 
       assert %User{id: ^user_id, posts_two: [%{title: "abc"}]} =
                TestRepo.get(User, user_id) |> TestRepo.preload(:posts_two)
+
+      assert %Post{id: ^post_id, users_two: [%User{id: ^user_id}]} =
+               TestRepo.get(Post, post_id) |> ArangoXEcto.preload(TestRepo, :users_two)
+    end
+
+    test "delete all assocs" do
+      attrs = %{
+        first_name: "John",
+        last_name: "Smith",
+        posts_two: [
+          %{title: "abc"}
+        ]
+      }
+
+      post_changeset = fn struct, map ->
+        Ecto.Changeset.cast(struct, map, [:title])
+      end
+
+      %User{posts_two: [post]} =
+        Ecto.Changeset.cast(%User{}, attrs, [:first_name, :last_name])
+        |> Ecto.Changeset.cast_assoc(:posts_two, with: post_changeset)
+        |> TestRepo.insert!()
+
+      TestRepo.delete!(post)
+
+      assert Enum.empty?(TestRepo.all(User))
+      assert Enum.empty?(TestRepo.all(Post))
+      assert Enum.empty?(TestRepo.all(UserPosts))
     end
 
     test "preload on graph connection" do
@@ -136,6 +166,182 @@ defmodule ArangoxEctoTest.Integration.RelationshipTest do
 
       assert %User{__id__: ^user_id, posts_two: [%Post{__id__: ^post2_id, title: "cba"}]} =
                TestRepo.preload(user, :posts_two)
+    end
+
+    test "raises on invalid options supplied to graph relation" do
+      assert_compile_time_raise(
+        ArgumentError,
+        "schema does not have the field :__id__ used by association",
+        fn ->
+          defmodule Test do
+            use Ecto.Schema
+            import ArangoXEcto.Schema, except: [schema: 2]
+            import ArangoXEcto.Association
+
+            schema "invalid_schema" do
+              outgoing(:field, ArangoXEcto.Integration.User, on_delete: :invalid_option)
+            end
+          end
+        end
+      )
+
+      assert_compile_time_raise(ArgumentError, "invalid `:on_delete` option for", fn ->
+        defmodule Test do
+          use ArangoXEcto.Schema
+
+          schema "invalid_schema" do
+            field :test, :string
+
+            outgoing(:field, ArangoXEcto.Integration.User, on_delete: :invalid_option)
+          end
+        end
+      end)
+
+      assert_compile_time_raise(ArgumentError, "invalid `:on_replace` option for", fn ->
+        defmodule Test do
+          use ArangoXEcto.Schema
+
+          schema "invalid_schema" do
+            field :test, :string
+
+            outgoing(:field, ArangoXEcto.Integration.User, on_replace: :invalid_option)
+          end
+        end
+      end)
+
+      assert_compile_time_raise(ArgumentError, "expected `:where` for", fn ->
+        defmodule Test do
+          use ArangoXEcto.Schema
+
+          schema "invalid_schema" do
+            field :test, :string
+
+            outgoing(:field, ArangoXEcto.Integration.User, where: "invalid")
+          end
+        end
+      end)
+
+      assert_compile_time_raise(ArgumentError, "had a nil :edge value", fn ->
+        defmodule Test do
+          use ArangoXEcto.Schema
+
+          schema "invalid_schema" do
+            field :test, :string
+
+            outgoing(:field, ArangoXEcto.Integration.User, edge: nil)
+          end
+        end
+      end)
+
+      assert_compile_time_raise(
+        ArgumentError,
+        "associations require the :edge option to be an atom",
+        fn ->
+          defmodule Test do
+            use ArangoXEcto.Schema
+
+            schema "invalid_schema" do
+              field :test, :string
+
+              outgoing(:field, ArangoXEcto.Integration.User, edge: "invalid")
+            end
+          end
+        end
+      )
+
+      assert_compile_time_raise(
+        ArgumentError,
+        "invalid associated schemas defined in",
+        fn ->
+          defmodule Test do
+            use ArangoXEcto.Schema
+
+            schema "invalid_schema" do
+              field :test, :string
+
+              outgoing(:field, "invalid")
+            end
+          end
+        end
+      )
+
+      assert_compile_time_raise(
+        ArgumentError,
+        "field/association :field already exists on schema",
+        fn ->
+          defmodule Test do
+            use ArangoXEcto.Schema
+
+            schema "invalid_schema" do
+              field :test, :string
+
+              outgoing(:field, ArangoXEcto.Integration.User)
+              outgoing(:field, ArangoXEcto.Integration.User)
+            end
+          end
+        end
+      )
+
+      assert_compile_time_raise(
+        ArgumentError,
+        "queryables must be a map with keys as schemas and value as a list of fields to be identified by",
+        fn ->
+          defmodule Test do
+            use ArangoXEcto.Schema
+
+            schema "invalid_schema" do
+              field :test, :string
+
+              outgoing(:field, %{
+                ArangoXEcto.Integration.User => [:test],
+                "invalid" => [:test]
+              })
+            end
+          end
+        end
+      )
+    end
+
+    test "raises on invalid options supplied to edge" do
+      assert_compile_time_raise(ArgumentError, "invalid `:on_replace` option for", fn ->
+        defmodule Test do
+          use ArangoXEcto.Edge,
+            from: ArangoXEcto.Integration.User,
+            to: ArangoXEcto.Integration.Post
+
+          schema "invalid_edge" do
+            edge_fields(on_replace: :invalid_option)
+          end
+        end
+      end)
+
+      assert_compile_time_raise(ArgumentError, "invalid option :where for edge_many/3", fn ->
+        defmodule Test do
+          use ArangoXEcto.Edge,
+            from: ArangoXEcto.Integration.User,
+            to: ArangoXEcto.Integration.Post
+
+          schema "invalid_edge" do
+            edge_fields(where: "invalid")
+          end
+        end
+      end)
+
+      assert_compile_time_raise(
+        ArgumentError,
+        "queryables must be a list of schemas or a map of modules and fields",
+        fn ->
+          defmodule Test do
+            use ArangoXEcto.Edge,
+              from: [ArangoXEcto.Integration.User, "invalid"],
+              to: ArangoXEcto.Integration.Post
+
+            schema "invalid_edge" do
+              edge_fields()
+            end
+          end
+        end
+      )
     end
 
     test "create relationship with supplied module and custom field" do

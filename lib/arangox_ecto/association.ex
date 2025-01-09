@@ -2,8 +2,6 @@ defmodule ArangoXEcto.Association do
   @moduledoc false
   require Ecto.Schema
 
-  alias Ecto.Repo.Queryable
-
   defmodule EdgeMany do
     @moduledoc """
     The association struct for a `edge_many` association.
@@ -462,28 +460,6 @@ defmodule ArangoXEcto.Association do
 
     # coveralls-ignore-stop
 
-    defp graph_direction(:inbound, maps, select_fields, edge_source, collections) do
-      from(
-        p in fragment("[?]", splice(^maps)),
-        join:
-          g in graph(1..1, :inbound, p._id, ^edge_source, vertexCollections: splice(^collections)),
-        on: true,
-        select: map(g, ^select_fields)
-      )
-    end
-
-    defp graph_direction(:outbound, maps, select_fields, edge_source, collections) do
-      from(
-        p in fragment("[?]", splice(^maps)),
-        join:
-          g in graph(1..1, :outbound, p._id, ^edge_source,
-            vertexCollections: splice(^collections)
-          ),
-        on: true,
-        select: map(g, ^select_fields)
-      )
-    end
-
     def assoc_query(%{queryables: queryables} = refl, values) do
       assoc_query(refl, queryables, values)
     end
@@ -492,21 +468,7 @@ defmodule ArangoXEcto.Association do
     def assoc_query(assoc, _, ids) do
       %{queryables: queryables, edge: edge, direction: direction} = assoc
 
-      edge_source = edge.__schema__(:source)
-
-      select_fields =
-        for queryable <- queryables, field <- queryable.__schema__(:fields), reduce: [] do
-          acc ->
-            [queryable.__schema__(:field_source, field) | acc]
-        end
-        |> Enum.uniq()
-
-      collections =
-        Enum.map(queryables, & &1.__schema__(:source))
-
-      maps = Enum.map(ids, &%{_id: &1})
-
-      graph_direction(direction, maps, select_fields, edge_source, collections)
+      get_related(edge, queryables, ids, direction)
     end
 
     @impl true
@@ -598,11 +560,6 @@ defmodule ArangoXEcto.Association do
       end)
     end
 
-    defp insert_join(edge, %{repo: repo, data: owner}, data, opts) when is_binary(edge) do
-      opts = Keyword.put_new(opts, :prefix, owner.__meta__.prefix)
-      repo.insert_all(edge, [data], opts)
-    end
-
     defp insert_join(edge, parent_changeset, data, opts) when is_atom(edge) do
       %{repo: repo, constraints: constraints, data: owner} = parent_changeset
 
@@ -629,21 +586,6 @@ defmodule ArangoXEcto.Association do
         raise "could not #{op} join entry because `#{field}` is nil in #{inspect(struct)}"
     end
 
-    defp dump!(action, edge, struct, adapter) when is_binary(edge) do
-      value = field!(action, struct, :__id__)
-      type = :binary_id
-
-      case Ecto.Type.adapter_dump(adapter, type, value) do
-        {:ok, value} ->
-          value
-
-        :error ->
-          raise Ecto.ChangeError,
-                "value `#{inspect(value)}` for `#{inspect(struct.__struct__)}.__id__` " <>
-                  "in `#{action}` does not match type #{Ecto.Type.format(type)}"
-      end
-    end
-
     defp dump!(action, edge, struct, _) when is_atom(edge) do
       field!(action, struct, :__id__)
     end
@@ -656,21 +598,92 @@ defmodule ArangoXEcto.Association do
       struct(queryable)
     end
 
+    # coveralls-ignore-start
     def build(%{owner: owner, field: field}, _) do
       raise RuntimeError,
             "cannot call build/2 on graph relation #{field} in module #{owner}. " <>
               "It is likely you used cast_assoc/3 instead of cast_graph/3."
     end
 
+    # coveralls-ignore-stop
+
     ## On delete callbacks
 
     @doc false
-    def delete_all(%{edge: edge}, parent, repo_name, opts) do
+    def delete_all(
+          %{edge: edge, queryables: queryables, direction: direction},
+          parent,
+          repo_name,
+          {%{opts: opts}, _}
+        ) do
       if value = Map.get(parent, :__id__) do
-        query = from(e in edge, where: e._from == type(^value, :binary_id))
+        collections =
+          Enum.map(queryables, & &1.__schema__(:source))
 
-        Queryable.delete_all(repo_name, query, opts)
+        direction_str =
+          direction
+          |> Atom.to_string()
+          |> String.upcase()
+
+        edge_source = edge.__schema__(:source)
+
+        ArangoXEcto.aql_query(
+          repo_name,
+          """
+          FOR v, e IN 1..1 #{direction_str} @id @edge OPTIONS {vertexCollections: @collections}
+            REMOVE e._key in #{edge_source}
+            #{remove_queries(collections)}
+          """,
+          [id: value, edge: edge_source, collections: collections],
+          opts
+        )
       end
+    end
+
+    defp remove_queries(collections) do
+      Enum.map_join(collections, " ", fn collection ->
+        "REMOVE v._key IN #{collection} OPTIONS { ignoreErrors: true }"
+      end)
+    end
+
+    defp get_related(edge, queryables, ids, direction) do
+      edge_source = edge.__schema__(:source)
+
+      collections =
+        Enum.map(queryables, & &1.__schema__(:source))
+
+      maps = Enum.map(ids, &%{_id: &1})
+
+      select_fields =
+        for queryable <- queryables, field <- queryable.__schema__(:fields), reduce: [] do
+          acc ->
+            [queryable.__schema__(:field_source, field) | acc]
+        end
+        |> Enum.uniq()
+
+      graph_direction(direction, maps, select_fields, edge_source, collections)
+    end
+
+    defp graph_direction(:inbound, maps, select_fields, edge_source, collections) do
+      from(
+        p in fragment("[?]", splice(^maps)),
+        join:
+          g in graph(1..1, :inbound, p._id, ^edge_source, vertexCollections: splice(^collections)),
+        on: true,
+        select: map(g, ^select_fields)
+      )
+    end
+
+    defp graph_direction(:outbound, maps, select_fields, edge_source, collections) do
+      from(
+        p in fragment("[?]", splice(^maps)),
+        join:
+          g in graph(1..1, :outbound, p._id, ^edge_source,
+            vertexCollections: splice(^collections)
+          ),
+        on: true,
+        select: map(g, ^select_fields)
+      )
     end
   end
 
@@ -797,7 +810,7 @@ defmodule ArangoXEcto.Association do
     Module.put_attribute(mod, :ecto_changeset_fields, {name, {:assoc, struct}})
   end
 
-  def __graph__(mod, name, queryables, _opts) do
+  def __graph__(mod, name, queryables, _direction, _opts) do
     raise ArgumentError,
           "invalid associated schemas defined in #{mod} for " <>
             "graph relation #{name}. Expected a module name or a map, got: #{inspect(queryables)}"
@@ -836,7 +849,7 @@ defmodule ArangoXEcto.Association do
     if List.keyfind(fields, name, 0) do
       raise ArgumentError,
             "field/association #{inspect(name)} already exists on schema, " <>
-              "you must either remove the deduplication or choose a different name"
+              "you must either remove the duplication or choose a different name"
     end
 
     Module.put_attribute(mod, :ecto_struct_fields, {name, assoc})

@@ -99,7 +99,10 @@ defmodule ArangoXEcto.Integration.Post do
 
     incoming(:users, ArangoXEcto.Integration.User)
 
-    incoming(:users_two, ArangoXEcto.Integration.User, edge: ArangoXEcto.Integration.UserPosts)
+    incoming(:users_two, ArangoXEcto.Integration.User,
+      edge: ArangoXEcto.Integration.UserPosts,
+      on_delete: :delete_all
+    )
 
     belongs_to(:user, ArangoXEcto.Integration.User)
 
