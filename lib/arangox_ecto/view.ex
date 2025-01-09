@@ -265,7 +265,7 @@ defmodule ArangoXEcto.View do
     :ok
   end
 
-  # coveralls-ignore-end
+  # coveralls-ignore-stop
 
   @doc """
   Defines a primary sort field on the view.
