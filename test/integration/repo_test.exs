@@ -796,4 +796,14 @@ defmodule ArangoXEcto.Integration.RepoTest do
              |> cast(%{title: "new title"}, [:title])
              |> unsafe_validate_unique(:title, TestRepo)
   end
+
+  describe "storage management" do
+    test "storage is already up" do
+      assert {:error, :already_up} = ArangoXEcto.Adapter.storage_up(TestRepo.config())
+    end
+
+    test "can fetch the status of the storage" do
+      assert :up = ArangoXEcto.Adapter.storage_status(TestRepo.config())
+    end
+  end
 end
