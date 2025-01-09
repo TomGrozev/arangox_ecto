@@ -118,11 +118,16 @@ defmodule ArangoXEcto.Edge do
 
         field(:type, :string)
       end
+
+  The options passed are directly supplied to the 
+  ArangoXEcto.Association.EdgeMany relation.
   """
-  defmacro edge_fields do
+  defmacro edge_fields(opts \\ []) do
     quote do
-      edge_many(:from, @from, key: :_from)
-      edge_many(:to, @to, key: :_to)
+      opts = unquote(opts)
+
+      edge_many(:from, @from, Keyword.put(opts, :key, :_from))
+      edge_many(:to, @to, Keyword.put(opts, :key, :_to))
     end
   end
 
