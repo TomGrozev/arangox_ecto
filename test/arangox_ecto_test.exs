@@ -128,7 +128,7 @@ defmodule ArangoXEctoTest do
     end
 
     test "valid Arangox function" do
-      assert {:ok, %Arangox.Response{body: %{"authorized" => true}}} =
+      assert {:ok, %Arangox.Response{body: %{"url" => "/_admin/echo"}}} =
                ArangoXEcto.api_query(TestRepo, :get, "/_admin/echo")
     end
   end
