@@ -79,7 +79,8 @@ defmodule ArangoXEcto.Migration.JsonSchema do
           | :map
           | {:array, field()}
 
-  @type command :: {atom(), field() | [command()], Keyword.t()}
+  @type action :: :add | :modify | :remove | :rename
+  @type command :: {action(), atom(), field() | [command()], Keyword.t()}
 
   @type level :: :none | :new | :moderate | :strict
 
@@ -121,17 +122,21 @@ defmodule ArangoXEcto.Migration.JsonSchema do
 
   This will take commands in the format of:
 
-      {name, type_or_sub_commands, options}
+      {action, name, type_or_sub_commands, options}
 
   For example, take the following:
 
-      {:first_name, :string, comment: "Some comment"}
+      {:add, :first_name, :string, comment: "Some comment"}
 
   Will result in the following part of the JSONSchema.
 
       %{"type" => "string", :"$comment" => "Some comment"}
 
   The type and options passed are validated to ensure they are the right type.
+
+  ## Available actions
+
+  The available actions are available in `t:action/0`
 
   ## Available types
 
@@ -233,7 +238,7 @@ defmodule ArangoXEcto.Migration.JsonSchema do
   end
 
   defp command_to_schema({_name, :const, command_opts}, _opts) do
-    %{const: Keyword.fetch!(command_opts, :value)}
+    %{type: "string", const: Keyword.fetch!(command_opts, :value)}
     |> maybe_add_opt(command_opts, :"$comment", :comment)
     |> apply_nullable(command_opts)
   end
@@ -412,7 +417,7 @@ defmodule ArangoXEcto.Migration.JsonSchema do
     level
   end
 
-  defp sub_level_schema(opts, nil), do: Keyword.put(opts, :schema, %{})
+  defp sub_level_schema(opts, nil), do: opts
 
   defp sub_level_schema(opts, name) do
     if schema = Keyword.get(opts, :schema) do
