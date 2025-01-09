@@ -71,6 +71,8 @@ defmodule ArangoXEcto.Integration.Migration do
 
     create edge(:user_content)
 
+    create edge(:post_classes)
+
     create collection(:permalinks) do
       add :uniform_resource_locator, :string
       add :title, :string

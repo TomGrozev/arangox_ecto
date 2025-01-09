@@ -26,7 +26,10 @@ defmodule ArangoXEcto.Integration.User do
       on_replace: :delete
     )
 
-    outgoing(:my_posts, ArangoXEcto.Integration.Post, edge: ArangoXEcto.Integration.UserContent)
+    outgoing(:my_posts, ArangoXEcto.Integration.Post,
+      edge: ArangoXEcto.Integration.UserContent,
+      on_replace: :delete
+    )
 
     outgoing(:my_comments, ArangoXEcto.Integration.Comment,
       edge: ArangoXEcto.Integration.UserContent
@@ -60,11 +63,6 @@ defmodule ArangoXEcto.Integration.Class do
   embedded_schema do
     field(:name, :string)
   end
-
-  def changeset(changeset, attrs) do
-    changeset
-    |> cast(attrs, [:name])
-  end
 end
 
 defmodule ArangoXEcto.Integration.DynamicClass do
@@ -83,6 +81,7 @@ end
 
 defmodule ArangoXEcto.Integration.Post do
   use ArangoXEcto.Schema
+  import Ecto.Changeset
 
   schema "posts" do
     field(:title, :string)
@@ -104,14 +103,22 @@ defmodule ArangoXEcto.Integration.Post do
       on_delete: :delete_all
     )
 
+    outgoing(:classes, ArangoXEcto.Integration.Class, edge: ArangoXEcto.Integration.PostClasses)
+
     belongs_to(:user, ArangoXEcto.Integration.User)
 
     timestamps()
+  end
+
+  def changeset(changeset, attrs) do
+    changeset
+    |> cast(attrs, [:title])
   end
 end
 
 defmodule ArangoXEcto.Integration.Comment do
   use ArangoXEcto.Schema
+  import Ecto.Changeset
 
   options(keyOptions: %{type: :uuid})
 
@@ -124,6 +131,11 @@ defmodule ArangoXEcto.Integration.Comment do
     field(:extra, :string)
 
     timestamps()
+  end
+
+  def changeset(changeset, attrs) do
+    changeset
+    |> cast(attrs, [:text])
   end
 end
 
@@ -180,6 +192,16 @@ defmodule ArangoXEcto.Integration.UserContent do
     to: [ArangoXEcto.Integration.Post, ArangoXEcto.Integration.Comment]
 
   schema "user_content" do
+    edge_fields()
+  end
+end
+
+defmodule ArangoXEcto.Integration.PostClasses do
+  use ArangoXEcto.Edge,
+    from: ArangoXEcto.Integration.Post,
+    to: ArangoXEcto.Integration.Class
+
+  schema "post_classes" do
     edge_fields()
   end
 end

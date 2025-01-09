@@ -412,6 +412,216 @@ defmodule ArangoXEctoTest.Integration.RelationshipTest do
     end
   end
 
+  describe "cast_graph/3" do
+    test "cast graph fails on schemaless changeset" do
+      struct = %ArangoXEcto.Integration.Class{name: "some value"}
+
+      assert_raise ArgumentError,
+                   ~r"cast_graph/3 cannot be used to cast associations into embedded schemas or schemaless changesets",
+                   fn ->
+                     Ecto.Changeset.change(struct)
+                     |> ArangoXEcto.Changeset.cast_graph(:name)
+                   end
+    end
+
+    test "cast graph fails on non-cast changeset" do
+      assert_raise ArgumentError,
+                   ~r"cast_graph/3 expects the changeset to be cast",
+                   fn ->
+                     %Ecto.Changeset{data: nil}
+                     |> ArangoXEcto.Changeset.cast_graph(:title)
+                   end
+    end
+
+    test "cast graph with required field" do
+      attrs = %{
+        first_name: "John",
+        last_name: "Smith"
+      }
+
+      post_changeset = fn struct, map ->
+        Ecto.Changeset.cast(struct, map, [:title])
+      end
+
+      comment_changeset = fn struct, map ->
+        Ecto.Changeset.cast(struct, map, [:text])
+      end
+
+      changeset =
+        Ecto.Changeset.cast(%User{}, attrs, [:first_name, :last_name])
+        |> ArangoXEcto.Changeset.cast_graph(:my_content,
+          with: %{
+            Post => post_changeset,
+            Comment => comment_changeset
+          },
+          required: true
+        )
+
+      assert [{:my_content, "can't be blank", [validation: :required]}] =
+               changeset.errors
+    end
+
+    test "cast graph with no with supplied" do
+      attrs = %{
+        first_name: "John",
+        last_name: "Smith",
+        my_content: [
+          %{text: "cba"},
+          %{title: "abc"}
+        ]
+      }
+
+      changeset =
+        Ecto.Changeset.cast(%User{}, attrs, [:first_name, :last_name])
+        |> ArangoXEcto.Changeset.cast_graph(:my_content)
+
+      [%{data: struct1}, %{data: struct2}] = Ecto.Changeset.get_change(changeset, :my_content)
+
+      assert Comment == struct1.__struct__
+      assert Post == struct2.__struct__
+    end
+
+    test "cast graph with no with and changeset function doesn't exists" do
+      attrs = %{
+        title: "My title",
+        classes: [
+          %{name: "My name"}
+        ]
+      }
+
+      assert_raise ArgumentError,
+                   ~r"the module ArangoXEcto.Integration.Class does not define a changeset/2 function",
+                   fn ->
+                     Ecto.Changeset.cast(%Post{}, attrs, [:title])
+                     |> ArangoXEcto.Changeset.cast_graph(:classes)
+                   end
+    end
+
+    test "cast graph with function changeset" do
+      attrs = %{
+        first_name: "John",
+        last_name: "Smith",
+        my_content: [
+          %{text: 123}
+        ]
+      }
+
+      changeset_fun = fn struct, map ->
+        Ecto.Changeset.cast(struct, map, [:text])
+      end
+
+      assert %{changes: %{my_content: [_]}} =
+               Ecto.Changeset.cast(%User{}, attrs, [:first_name, :last_name])
+               |> ArangoXEcto.Changeset.cast_graph(:my_content, with: changeset_fun)
+    end
+
+    test "cast graph with nil changeset option" do
+      attrs = %{
+        first_name: "John",
+        last_name: "Smith",
+        my_content: [
+          %{text: 123}
+        ]
+      }
+
+      assert_raise ArgumentError,
+                   ~r"the function for module ArangoXEcto.Integration.Comment is not a valid function",
+                   fn ->
+                     Ecto.Changeset.cast(%User{}, attrs, [:first_name, :last_name])
+                     |> ArangoXEcto.Changeset.cast_graph(:my_content,
+                       with: %{
+                         Comment => nil
+                       }
+                     )
+                   end
+    end
+
+    test "cast graph with module that doesn't exist in relation" do
+      attrs = %{
+        first_name: "John",
+        last_name: "Smith",
+        my_content: [
+          %{text: 123}
+        ]
+      }
+
+      changeset_fun = fn struct, map ->
+        Ecto.Changeset.cast(struct, map, [:text])
+      end
+
+      assert_raise ArgumentError,
+                   ~r"the module ArangoXEcto.Integration.User is not a valid related schema for this association",
+                   fn ->
+                     Ecto.Changeset.cast(%User{}, attrs, [:first_name, :last_name])
+                     |> ArangoXEcto.Changeset.cast_graph(:my_content,
+                       with: %{
+                         User => changeset_fun
+                       }
+                     )
+                   end
+    end
+
+    test "cast graph with invalid with parameter" do
+      attrs = %{
+        first_name: "John",
+        last_name: "Smith",
+        my_content: [
+          %{text: 123}
+        ]
+      }
+
+      changeset_fun = fn struct, map ->
+        Ecto.Changeset.cast(struct, map, [:text])
+      end
+
+      assert_raise ArgumentError,
+                   ~r"the with clause is not valid",
+                   fn ->
+                     Ecto.Changeset.cast(%User{}, attrs, [:first_name, :last_name])
+                     |> ArangoXEcto.Changeset.cast_graph(:my_content,
+                       with: "invalid"
+                     )
+                   end
+    end
+
+    test "cast graph with module as mapping" do
+      attrs = %{
+        first_name: "John",
+        last_name: "Smith",
+        my_posts: [
+          %{title: "some title"}
+        ]
+      }
+
+      assert %{changes: %{my_posts: [_]}} =
+               Ecto.Changeset.cast(%User{}, attrs, [:first_name, :last_name])
+               |> ArangoXEcto.Changeset.cast_graph(:my_posts)
+    end
+
+    test "cast graph update struct" do
+      attrs = %{
+        first_name: "John",
+        last_name: "Smith",
+        my_posts: [
+          %{title: "some title"}
+        ]
+      }
+
+      user =
+        Ecto.Changeset.cast(%User{}, attrs, [:first_name, :last_name])
+        |> ArangoXEcto.Changeset.cast_graph(:my_posts)
+        |> TestRepo.insert!()
+
+      assert %{
+               changes: %{
+                 my_posts: [%{action: :replace}, %{changes: %{title: "some other title"}}]
+               }
+             } =
+               Ecto.Changeset.cast(user, %{my_posts: [%{title: "some other title"}]}, [])
+               |> ArangoXEcto.Changeset.cast_graph(:my_posts)
+    end
+  end
+
   describe "one relationship" do
     test "one to other one" do
       post = %Post{title: "abc"}
