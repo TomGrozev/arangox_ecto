@@ -570,10 +570,6 @@ defmodule ArangoXEctoTest.Integration.RelationshipTest do
         ]
       }
 
-      changeset_fun = fn struct, map ->
-        Ecto.Changeset.cast(struct, map, [:text])
-      end
-
       assert_raise ArgumentError,
                    ~r"the with clause is not valid",
                    fn ->
@@ -582,6 +578,20 @@ defmodule ArangoXEctoTest.Integration.RelationshipTest do
                        with: "invalid"
                      )
                    end
+    end
+
+    test "cast graph with invalid value fails" do
+      attrs = %{
+        first_name: "John",
+        last_name: "Smith",
+        my_content: [
+          "invalid"
+        ]
+      }
+
+      assert %{errors: [my_content: {"is invalid", [validation: :assoc, type: {:array, :map}]}]} =
+               Ecto.Changeset.cast(%User{}, attrs, [:first_name, :last_name])
+               |> ArangoXEcto.Changeset.cast_graph(:my_content)
     end
 
     test "cast graph with module as mapping" do
@@ -619,6 +629,223 @@ defmodule ArangoXEctoTest.Integration.RelationshipTest do
              } =
                Ecto.Changeset.cast(user, %{my_posts: [%{title: "some other title"}]}, [])
                |> ArangoXEcto.Changeset.cast_graph(:my_posts)
+    end
+  end
+
+  describe "put_graph/4" do
+    test "can put a value into changeset" do
+      attrs = %{
+        first_name: "John",
+        last_name: "Smith"
+      }
+
+      post = %Post{title: "Some title"}
+
+      assert %{changes: %{my_content: [%{data: %Post{}}]}} =
+               Ecto.Changeset.cast(%User{}, attrs, [:first_name, :last_name])
+               |> ArangoXEcto.Changeset.put_graph(:my_content, [post])
+    end
+
+    test "no types set in changeset" do
+      post = %Post{title: "Some title"}
+
+      assert_raise ArgumentError,
+                   ~r"changeset does not have types information",
+                   fn ->
+                     Ecto.Changeset.cast(%User{}, %{}, [])
+                     |> Map.put(:types, nil)
+                     |> ArangoXEcto.Changeset.put_graph(:my_content, [post])
+                   end
+    end
+
+    test "on replace mark as invalid" do
+      attrs = %{
+        first_name: "John",
+        last_name: "Smith"
+      }
+
+      user =
+        Ecto.Changeset.cast(%User{}, attrs, [:first_name, :last_name])
+        |> ArangoXEcto.Changeset.put_graph(:my_comments, [%Comment{text: "Some text"}])
+        |> TestRepo.insert!()
+
+      assert %{errors: [my_comments: {"is invalid", [type: {:array, :map}]}]} =
+               Ecto.Changeset.cast(user, %{first_name: "Robert"}, [:first_name, :last_name])
+               |> ArangoXEcto.Changeset.put_graph(:my_comments, [%Comment{text: "Some
+        other text"}])
+    end
+
+    test "on replace raises" do
+      attrs = %{
+        first_name: "John",
+        last_name: "Smith"
+      }
+
+      user =
+        Ecto.Changeset.cast(%User{}, attrs, [:first_name, :last_name])
+        |> ArangoXEcto.Changeset.put_graph(:my_content, [%Comment{text: "Some text"}])
+        |> TestRepo.insert!()
+
+      assert_raise RuntimeError,
+                   ~r"you are attempting to change graph relation :my_content of",
+                   fn ->
+                     Ecto.Changeset.cast(user, %{first_name: "Robert"}, [:first_name, :last_name])
+                     |> ArangoXEcto.Changeset.put_graph(:my_content, [%Comment{text: "Some
+        other text"}])
+                   end
+    end
+
+    test "changes cleared on no difference" do
+      attrs = %{
+        first_name: "John",
+        last_name: "Smith"
+      }
+
+      user =
+        Ecto.Changeset.cast(%User{}, attrs, [:first_name, :last_name])
+        |> ArangoXEcto.Changeset.put_graph(:my_comments, [%Comment{text: "Some text"}])
+        |> TestRepo.insert!()
+
+      assert %{valid?: true, changes: %{first_name: "Robert"} = changes} =
+               Ecto.Changeset.cast(user, %{first_name: "Robert"}, [:first_name, :last_name])
+               |> ArangoXEcto.Changeset.put_graph(
+                 :my_comments,
+                 user.my_comments
+               )
+
+      refute Map.has_key?(changes, :my_comments)
+    end
+
+    test "raises on trying to insert wrong type" do
+      attrs = %{
+        first_name: "John",
+        last_name: "Smith"
+      }
+
+      assert_raise RuntimeError,
+                   ~r"expected changeset data to be one of",
+                   fn ->
+                     Ecto.Changeset.cast(%User{}, attrs, [:first_name, :last_name])
+                     |> ArangoXEcto.Changeset.put_graph(:my_content, [%User{first_name: "Ben"}])
+                   end
+    end
+
+    test "put changeset in graph" do
+      attrs = %{
+        first_name: "John",
+        last_name: "Smith"
+      }
+
+      changeset = %Comment{text: "Some text"} |> Ecto.Changeset.change()
+
+      assert %{changes: %{my_comments: [%{data: %Comment{}}]}} =
+               Ecto.Changeset.cast(%User{}, attrs, [:first_name, :last_name])
+               |> ArangoXEcto.Changeset.put_graph(:my_comments, [changeset])
+
+      assert %{changes: %{my_comments: [%{data: %Comment{}}]}} =
+               Ecto.Changeset.cast(%User{my_comments: nil}, attrs, [:first_name, :last_name])
+               |> ArangoXEcto.Changeset.put_graph(:my_comments, [changeset])
+
+      assert %{changes: changes} =
+               Ecto.Changeset.cast(%User{}, attrs, [:first_name, :last_name])
+               |> ArangoXEcto.Changeset.put_graph(:my_comments, [
+                 Map.put(changeset, :action, :ignore)
+               ])
+
+      refute Map.has_key?(changes, :my_comments)
+    end
+
+    test "update changeset in graph" do
+      attrs = %{
+        first_name: "John",
+        last_name: "Smith"
+      }
+
+      changeset = %Comment{text: "Some text"} |> Ecto.Changeset.change()
+
+      %User{my_comments: [comment]} =
+        user =
+        Ecto.Changeset.cast(%User{}, attrs, [:first_name, :last_name])
+        |> ArangoXEcto.Changeset.put_graph(:my_comments, [changeset])
+        |> TestRepo.insert!()
+
+      comment_keyword = [id: comment.id, text: "Some other text"]
+      comment = Ecto.Changeset.change(comment, %{text: "Some other text"})
+
+      assert %{changes: %{my_comments: [%{changes: %{text: "Some other text"}}]}} =
+               Ecto.Changeset.cast(user, %{first_name: "Robert"}, [:first_name, :last_name])
+               |> ArangoXEcto.Changeset.put_graph(:my_comments, [comment])
+
+      assert %{changes: %{my_comments: [%{changes: %{text: "Some other text"}}]}} =
+               Ecto.Changeset.cast(user, %{first_name: "Robert"}, [:first_name, :last_name])
+               |> ArangoXEcto.Changeset.put_graph(
+                 :my_comments,
+                 [comment_keyword]
+               )
+    end
+
+    test "put empty value" do
+      attrs = %{
+        first_name: "John",
+        last_name: "Smith"
+      }
+
+      assert %{changes: %{my_comments: []}} =
+               Ecto.Changeset.cast(%User{}, attrs, [:first_name, :last_name])
+               |> ArangoXEcto.Changeset.put_graph(:my_comments, [])
+    end
+
+    test "put invalid value type" do
+      attrs = %{
+        first_name: "John",
+        last_name: "Smith"
+      }
+
+      assert %{errors: [my_comments: {"is invalid", [type: {:array, :map}]}]} =
+               Ecto.Changeset.cast(%User{}, attrs, [:first_name, :last_name])
+               |> ArangoXEcto.Changeset.put_graph(:my_comments, "invalid")
+    end
+
+    test "put with nil existing value" do
+      attrs = %{
+        first_name: "John",
+        last_name: "Smith"
+      }
+
+      assert %{changes: %{my_comments: [%{data: %Comment{}}]}} =
+               Ecto.Changeset.cast(%User{my_comments: nil}, attrs, [:first_name, :last_name])
+               |> ArangoXEcto.Changeset.put_graph(:my_comments, [%Comment{text: "Some
+        other text"}])
+    end
+
+    test "can't put more than once on unique field" do
+      attrs = %{
+        first_name: "John",
+        last_name: "Smith"
+      }
+
+      comment = %Comment{text: "Some other text"} |> TestRepo.insert!()
+
+      assert %{
+               changes: %{
+                 my_comments: [%{valid?: true}, %{errors: [id: {"has already been taken", []}]}]
+               }
+             } =
+               Ecto.Changeset.cast(%User{}, attrs, [:first_name, :last_name])
+               |> ArangoXEcto.Changeset.put_graph(:my_comments, [comment, comment])
+    end
+
+    test "can put more than once on regular field" do
+      attrs = %{
+        first_name: "John",
+        last_name: "Smith"
+      }
+
+      comment = %Comment{text: "Some other text"} |> TestRepo.insert!()
+
+      assert %{changes: %{my_content: [%{valid?: true}, %{valid?: true}]}} =
+               Ecto.Changeset.cast(%User{}, attrs, [:first_name, :last_name])
+               |> ArangoXEcto.Changeset.put_graph(:my_content, [comment, comment])
     end
   end
 

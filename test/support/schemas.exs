@@ -32,7 +32,9 @@ defmodule ArangoXEcto.Integration.User do
     )
 
     outgoing(:my_comments, ArangoXEcto.Integration.Comment,
-      edge: ArangoXEcto.Integration.UserContent
+      edge: ArangoXEcto.Integration.UserContent,
+      on_replace: :mark_as_invalid,
+      unique: true
     )
 
     outgoing(
@@ -41,7 +43,8 @@ defmodule ArangoXEcto.Integration.User do
         ArangoXEcto.Integration.Post => [:title],
         ArangoXEcto.Integration.Comment => [:text]
       },
-      edge: ArangoXEcto.Integration.UserContent
+      edge: ArangoXEcto.Integration.UserContent,
+      on_replace: :raise
     )
 
     has_one(:best_post, ArangoXEcto.Integration.Post)
