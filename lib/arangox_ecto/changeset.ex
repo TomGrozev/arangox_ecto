@@ -717,7 +717,8 @@ defmodule ArangoXEcto.Changeset do
     if mod in mods do
       changeset
     else
-      raise ArgumentError, "expected changeset data to be a #{mod} struct, got: #{inspect(data)}"
+      raise RuntimeError,
+            "expected changeset data to be one of #{Enum.join(mods, ", ")} struct(s), got: #{inspect(data)}"
     end
   end
 
