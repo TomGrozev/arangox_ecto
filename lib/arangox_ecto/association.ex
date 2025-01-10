@@ -409,6 +409,7 @@ defmodule ArangoXEcto.Association do
         mapping: queryables,
         on_delete: on_delete,
         on_replace: on_replace,
+        unique: Keyword.get(opts, :unique, false),
         where: where
       }
     end
@@ -776,6 +777,12 @@ defmodule ArangoXEcto.Association do
                       deleted when casting or manipulating the parent changeset.
     * `:where` - A filter for the association. See "Filtering associations" in 
                 `Ecto.Schema.has_many/3`.
+    * `:unique` - When true, checks if the associated entries are unique 
+                whenever the association is cast or changed via the parent 
+                record. For instance, it would verify that a given tag cannot 
+                be attached to the same post more than once. This exists mostly 
+                as a quick check for user feedback, as it does not guarantee 
+                uniqueness in the Arango database.
   """
   defmacro graph(name, queryables, direction, opts \\ []) do
     queryables = expand_literals(queryables, __CALLER__)
@@ -791,7 +798,7 @@ defmodule ArangoXEcto.Association do
     end
   end
 
-  @valid_graph_options [:edge, :on_replace, :on_delete, :where]
+  @valid_graph_options [:edge, :on_replace, :on_delete, :where, :unique]
 
   @doc false
   def __graph__(mod, name, queryables, direction, opts)
