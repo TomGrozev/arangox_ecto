@@ -1,52 +1,78 @@
-defmodule ArangoXEctoTest.Integration.User do
+defmodule ArangoXEcto.Integration.User do
   use ArangoXEcto.Schema
+
   import Ecto.Changeset
 
   schema "users" do
     field(:first_name, :string)
     field(:last_name, :string)
-    field(:extra, :string)
-    field(:extra2, :string)
     field(:gender, Ecto.Enum, values: [male: 0, female: 1, other: 2], default: :male)
-    field(:age, :integer)
+    field(:age, :integer, default: 0)
     field(:location, ArangoXEcto.Types.GeoJSON)
+    field(:uuid, Ecto.UUID)
+    field(:create_time, :time)
+    field(:create_datetime, :utc_datetime)
 
-    embeds_one(:class, ArangoXEctoTest.Integration.Class, on_replace: :delete)
+    embeds_one(:class, ArangoXEcto.Integration.Class, on_replace: :delete)
 
     embeds_many :items, Item do
       field(:name, :string)
     end
 
-    outgoing(:posts, ArangoXEctoTest.Integration.Post)
+    outgoing(:posts, ArangoXEcto.Integration.Post)
 
-    outgoing(:posts_two, ArangoXEctoTest.Integration.Post,
-      edge: ArangoXEctoTest.Integration.UserPosts
+    outgoing(:posts_two, ArangoXEcto.Integration.Post,
+      edge: ArangoXEcto.Integration.UserPosts,
+      on_replace: :delete
     )
 
-    one_outgoing(:best_post, ArangoXEctoTest.Integration.Post)
+    outgoing(:my_posts, ArangoXEcto.Integration.Post,
+      edge: ArangoXEcto.Integration.UserContent,
+      on_replace: :delete
+    )
+
+    outgoing(:my_comments, ArangoXEcto.Integration.Comment,
+      edge: ArangoXEcto.Integration.UserContent,
+      on_replace: :mark_as_invalid,
+      unique: true
+    )
+
+    outgoing(
+      :my_content,
+      %{
+        ArangoXEcto.Integration.Post => [:title],
+        ArangoXEcto.Integration.Comment => [:text]
+      },
+      edge: ArangoXEcto.Integration.UserContent,
+      on_replace: :raise
+    )
+
+    has_one(:best_post, ArangoXEcto.Integration.Post)
 
     timestamps()
   end
 
   def changeset(struct, attrs) do
     struct
-    |> cast(attrs, [:first_name, :last_name, :extra, :extra2, :gender])
-    |> cast_embed(:class)
-    |> cast_embed(:items, with: &items_changeset/2)
-    |> validate_required([:first_name, :last_name])
-  end
-
-  defp items_changeset(changeset, attrs) do
-    changeset
-    |> cast(attrs, [:name])
+    |> cast(attrs, [:first_name, :last_name, :gender, :age, :location])
+    |> validate_required([:last_name])
   end
 end
 
-defmodule ArangoXEctoTest.Integration.Class do
+defmodule ArangoXEcto.Integration.Class do
   use ArangoXEcto.Schema
   import Ecto.Changeset
 
   embedded_schema do
+    field(:name, :string)
+  end
+end
+
+defmodule ArangoXEcto.Integration.DynamicClass do
+  use ArangoXEcto.Schema
+  import Ecto.Changeset
+
+  schema "dynamic_class" do
     field(:name, :string)
   end
 
@@ -56,28 +82,44 @@ defmodule ArangoXEctoTest.Integration.Class do
   end
 end
 
-defmodule ArangoXEctoTest.Integration.Post do
+defmodule ArangoXEcto.Integration.Post do
   use ArangoXEcto.Schema
+  import Ecto.Changeset
 
   schema "posts" do
     field(:title, :string)
-    field(:text, :string)
-    field(:views, :integer)
-    field(:virt, :string, default: "iamavirtualfield", virtual: true)
+    field(:counter, :id)
+    field(:uuid, Ecto.UUID)
+    field(:links, {:map, :string})
+    field(:intensities, {:map, :float})
+    field(:public, :boolean, default: true)
+    field(:cost, :decimal)
+    field(:visits, :integer)
+    field(:intensity, :float)
+    field(:posted, :date)
+    field(:read_only, :string)
 
-    incoming(:users, ArangoXEctoTest.Integration.User)
+    incoming(:users, ArangoXEcto.Integration.User)
 
-    incoming(:users_two, ArangoXEctoTest.Integration.User,
-      edge: ArangoXEctoTest.Integration.UserPosts
+    incoming(:users_two, ArangoXEcto.Integration.User,
+      edge: ArangoXEcto.Integration.UserPosts,
+      on_delete: :delete_all
     )
 
-    one_incoming(:user, ArangoXEctoTest.Integration.User)
+    outgoing(:classes, ArangoXEcto.Integration.Class, edge: ArangoXEcto.Integration.PostClasses)
+
+    belongs_to(:user, ArangoXEcto.Integration.User)
 
     timestamps()
   end
+
+  def changeset(changeset, attrs) do
+    changeset
+    |> cast(attrs, [:title])
+  end
 end
 
-defmodule ArangoXEctoTest.Integration.Comment do
+defmodule ArangoXEcto.Integration.Comment do
   use ArangoXEcto.Schema
   import Ecto.Changeset
 
@@ -97,11 +139,10 @@ defmodule ArangoXEctoTest.Integration.Comment do
   def changeset(changeset, attrs) do
     changeset
     |> cast(attrs, [:text])
-    |> unique_constraint(:text, name: :comment_idx)
   end
 end
 
-defmodule ArangoXEctoTest.Integration.Deep.Magic do
+defmodule ArangoXEcto.Integration.Deep.Magic do
   use ArangoXEcto.Schema
 
   schema "magics" do
@@ -110,14 +151,14 @@ defmodule ArangoXEctoTest.Integration.Deep.Magic do
   end
 end
 
-defmodule ArangoXEctoTest.Integration.UserPosts do
+defmodule ArangoXEcto.Integration.UserPosts do
   use ArangoXEcto.Edge,
-    from: ArangoXEctoTest.Integration.User,
-    to: ArangoXEctoTest.Integration.Post
+    from: ArangoXEcto.Integration.Post,
+    to: ArangoXEcto.Integration.User
 
   import Ecto.Changeset
 
-  schema "user_posts" do
+  schema "posts_users" do
     edge_fields()
 
     field(:type, :string)
@@ -129,20 +170,14 @@ defmodule ArangoXEctoTest.Integration.UserPosts do
   end
 end
 
-defmodule ArangoXEctoTest.Integration.UserPostsOptions do
+defmodule ArangoXEcto.Integration.UserPostsOptions do
   use ArangoXEcto.Edge,
-    from: ArangoXEctoTest.Integration.User,
-    to: ArangoXEctoTest.Integration.Post
+    from: ArangoXEcto.Integration.Post,
+    to: ArangoXEcto.Integration.User
 
   import Ecto.Changeset
 
-  options(keyOptions: %{type: :uuid})
-
-  indexes([
-    [fields: [:type], unique: true]
-  ])
-
-  schema "user_posts_options" do
+  schema "posts_users_options" do
     edge_fields()
 
     field(:type, :string)
@@ -154,17 +189,38 @@ defmodule ArangoXEctoTest.Integration.UserPostsOptions do
   end
 end
 
-defmodule ArangoXEctoTest.Integration.UsersView do
+defmodule ArangoXEcto.Integration.UserContent do
+  use ArangoXEcto.Edge,
+    from: ArangoXEcto.Integration.User,
+    to: [ArangoXEcto.Integration.Post, ArangoXEcto.Integration.Comment]
+
+  schema "user_content" do
+    edge_fields()
+  end
+end
+
+defmodule ArangoXEcto.Integration.PostClasses do
+  use ArangoXEcto.Edge,
+    from: ArangoXEcto.Integration.Post,
+    to: ArangoXEcto.Integration.Class
+
+  schema "post_classes" do
+    edge_fields()
+  end
+end
+
+defmodule ArangoXEcto.Integration.UsersView do
   use ArangoXEcto.View
 
   alias ArangoXEcto.View.Link
 
   view "user_search" do
-    primary_sort(:created_at, :asc)
+    primary_sort(:created_at, :desc)
+    primary_sort(:first_name, :asc)
 
-    store_value([:first_name], :lz4)
+    store_value([:first_name, :last_name], :lz4)
 
-    link(ArangoXEctoTest.Integration.User, %Link{
+    link(ArangoXEcto.Integration.User, %Link{
       includeAllFields: true,
       fields: %{
         last_name: %Link{
@@ -177,36 +233,56 @@ defmodule ArangoXEctoTest.Integration.UsersView do
   end
 end
 
-defmodule ArangoXEctoTest.Integration.CommentView do
+defmodule ArangoXEcto.Integration.PostsView do
+  use ArangoXEcto.View
+
+  alias ArangoXEcto.View.Link
+
+  view "post_search" do
+    primary_sort(:created_at, :asc)
+
+    store_value([:title], :lz4)
+
+    link(ArangoXEcto.Integration.Post, %Link{
+      includeAllFields: true,
+      fields: %{
+        title: %Link{
+          analyzers: [:text_en]
+        }
+      }
+    })
+
+    options(primarySortCompression: :lz4)
+  end
+end
+
+defmodule ArangoXEcto.Integration.CommentView do
   use ArangoXEcto.View
 
   alias ArangoXEcto.View.Link
 
   view "comment_search" do
-    link(
-      ArangoXEctoTest.Integration.Comment,
-      %Link{
-        includeAllFields: true,
-        fields: %{
-          name: %Link{
-            analyzers: [:text_en]
-          }
+    link(ArangoXEcto.Integration.Comment, %Link{
+      includeAllFields: true,
+      fields: %{
+        text: %Link{
+          analyzers: [:text_en]
         }
       }
-    )
+    })
 
     options(primarySortCompression: :lz4)
   end
 end
 
-defmodule ArangoXEctoTest.Integration.AnalyzerTestView do
-  use ArangoXEcto.View, analyzer_module: ArangoXEctoTest.Integration.Analyzers
+defmodule ArangoXEcto.Integration.AnalyzerTestView do
+  use ArangoXEcto.View, analyzer_module: ArangoXEcto.Integration.Analyzers
 
   alias ArangoXEcto.View.Link
 
   view "analyzer_test_view" do
     link(
-      ArangoXEctoTest.Integration.Comment,
+      ArangoXEcto.Integration.Comment,
       %Link{
         includeAllFields: true,
         fields: %{
@@ -221,29 +297,7 @@ defmodule ArangoXEctoTest.Integration.AnalyzerTestView do
   end
 end
 
-defmodule ArangoXEctoTest.Integration.FailedAnalyzerTestView do
-  use ArangoXEcto.View
-
-  alias ArangoXEcto.View.Link
-
-  view "failed_analyzer_test_view" do
-    link(
-      ArangoXEctoTest.Integration.Comment,
-      %Link{
-        includeAllFields: true,
-        fields: %{
-          name: %Link{
-            analyzers: [:f]
-          }
-        }
-      }
-    )
-
-    options(primarySortCompression: :lz4)
-  end
-end
-
-defmodule ArangoXEctoTest.Integration.Analyzers do
+defmodule ArangoXEcto.Integration.Analyzers do
   use ArangoXEcto.Analyzer
 
   identity(:a, [:norm])
@@ -340,4 +394,38 @@ defmodule ArangoXEctoTest.Integration.Analyzers do
   })
 
   build()
+end
+
+defmodule ArangoXEcto.Integration.NonEcto do
+  defstruct [:id, :name, :__meta__]
+end
+
+defmodule ArangoXEcto.Integration.InvalidIndexes do
+  use ArangoXEcto.Schema
+
+  indexes(%{
+    indexes: [fields: [:name], unique: true, name: :invalid_idx]
+  })
+
+  schema "invalid_indexes" do
+    field(:name, :string)
+
+    timestamps()
+  end
+end
+
+defmodule ArangoXEcto.Integration.OneInvalidIndex do
+  use ArangoXEcto.Schema
+
+  indexes([
+    [fields: [:name], unique: true, name: :valid_idx],
+    [fields: [:name], name: :valid_idx],
+    [fields: [:name], unique: true, name: :valid_idx2]
+  ])
+
+  schema "one_invalid_index" do
+    field(:name, :string)
+
+    timestamps()
+  end
 end

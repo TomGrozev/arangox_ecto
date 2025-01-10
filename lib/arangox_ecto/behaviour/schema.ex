@@ -20,14 +20,14 @@ defmodule ArangoXEcto.Behaviour.Schema do
   """
   @impl true
   def insert(
-        %{pid: conn, repo: repo},
+        %{repo: repo} = adapter_meta,
         %{source: collection, schema: schema, prefix: prefix},
-        fields,
+        params,
         on_conflict,
         returning,
-        options
+        opts
       ) do
-    return_new = should_return_new?(returning, options)
+    return_new = should_return_new?(returning, opts)
 
     options =
       build_options([
@@ -36,23 +36,31 @@ defmodule ArangoXEcto.Behaviour.Schema do
       ])
 
     insert_fields =
-      fields
+      params
       |> process_fields(schema)
 
     doc = Enum.into(insert_fields, %{})
 
-    Logger.debug("#{inspect(__MODULE__)}.insert", %{
-      "#{inspect(__MODULE__)}.insert-params" => %{document: inspect(doc)}
-    })
+    opts = Keyword.merge(opts, source: collection, type: "insert") |> Keyword.put(:prefix, prefix)
 
-    maybe_create_collection(repo, schema, prefix)
+    if !Keyword.get(repo.config(), :static, true) do
+      maybe_create_collection(repo, schema, prefix)
+    end
 
-    Arangox.post(
-      conn,
-      ArangoXEcto.__build_connection_url__(repo, "document/#{collection}", prefix, options),
-      doc
+    ArangoXEcto.api_query(
+      adapter_meta,
+      :post,
+      ArangoXEcto.__build_connection_url__(
+        repo,
+        "document/#{collection}",
+        opts,
+        options
+      ),
+      doc,
+      %{},
+      opts
     )
-    |> extract_doc(return_new, on_conflict)
+    |> process_result(return_new, on_conflict)
     |> single_doc_result(returning)
   end
 
@@ -61,17 +69,16 @@ defmodule ArangoXEcto.Behaviour.Schema do
   """
   @impl true
   def insert_all(
-        %{pid: conn, repo: repo},
+        %{repo: repo} = adapter_meta,
         %{source: collection, schema: schema, prefix: prefix},
         _header,
         list,
         on_conflict,
         returning,
         _placeholders,
-        options
+        opts
       ) do
-    docs = build_docs(list)
-    return_new = should_return_new?(returning, options)
+    return_new = should_return_new?(returning, opts)
 
     options =
       build_options([
@@ -79,19 +86,30 @@ defmodule ArangoXEcto.Behaviour.Schema do
         {replace_conflict?(on_conflict), "overwrite"}
       ])
 
-    Logger.debug("#{inspect(__MODULE__)}.insert_all", %{
-      "#{inspect(__MODULE__)}.insert_all-params" => %{documents: inspect(docs)}
-    })
+    docs = build_docs(list)
 
-    maybe_create_collection(repo, schema, prefix)
+    opts =
+      Keyword.merge(opts, source: collection, type: "insert_all") |> Keyword.put(:prefix, prefix)
 
-    case Arangox.post(
-           conn,
-           ArangoXEcto.__build_connection_url__(repo, "document/#{collection}", prefix, options),
-           docs
+    if !Keyword.get(repo.config(), :static, true) do
+      maybe_create_collection(repo, schema, prefix)
+    end
+
+    case ArangoXEcto.api_query(
+           adapter_meta,
+           :post,
+           ArangoXEcto.__build_connection_url__(
+             repo,
+             "document/#{collection}",
+             opts,
+             options
+           ),
+           docs,
+           %{},
+           opts
          ) do
       {:ok, %{body: body}} ->
-        get_insert_fields(body, returning, return_new)
+        process_all_docs(body, docs, returning, return_new, on_conflict)
 
       {:error, %{status: status}} ->
         {:invalid, status}
@@ -101,7 +119,7 @@ defmodule ArangoXEcto.Behaviour.Schema do
   defp replace_conflict?({fields, _, _targets}) when is_list(fields), do: true
   defp replace_conflict?({_, _, _targets}), do: false
 
-  defp build_options(options_matrix) do
+  defp build_options(options_matrix) when is_list(options_matrix) do
     Enum.reduce(options_matrix, [], fn {bool, option}, acc ->
       ["#{option}=#{bool}" | acc]
     end)
@@ -135,8 +153,8 @@ defmodule ArangoXEcto.Behaviour.Schema do
       assoc = schema.__schema__(:association, assoc_key)
 
       case assoc.owner_key do
-        :_from -> {assoc.queryable, elem(acc, 1)}
-        :_to -> {elem(acc, 0), assoc.queryable}
+        :_from -> {assoc.queryables, elem(acc, 1)}
+        :_to -> {elem(acc, 0), assoc.queryables}
         _ -> acc
       end
     end)
@@ -147,25 +165,29 @@ defmodule ArangoXEcto.Behaviour.Schema do
   """
   @impl true
   def delete(
-        %{pid: conn, repo: repo},
+        %{repo: repo} = adapter_meta,
         %{source: collection, prefix: prefix},
         [{:_key, key}],
-        _options
+        _returning,
+        opts
       ) do
-    Logger.debug("#{inspect(__MODULE__)}.delete", %{
-      "#{inspect(__MODULE__)}.delete-params" => %{collection: collection, key: key}
-    })
+    opts = Keyword.merge(opts, source: collection, type: "delete")
 
-    url = ArangoXEcto.__build_connection_url__(repo, "document/#{collection}/#{key}", prefix)
+    url =
+      ArangoXEcto.__build_connection_url__(
+        repo,
+        "document/#{collection}/#{key}",
+        Keyword.put(opts, :prefix, prefix)
+      )
 
-    case Arangox.delete(conn, url) do
+    case ArangoXEcto.api_query(adapter_meta, :delete, url, "", %{}, opts) do
       {:ok, _} -> {:ok, []}
       {:error, %{status: 404}} -> {:error, :stale}
       {:error, %{status: status}} -> {:error, status}
     end
   end
 
-  def delete(_adapter_meta, _schema_meta, _filters, _options) do
+  def delete(_adapter_meta, _schema_meta, _filters, _returning, _options) do
     raise "Deleting with filters other than _key is not supported yet"
   end
 
@@ -174,35 +196,39 @@ defmodule ArangoXEcto.Behaviour.Schema do
   """
   @impl true
   def update(
-        %{pid: conn, repo: repo},
+        %{repo: repo} = adapter_meta,
         %{source: collection, schema: schema, prefix: prefix},
         fields,
         [{:_key, key}],
         returning,
-        options
+        opts
       ) do
-    document = Enum.into(fields, %{})
+    return_new = should_return_new?(returning, opts)
 
-    return_new = should_return_new?(returning, options)
-    options = if return_new, do: "?returnNew=true", else: ""
+    options = build_options([{return_new, "returnNew"}])
 
-    Logger.debug("#{inspect(__MODULE__)}.update", %{
-      "#{inspect(__MODULE__)}.update-params" => %{document: inspect(document)}
-    })
+    doc = Enum.into(fields, %{})
 
-    maybe_create_collection(repo, schema, prefix)
+    opts = Keyword.merge(opts, source: collection, type: "update") |> Keyword.put(:prefix, prefix)
 
-    Arangox.patch(
-      conn,
+    if !Keyword.get(repo.config(), :static, true) do
+      maybe_create_collection(repo, schema, prefix)
+    end
+
+    ArangoXEcto.api_query(
+      adapter_meta,
+      :patch,
       ArangoXEcto.__build_connection_url__(
         repo,
         "document/#{collection}/#{key}",
-        prefix,
+        opts,
         options
       ),
-      document
+      doc,
+      %{},
+      opts
     )
-    |> extract_doc(return_new)
+    |> process_result(return_new, nil)
     |> single_doc_result(returning)
   end
 
@@ -235,49 +261,54 @@ defmodule ArangoXEcto.Behaviour.Schema do
       Enum.any?(returning, &(&1 not in [:_id, :_key, :_rev]))
   end
 
-  defp extract_doc(response, return_new, on_conflict \\ nil)
+  defp extract_doc(%{"errorNum" => num, "errorMessage" => msg}, return_new, on_conflict),
+    do: extract_doc(%{error_num: num, message: msg}, return_new, on_conflict)
 
-  defp extract_doc({:ok, %Arangox.Response{body: %{"new" => doc}}}, true, _on_conflict) do
-    {:ok, doc}
-  end
+  defp extract_doc(%{error_num: 1210, message: _msg}, _, {:nothing, _, _}), do: {:ok, nil}
 
-  defp extract_doc({:ok, %Arangox.Response{body: doc}}, false, _on_conflict) do
-    {:ok, patch_body_keys(doc)}
-  end
-
-  defp extract_doc({:error, %{error_num: 1210, message: _msg}}, _, {:nothing, _, _}) do
-    {:ok, nil}
-  end
-
-  defp extract_doc({:error, %{error_num: 1210, message: msg}}, _, _on_conflict) do
+  defp extract_doc(%{error_num: 1210, message: msg}, _, _) do
     [_, index] = Regex.run(~r/in index ([^\s]+) of type/, msg)
     {:invalid, [unique: index]}
   end
 
-  defp extract_doc({:error, %{error_num: 1202}}, _, _on_conflict) do
-    {:error, :stale}
-  end
+  defp extract_doc(%{error_num: 1202, message: _msg}, _, _), do: {:error, :stale}
+  defp extract_doc(%{error_num: 1620, message: msg}, _, _), do: {:invalid, [schema: msg]}
 
-  defp extract_doc({:error, %{error_num: error_num, message: msg}}, _, _on_conflict) do
-    raise "#{inspect(__MODULE__)} Error(#{error_num}): #{msg}"
-  end
+  defp extract_doc(%{error_num: num, message: msg}, _, _),
+    do: {:error, "#{inspect(__MODULE__)} Error(#{num}): #{msg}"}
+
+  defp extract_doc(%{"new" => doc}, true, _) when is_map(doc), do: {:ok, doc}
+
+  defp extract_doc(doc, false, _) when is_map(doc), do: {:ok, patch_body_keys(doc)}
+
+  defp process_result({:ok, %Arangox.Response{body: doc}}, return_new, on_conflict),
+    do: extract_doc(doc, return_new, on_conflict)
+
+  defp process_result({:error, error}, return_new, on_conflict),
+    do: extract_doc(error, return_new, on_conflict)
 
   defp single_doc_result({:ok, nil}, _returning), do: {:ok, []}
 
   defp single_doc_result({:ok, doc}, returning) do
-    {:ok, Enum.map(returning, &{&1, Map.get(doc, Atom.to_string(&1))})}
+    {:ok, select_returning(doc, returning)}
   end
 
   defp single_doc_result({:error, _} = res, _), do: res
 
   defp single_doc_result({:invalid, _} = res, _), do: res
 
+  defp select_returning(_doc, []), do: nil
+
+  defp select_returning(doc, returning) do
+    Enum.map(returning, &{&1, Map.get(doc, Atom.to_string(&1))})
+  end
+
   defp maybe_create_collection(repo, schema, prefix) when is_atom(repo) do
     type = ArangoXEcto.schema_type!(schema)
     collection_name = schema.__schema__(:source)
     opts = [prefix: prefix]
 
-    unless ArangoXEcto.collection_exists?(repo, collection_name, type, opts) do
+    if !ArangoXEcto.collection_exists?(repo, collection_name, type, opts) do
       ArangoXEcto.create_collection(repo, schema, opts)
     end
   end
@@ -296,10 +327,48 @@ defmodule ArangoXEcto.Behaviour.Schema do
     for {k, v} <- body, into: %{}, do: {replacement_key(k), v}
   end
 
-  defp get_insert_fields(docs, returning, false), do: process_docs(docs, returning)
+  defp process_all_docs(docs, params, returning, return_new, on_conflict) do
+    processed_docs =
+      docs
+      |> Stream.map(&extract_doc(&1, return_new, on_conflict))
+      |> Stream.zip(params)
+      |> Stream.filter(fn
+        {{:error, reason}, doc} ->
+          Logger.error("Failed to insert document, reason: #{reason}\n#{inspect(doc)}\n")
 
-  defp get_insert_fields(docs, returning, true) do
-    process_docs(Enum.map(docs, & &1["new"]), returning)
+          false
+
+        {{:invalid, constraints}, doc} ->
+          constraints_msg =
+            Enum.map_join(constraints, ", ", fn {k, v} -> "#{k}: #{v}" end)
+
+          Logger.error(
+            "Failed to insert document, failed schema validation: #{constraints_msg}\n#{inspect(doc)}\n"
+          )
+
+          false
+
+        {{:ok, nil}, _} ->
+          false
+
+        _ ->
+          true
+      end)
+      |> Enum.map(fn {{:ok, attrs}, _} -> attrs end)
+
+    returns =
+      case returning do
+        [] ->
+          nil
+
+        returning ->
+          processed_docs
+          |> Stream.map(&select_returning(&1, returning))
+          |> Stream.map(&Keyword.values/1)
+          |> Enum.reject(&is_nil/1)
+      end
+
+    {length(processed_docs), returns}
   end
 
   @replacements %{"1" => "_key", "2" => "_rev", "3" => "_id"}
@@ -308,21 +377,6 @@ defmodule ArangoXEcto.Behaviour.Schema do
       nil -> key
       k -> k
     end
-  end
-
-  defp process_docs(docs, []), do: {length(docs), nil}
-
-  defp process_docs(docs, returning) do
-    new_docs =
-      Enum.map(docs, fn
-        nil ->
-          nil
-
-        doc ->
-          Enum.map(returning, &Map.get(doc, Atom.to_string(&1)))
-      end)
-
-    {length(docs), new_docs}
   end
 
   defp key_to_id(key, module) when is_binary(key) do

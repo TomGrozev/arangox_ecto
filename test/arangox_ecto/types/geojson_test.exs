@@ -1,6 +1,5 @@
 defmodule ArangoXEctoTest.Types.GeojsonTest do
   use ExUnit.Case
-  @moduletag :supported
 
   alias ArangoXEcto.Types.GeoJSON
 
@@ -22,6 +21,10 @@ defmodule ArangoXEctoTest.Types.GeojsonTest do
                   "coordinates" => [[[100.0, 0.0], [99.0, 0.0], [98.0, 1.0]]]
                 }}
     end
+
+    test "fails on non map casting" do
+      assert :error = GeoJSON.cast("POINT(100.0,0.0)")
+    end
   end
 
   describe "load/1" do
@@ -40,6 +43,10 @@ defmodule ArangoXEctoTest.Types.GeojsonTest do
                "coordinates" => [[[100.0, 0.0], [99.0, 0.0], [98.0, 1.0]]]
              }) ==
                {:ok, polygon}
+    end
+
+    test "fails on non map loading" do
+      assert :error = GeoJSON.load("POINT(100.0,0.0)")
     end
   end
 
@@ -60,6 +67,10 @@ defmodule ArangoXEctoTest.Types.GeojsonTest do
                   "type" => "Polygon",
                   "coordinates" => [[[100.0, 0.0], [99.0, 0.0], [98.0, 1.0]]]
                 }}
+    end
+
+    test "fails on non geo data dumping" do
+      assert :error = GeoJSON.dump("POINT(100.0,0.0)")
     end
   end
 end

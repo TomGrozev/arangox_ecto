@@ -46,7 +46,7 @@ defmodule ArangoXEcto.View do
 
   ### Defining the analyzer module 
 
-  **When in dynamic mode only** the analyzer module needs to be passed to the view so that 
+  **When in dynamic mode** the analyzer module needs to be passed to the view so that 
   the analyzers will be automatically created. This option will be ignored in static mode. 
   You can pass the analyzer module by passing the module to the `:analyzer_module` option on 
   the use statement.
@@ -137,6 +137,7 @@ defmodule ArangoXEcto.View do
 
   alias ArangoXEcto.View.Link
 
+  @type t :: module()
   @type name :: String.t()
   @type compression :: :lz4 | :none
 
@@ -152,6 +153,7 @@ defmodule ArangoXEcto.View do
       Module.register_attribute(__MODULE__, :view_links, accumulate: true)
       Module.put_attribute(__MODULE__, :view_primary_sort_compression, :lz4)
 
+      @doc false
       def __analyzer_module__ do
         Keyword.get(unquote(opts), :analyzer_module)
       end
@@ -189,6 +191,15 @@ defmodule ArangoXEcto.View do
 
     postlude =
       quote unquote: false do
+        fields =
+          Stream.flat_map(@view_links, fn {mod, _} ->
+            mod.__struct__() |> Map.keys()
+          end)
+          |> Stream.reject(&(&1 in [:__struct__, :__meta__]))
+          |> Enum.uniq()
+
+        defstruct fields
+
         def __view__(:name), do: unquote(name)
         def __view__(:primary_sort), do: @view_primary_sorts
         def __view__(:stored_values), do: @view_stored_values
@@ -207,6 +218,14 @@ defmodule ArangoXEcto.View do
           }
         end
 
+        def __schema__(:updatable_fields) do
+          unquote({fields, []})
+        end
+
+        def __schema__(:insertable_fields) do
+          unquote({fields, []})
+        end
+
         for clauses <- ArangoXEcto.View.__schema__(@view_links),
             {args, body} <- clauses do
           def __schema__(unquote_splicing(args)), do: unquote(body)
@@ -218,6 +237,35 @@ defmodule ArangoXEcto.View do
       unquote(postlude)
     end
   end
+
+  # coveralls-ignore-start
+  @doc false
+  def __after_compile__(%{module: module} = env, _) do
+    # If we are compiling code, we can validate associations now,
+    # as the Elixir compiler will solve dependencies.
+    if Code.can_await_module_compilation?() do
+      for {schema, link} <- module.__view__(:links) do
+        if !(is_atom(schema) and
+               (ArangoXEcto.document?(schema) or ArangoXEcto.edge?(schema))) do
+          IO.warn(
+            "the schema passed must be an Ecto schema, got: #{inspect(schema)}",
+            Macro.Env.stacktrace(env)
+          )
+        end
+
+        if !Link.valid?(link) do
+          IO.warn(
+            "the link is invalid for field `#{schema}` got: #{inspect(link)}",
+            Macro.Env.stacktrace(env)
+          )
+        end
+      end
+    end
+
+    :ok
+  end
+
+  # coveralls-ignore-stop
 
   @doc """
   Defines a primary sort field on the view.
@@ -236,12 +284,12 @@ defmodule ArangoXEcto.View do
       field = unquote(field)
       direction = unquote(direction)
 
-      unless is_atom(field) do
+      if not is_atom(field) do
         raise ArgumentError,
               "the name for field must be an atom, got: #{inspect(field)}"
       end
 
-      unless is_atom(direction) and direction in [:asc, :desc] do
+      if !(is_atom(direction) and direction in [:asc, :desc]) do
         raise ArgumentError,
               "the direction for field `#{field}` must be an atom of either :asc or :desc, got: #{inspect(direction)}"
       end
@@ -267,12 +315,12 @@ defmodule ArangoXEcto.View do
       fields = unquote(fields)
       compression = unquote(compression)
 
-      unless is_list(fields) and Enum.all?(fields, &is_atom/1) do
+      if !(is_list(fields) and Enum.all?(fields, &is_atom/1)) do
         raise ArgumentError,
               "the fields must be a list of atoms, got: #{inspect(fields)}"
       end
 
-      unless is_atom(compression) and compression in [:none, :lz4] do
+      if !(is_atom(compression) and compression in [:none, :lz4]) do
         raise ArgumentError,
               "the compression for stored value field with fields `#{inspect(fields)}` must be an atom of either :none or :lz4, got: #{inspect(compression)}"
       end
@@ -303,21 +351,10 @@ defmodule ArangoXEcto.View do
       schema = unquote(schema)
       link = unquote(link)
 
-      unless is_atom(schema) and
-               (ArangoXEcto.is_document?(schema) or ArangoXEcto.is_edge?(schema)) do
-        raise ArgumentError,
-              "the schema passed must be an Ecto schema, got: #{inspect(schema)}"
-      end
-
-      unless Link.valid?(link) do
-        raise ArgumentError,
-              "the link is invalid for field `#{schema}` got: #{inspect(link)}"
-      end
-
       Module.put_attribute(
         __MODULE__,
         :view_links,
-        {unquote(schema), unquote(link)}
+        {schema, link}
       )
     end
   end
@@ -368,33 +405,6 @@ defmodule ArangoXEcto.View do
     end
   end
 
-  @doc """
-  Generates the view definition
-
-  This takes the macros that define the view and converts it into
-  a definition for use on creation.
-  """
-  @spec definition(Module.t()) :: map()
-  def definition(view) when is_atom(view) do
-    if function_exported?(view, :__view__, 1) do
-      opts = Enum.into(view.__view__(:options), %{})
-
-      %{
-        name: view.__view__(:name),
-        type: "arangosearch",
-        links: %{},
-        primarySort: [],
-        storedValues: []
-      }
-      |> add_links(view)
-      |> add_primary_sort(view)
-      |> add_stored_values(view)
-      |> Map.merge(opts)
-    else
-      raise ArgumentError, "not a valid view schema"
-    end
-  end
-
   @doc false
   def __schema__(links) do
     {primary_keys, query_fields, fields, field_sources} =
@@ -429,31 +439,8 @@ defmodule ArangoXEcto.View do
     Enum.reduce(schema.__schema__(:fields), {fields, field_sources}, fn field,
                                                                         {a_fields,
                                                                          a_field_sources} ->
-      {Map.put_new(a_fields, field, schema.__schema__(:type, field)),
+      {Map.put_new(a_fields, field, {schema.__schema__(:type, field), :always}),
        Map.put_new(a_field_sources, field, schema.__schema__(:field_source, field))}
-    end)
-  end
-
-  defp add_links(map, view) do
-    view.__view__(:links)
-    |> Enum.reduce(map, fn {schema, link}, acc ->
-      put_in(acc, [:links, schema.__schema__(:source)], Link.to_map(link))
-    end)
-  end
-
-  defp add_stored_values(map, view) do
-    view.__view__(:stored_values)
-    |> Enum.reduce(map, fn {fields, compression}, acc ->
-      val = %{fields: fields, compression: compression}
-      Map.update!(acc, :storedValues, &[val | &1])
-    end)
-  end
-
-  defp add_primary_sort(map, view) do
-    view.__view__(:primary_sort)
-    |> Enum.reduce(map, fn {field, direction}, acc ->
-      val = %{field: field, direction: direction}
-      Map.update!(acc, :primarySort, &[val | &1])
     end)
   end
 end

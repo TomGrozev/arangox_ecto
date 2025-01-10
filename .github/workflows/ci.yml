@@ -18,17 +18,19 @@ jobs:
       FORCE_COLOR: 1
     strategy:
       matrix:
-        otp: [24, 25]
-        elixir: [1.13.4, 1.14.3]
-        exclude: []
+        otp: [25.3.2.12, 26.2.5, 27.2]
+        elixir: [1.16.3, 1.17.3, 1.18.1]
+        exclude:
+          - otp: 27.2
+            elixir: 1.16.3
 
     steps:
       - uses: actions/checkout@v2
       - uses: xinova/arangodb-action@v1
         with:
-          arangodb version: 'latest'
+          arangodb version: "3.11"
         env:
-          ARANGO_ROOT_PASSWORD: 'CI-PIPELINE'
+          ARANGO_ROOT_PASSWORD: "CI-PIPELINE"
       - uses: erlef/setup-beam@v1
         with:
           otp-version: ${{matrix.otp}}
@@ -47,6 +49,6 @@ jobs:
       - run: mix doctor --summary
       - run: mix test
         env:
-          DB_ENDPOINT: 'http://localhost:8529'
-          DB_USER: 'root'
-          DB_PASSWORD: 'CI-PIPELINE'
+          DB_ENDPOINT: "http://localhost:8529"
+          DB_USER: "root"
+          DB_PASSWORD: "CI-PIPELINE"
