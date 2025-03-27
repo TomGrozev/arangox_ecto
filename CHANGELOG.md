@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.0.1
+
+### Fixes
+
+- Add validation to the `ArangoXEcto.Types.GeoJSON` type to check coordinates
+  and format
+
+### Docs
+
+- Remove TODOs leftover in docs
+- Update Elixir and OTP versions in README prerequisites
+
 ## 2.0.0
 
 This is a big release with a lot of changes and has been over a year in the

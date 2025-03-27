@@ -31,8 +31,6 @@ that suited my needs. I needed ArangoDB to work with Ecto seamlessly but there w
 ArangoX Ecto uses the power of ArangoX to communicate with ArangoDB and Ecto for the API in Elixir. Ecto is integrated
 with many other packages and can now be used with ArangoDB thanks to this package.
 
-From version 1.0.0 onward graph relationships work seamlessly in Ecto.
-
 ### Built With
 
 - [Arangox](https://github.com/ArangoDB-Community/arangox)
@@ -43,9 +41,7 @@ To get the adapter integrated with your project, follow these simple steps.
 
 ### Prerequisites
 
-TODO: update these
-
-- Elixir 1.12.3+ / Erlang OTP 22.2+
+- Elixir 1.16.3+ / Erlang OTP 25.3.2.12+
   (Others may versions may work but this is the oldest it is tested on)
 
 ### Installation

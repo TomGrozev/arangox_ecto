@@ -1,7 +1,7 @@
 defmodule ArangoXEcto.Integration.SandboxTest do
   use ExUnit.Case, async: false
 
-  @moduletag :integration
+  @moduletag :sandbox
 
   import ExUnit.CaptureLog
 

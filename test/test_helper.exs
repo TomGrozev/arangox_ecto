@@ -102,4 +102,4 @@ defmodule CompileTimeAssertions do
   end
 end
 
-ExUnit.start(exclude: :mix)
+ExUnit.start(exclude: [:mix, :sandbox])
