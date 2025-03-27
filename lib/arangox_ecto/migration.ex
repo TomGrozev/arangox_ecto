@@ -1248,7 +1248,7 @@ defmodule ArangoXEcto.Migration do
 
   ## Options
 
-  TODO: Add note about reading the docs for options.
+  Refer to the arangodb docs for more options. Available options are in `t:View.view_option/0`.
 
     * `:prefix` - the prefix for the view. This will be the prefix database used for the
         Arango search view.
@@ -1275,7 +1275,7 @@ defmodule ArangoXEcto.Migration do
     * `:features` - a list of enabled features, available options are
       `t:ArangoXEcto.Migration.Analyzer.feature/0`.
     * `:properties` - additional options for the analyzer, dependant on the type. Refer to the
-      `ArangoDB` docs. TODO: add link.
+      ArangoDB docs.
   """
   @spec analyzer(atom() | String.t(), Analyzer.type(), [Analyzer.feature()], map(), Keyword.t()) ::
           Analyzer.t()
@@ -1439,7 +1439,7 @@ defmodule ArangoXEcto.Migration do
   @doc """
   Adds a primary sort to a view.
 
-  This adds a sort to the view. TODO: add a description of it.
+  This adds a sort to the view, refer to the [ArangoDB docs](https://docs.arangodb.com/3.11/index-and-search/arangosearch/arangosearch-views-reference/#view-properties).
 
   This accepts a field name and a sort direction (either `:asc` or `:desc`), defaults to `:asc`.
   """
@@ -1451,7 +1451,7 @@ defmodule ArangoXEcto.Migration do
   @doc """
   Adds a stored value to a view.
 
-  This adds a stored value to the view. TODO: add a description of it.
+  This adds a stored value to the view, refer to the [ArangoDB docs](https://docs.arangodb.com/3.11/index-and-search/arangosearch/arangosearch-views-reference/#view-properties).
 
   This accepts a field name and a compression (either `:lz4` or `:none`), defaults to `:lz4`.
   """
