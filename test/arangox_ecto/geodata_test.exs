@@ -11,221 +11,151 @@ defmodule ArangoXEctoTest.GeodataTest do
 
     test "it does not accept out of bounds coordinates" do
       # Lat is out of bounds
-      assert_raise ArgumentError, ~r/Invalid coordinates provided/, fn ->
-        ArangoXEcto.GeoData.point(100, 0)
-      end
+      assert {:error, "latitude is invalid"} = ArangoXEcto.GeoData.point(100, 0)
     end
   end
 
   describe "multi_point/1" do
     test "it takes valid coordinates" do
-      coords = [{0, 100}, {9, 10}]
-      correct = %Geo.MultiPoint{coordinates: [{100.0, 0.0}, {10.0, 9.0}]}
+      coords = [{3, 70}, {10, 9}]
 
-      assert ArangoXEcto.GeoData.multi_point(coords) == correct
+      assert %Geo.MultiPoint{coordinates: [{3.0, 70.0}, {10.0, 9.0}]} =
+               ArangoXEcto.GeoData.multi_point(coords)
     end
 
     test "it does not accept out of bounds coords" do
       # Lat is out of bound
-      assert_raise ArgumentError, ~r/Invalid coordinates provided/, fn ->
-        ArangoXEcto.GeoData.multi_point([{100, 0}, {10, 9}])
-      end
+      assert {:error, "latitude is invalid"} =
+               ArangoXEcto.GeoData.multi_point([{100, 200}, {10, 9}])
     end
 
     test "it fails for invalid single element tuples" do
-      assert_raise ArgumentError, ~r/Invalid number of coordinate tuple/, fn ->
-        ArangoXEcto.GeoData.multi_point([{0, 100}, {10}])
-      end
+      assert {:error, "invalid coordinates tuple"} =
+               ArangoXEcto.GeoData.multi_point([{0, 50}, {10}])
     end
 
     test "it fails for invalid three or more element tuples" do
-      assert_raise ArgumentError, ~r/Invalid number of coordinate tuple/, fn ->
-        ArangoXEcto.GeoData.multi_point([{0, 100}, {10, 0, 1}])
-      end
+      assert {:error, "invalid coordinates tuple"} =
+               ArangoXEcto.GeoData.multi_point([{0, 50}, {10, 0, 1}])
     end
-
-    #    test "it converts a single point into a Geo.Point" do
-    #      assert ArangoXEcto.GeoData.multi_point([{0, 100}]) == %Geo.Point{coordinates: {100.0, 0.0}}
-    #    end
   end
 
   describe "linestring/1" do
     test "it takes valid coordinates" do
-      coords = [{0, 100}, {9, 10}]
-      correct = %Geo.LineString{coordinates: [{100.0, 0.0}, {10.0, 9.0}]}
+      coords = [{1, 30}, {9, 10}]
 
-      assert ArangoXEcto.GeoData.linestring(coords) == correct
+      assert %Geo.LineString{coordinates: [{1.0, 30.0}, {9.0, 10.0}]} =
+               ArangoXEcto.GeoData.linestring(coords)
     end
 
     test "it does not accept out of bounds coords" do
-      # Lat is out of bound
-      assert_raise ArgumentError, ~r/Invalid coordinates provided/, fn ->
-        ArangoXEcto.GeoData.linestring([{100, 0}, {10, 9}])
-      end
+      # Lon is out of bound
+      assert {:error, "longitude is invalid"} =
+               ArangoXEcto.GeoData.linestring([{200, 0}, {10, 9}])
     end
 
     test "it fails for invalid single element tuples" do
-      assert_raise ArgumentError, ~r/Invalid number of coordinate tuple/, fn ->
-        ArangoXEcto.GeoData.linestring([{0, 100}, {10}])
-      end
+      assert {:error, "invalid coordinates tuple"} =
+               ArangoXEcto.GeoData.linestring([{0, 50}, {10}])
     end
 
     test "it fails for invalid three or more element tuples" do
-      assert_raise ArgumentError, ~r/Invalid number of coordinate tuple/, fn ->
-        ArangoXEcto.GeoData.linestring([{0, 100}, {10, 0, 1}])
-      end
+      assert {:error, "invalid coordinates tuple"} =
+               ArangoXEcto.GeoData.linestring([{0, 50}, {10, 0, 1}])
     end
-
-    #    test "it converts a single point into a Geo.Point" do
-    #      assert ArangoXEcto.GeoData.linestring([{0, 100}]) == %Geo.Point{coordinates: {100.0, 0.0}}
-    #    end
   end
 
   describe "multi_linestring/1" do
     test "it takes valid coordinates" do
-      coords = [[{0, 100}, {9, 10}], [{10, 10}, {20, -20}]]
+      coords = [[{8, 50}, {9, 10}], [{10, 10}, {20, -20}]]
 
-      correct = %Geo.MultiLineString{
-        coordinates: [[{100.0, 0.0}, {10.0, 9.0}], [{10, 10}, {-20, 20}]]
-      }
-
-      assert ArangoXEcto.GeoData.multi_linestring(coords) == correct
+      assert %Geo.MultiLineString{
+               coordinates: [[{8.0, 50.0}, {9.0, 10.0}], [{10.0, 10.0}, {20.0, -20.0}]]
+             } = ArangoXEcto.GeoData.multi_linestring(coords)
     end
 
     test "it does not accept out of bounds coords" do
       # Lat is out of bound
-      assert_raise ArgumentError, ~r/Invalid coordinates provided/, fn ->
-        ArangoXEcto.GeoData.multi_linestring([[{100, 0}, {10, 9}]])
-      end
+      assert {:error, "latitude is invalid"} =
+               ArangoXEcto.GeoData.multi_linestring([[{100, 200}, {10, 9}]])
     end
 
     test "it fails for invalid single element tuples" do
-      assert_raise ArgumentError, ~r/Invalid number of coordinate tuple/, fn ->
-        ArangoXEcto.GeoData.multi_linestring([[{0, 100}, {10}]])
-      end
+      assert {:error, "invalid coordinates tuple"} =
+               ArangoXEcto.GeoData.multi_linestring([[{0, 50}, {10}]])
     end
 
     test "it fails for invalid three or more element tuples" do
-      assert_raise ArgumentError, ~r/Invalid number of coordinate tuple/, fn ->
-        ArangoXEcto.GeoData.multi_linestring([[{0, 100}, {10, 0, 1}]])
-      end
+      assert {:error, "invalid coordinates tuple"} =
+               ArangoXEcto.GeoData.multi_linestring([[{0, 50}, {10, 0, 1}]])
     end
-
-    ##    test "it converts a single array of points to a Geo.LineString" do
-    ##      assert ArangoXEcto.GeoData.multi_linestring([[{0, 100}, {10, 9}]]) == %Geo.LineString{
-    ##               coordinates: [{100.0, 0.0}, {9.0, 10.0}]
-    ##             }
-    ##    end
-    ##
-    ##    test "it converts a single single point into a Geo.Point" do
-    ##      assert ArangoXEcto.GeoData.multi_linestring([[{0, 100}]]) == %Geo.Point{
-    ##               coordinates: {100.0, 0.0}
-    ##             }
-    ##    end
   end
 
   describe "polygon/1" do
     test "it takes valid simple polygon" do
-      coords = [{0, 100}, {9, 10}]
-      correct = %Geo.Polygon{coordinates: [[{100.0, 0.0}, {10.0, 9.0}]]}
+      coords = [{9, 90}, {9, 10}]
 
-      assert ArangoXEcto.GeoData.polygon(coords) == correct
+      assert %Geo.Polygon{coordinates: [[{9.0, 90.0}, {9.0, 10.0}]]} =
+               ArangoXEcto.GeoData.polygon(coords)
     end
 
     test "it takes valid advanced polygon" do
-      coords = [[{0, 100}, {9, 10}], [{10, 10}, {20, -20}]]
-      correct = %Geo.Polygon{coordinates: [[{100.0, 0.0}, {10.0, 9.0}], [{10, 10}, {-20, 20}]]}
+      coords = [[{2, 20}, {9, 10}], [{10, 10}, {20, -20}]]
 
-      assert ArangoXEcto.GeoData.polygon(coords) == correct
+      assert %Geo.Polygon{
+               coordinates: [[{2.0, 20.0}, {9.0, 10.0}], [{10.0, 10.0}, {20.0, -20.0}]]
+             } =
+               ArangoXEcto.GeoData.polygon(coords)
     end
 
     test "it does not accept out of bounds coords" do
-      # Lat is out of bound
-      assert_raise ArgumentError, ~r/Invalid coordinates provided/, fn ->
-        ArangoXEcto.GeoData.polygon([{100, 0}, {10, 9}])
-      end
+      # Lon is out of bound
+      assert {:error, "longitude is invalid"} =
+               ArangoXEcto.GeoData.polygon([{200, 0}, {10, 9}])
     end
 
     test "it fails for invalid single element tuples" do
-      assert_raise ArgumentError, ~r/Invalid number of coordinate tuple/, fn ->
-        ArangoXEcto.GeoData.polygon([{0, 100}, {10}])
-      end
+      assert {:error, "invalid coordinates tuple"} =
+               ArangoXEcto.GeoData.polygon([{0, 50}, {10}])
     end
 
     test "it fails for invalid three or more element tuples" do
-      assert_raise ArgumentError, ~r/Invalid number of coordinate tuple/, fn ->
-        ArangoXEcto.GeoData.polygon([{0, 100}, {10, 0, 1}])
-      end
+      assert {:error, "invalid coordinates tuple"} =
+               ArangoXEcto.GeoData.polygon([{0, 50}, {10, 0, 1}])
     end
-
-    #    test "it converts a single single point simple polygon into a Geo.Point" do
-    #      assert ArangoXEcto.GeoData.polygon([{0, 100}]) == %Geo.Point{coordinates: {100.0, 0.0}}
-    #    end
-    #
-    #    test "it converts a single single point advanced polygon into a Geo.Point" do
-    #      assert ArangoXEcto.GeoData.polygon([[{0, 100}]]) == %Geo.Point{coordinates: {100.0, 0.0}}
-    #    end
-    #
-    #    test "it converts a two point polygon into a Geo.LineString" do
-    #      assert ArangoXEcto.GeoData.polygon([{0, 100}, {10, 9}]) == %Geo.LineString{
-    #               coordinates: [{100.0, 0.0}, {9, 10}]
-    #             }
-    #    end
   end
 
   describe "multi_polygon/1" do
     test "it takes valid multi polygons" do
       coords = [
-        [[{0, 100}, {9, 10}], [{10, 10}, {20, -20}]],
-        [[{0, 100}, {9, 10}], [{10, 10}, {20, -20}]]
+        [[{2, 90}, {9, 10}], [{10, 10}, {20, -20}]],
+        [[{3, 90}, {9, 10}], [{10, 10}, {20, -20}]]
       ]
 
-      correct = %Geo.MultiPolygon{
-        coordinates: [
-          [[{100.0, 0.0}, {10.0, 9.0}], [{10, 10}, {-20, 20}]],
-          [[{100.0, 0.0}, {10.0, 9.0}], [{10, 10}, {-20, 20}]]
-        ]
-      }
-
-      assert ArangoXEcto.GeoData.multi_polygon(coords) == correct
+      assert %Geo.MultiPolygon{
+               coordinates: [
+                 [[{2.0, 90.0}, {9.0, 10.0}], [{10.0, 10.0}, {20.0, -20.0}]],
+                 [[{3.0, 90.0}, {9.0, 10.0}], [{10.0, 10.0}, {20.0, -20.0}]]
+               ]
+             } =
+               ArangoXEcto.GeoData.multi_polygon(coords)
     end
 
     test "it does not accept out of bounds coords" do
       # Lat is out of bound
-      assert_raise ArgumentError, ~r/Invalid coordinates provided/, fn ->
-        ArangoXEcto.GeoData.multi_polygon([[{100, 0}, {10, 9}]])
-      end
+      assert {:error, "latitude is invalid"} =
+               ArangoXEcto.GeoData.multi_polygon([[{100, 200}, {10, 9}]])
     end
 
     test "it fails for invalid single element tuples" do
-      assert_raise ArgumentError, ~r/Invalid number of coordinate tuple/, fn ->
-        ArangoXEcto.GeoData.multi_polygon([[{0, 100}, {10}]])
-      end
+      assert {:error, "invalid coordinates tuple"} =
+               ArangoXEcto.GeoData.multi_polygon([[{0, 50}, {10}]])
     end
 
     test "it fails for invalid three or more element tuples" do
-      assert_raise ArgumentError, ~r/Invalid number of coordinate tuple/, fn ->
-        ArangoXEcto.GeoData.multi_polygon([[{0, 100}, {10, 0, 1}]])
-      end
+      assert {:error, "invalid coordinates tuple"} =
+               ArangoXEcto.GeoData.multi_polygon([[{0, 50}, {10, 0, 1}]])
     end
-
-    # test "it converts a single point polygon into a Geo.Point" do
-    #  assert ArangoXEcto.GeoData.multi_polygon([[{0, 100}]]) == %Geo.Point{
-    #           coordinates: {100.0, 0.0}
-    #         }
-    # end
-
-    # test "it converts a two point polygon into a Geo.LineString" do
-    #  assert ArangoXEcto.GeoData.multi_polygon([{0, 100}, {10, 9}]) == %Geo.LineString{
-    #           coordinates: [{100.0, 0.0}, {9, 10}]
-    #         }
-    # end
-
-    # test "it converts a single polygon into a Geo.Polygon" do
-    #  assert ArangoXEcto.GeoData.multi_polygon([{0, 100}, {10, 9}, {50, 50}]) == %Geo.Polygon{
-    #           coordinates: [{100.0, 0.0}, {9, 10}, {50, 50}]
-    #         }
-    # end
   end
 
   describe "sanitize/1" do
